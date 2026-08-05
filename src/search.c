@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #define SEARCH_MAX_PATH 512
+#define SEARCH_MAX_UNDO 2048
 #define DEFAULT_MAX_TREE_NODES 1000000U
 #define VALUE_SCALE UINT64_C(1000000)
 
@@ -29,6 +30,7 @@ typedef struct {
 struct TreeNode {
     uint64_t hash;
     atomic_bool expanded;
+    atomic_flag expansion_lock;
     atomic_uint next_unexpanded;
     atomic_uint_least64_t visits;
     atomic_uint_least64_t value;
@@ -38,7 +40,7 @@ struct TreeNode {
 };
 
 typedef struct {
-    TreeNode **nodes;
+    TreeNode *nodes;
     size_t node_count;
     size_t node_capacity;
     TsMutex expansion_mutex;
@@ -98,12 +100,11 @@ static void tree_free_node(TreeNode *node) {
     if (node == NULL) return;
     free(node->moves);
     free(node->children);
-    free(node);
 }
 
 static void tree_destroy(SearchTree *tree) {
     if (tree == NULL) return;
-    for (size_t index = 0; index < tree->node_count; ++index) tree_free_node(tree->nodes[index]);
+    for (size_t index = 0; index < tree->node_count; ++index) tree_free_node(&tree->nodes[index]);
     free(tree->nodes);
     ts_mutex_destroy(&tree->expansion_mutex);
     memset(tree, 0, sizeof(*tree));
@@ -113,15 +114,14 @@ static TreeNode *tree_new_node(SearchTree *tree, uint64_t hash) {
     TreeNode *node = NULL;
     ts_mutex_lock(&tree->expansion_mutex);
     if (tree->node_count < tree->node_capacity) {
-        node = calloc(1, sizeof(*node));
-        if (node != NULL) {
-            node->hash = hash;
-            atomic_init(&node->expanded, false);
-            atomic_init(&node->next_unexpanded, 0);
-            atomic_init(&node->visits, 0);
-            atomic_init(&node->value, 0);
-            tree->nodes[tree->node_count++] = node;
-        }
+        node = &tree->nodes[tree->node_count++];
+        memset(node, 0, sizeof(*node));
+        node->hash = hash;
+        atomic_init(&node->expanded, false);
+        atomic_flag_clear(&node->expansion_lock);
+        atomic_init(&node->next_unexpanded, 0);
+        atomic_init(&node->visits, 0);
+        atomic_init(&node->value, 0);
     }
     ts_mutex_unlock(&tree->expansion_mutex);
     return node;
@@ -131,7 +131,7 @@ static bool node_expand(SearchTree *tree, TreeNode *node, const ShogiPosition *p
                         const ShogiMove *moves, size_t move_count) {
     if (atomic_load_explicit(&node->expanded, memory_order_acquire)) return true;
     bool success = true;
-    ts_mutex_lock(&tree->expansion_mutex);
+    while (atomic_flag_test_and_set_explicit(&node->expansion_lock, memory_order_acquire)) sched_yield();
     if (!atomic_load_explicit(&node->expanded, memory_order_relaxed)) {
         node->move_count = (unsigned)move_count;
         if (move_count != 0) {
@@ -158,7 +158,8 @@ static bool node_expand(SearchTree *tree, TreeNode *node, const ShogiPosition *p
         (void)position;
         atomic_store_explicit(&node->expanded, true, memory_order_release);
     }
-    ts_mutex_unlock(&tree->expansion_mutex);
+    atomic_flag_clear_explicit(&node->expansion_lock, memory_order_release);
+    (void)tree;
     return success;
 }
 
@@ -191,7 +192,8 @@ static TreeChild *select_child(const SearchJob *job, TreeNode *node, bool maximi
     return best;
 }
 
-static TreeChild *expand_one(SearchJob *job, TreeNode *node, const ShogiPosition *position) {
+static TreeChild *expand_one(SearchJob *job, TreeNode *node, ShogiPosition *position,
+                             ShogiUndo *undo) {
     ts_mutex_lock(&job->tree.expansion_mutex);
     unsigned index = atomic_load_explicit(&node->next_unexpanded, memory_order_relaxed);
     if (index >= node->move_count) {
@@ -202,17 +204,21 @@ static TreeChild *expand_one(SearchJob *job, TreeNode *node, const ShogiPosition
     TreeChild *child = &node->children[index];
     TreeNode *child_node = atomic_load_explicit(&child->node, memory_order_relaxed);
     if (child_node == NULL) {
-        child_node = calloc(1, sizeof(*child_node));
-        if (child_node != NULL && job->tree.node_count < job->tree.node_capacity) {
-            child_node->hash = position->hash;
-            atomic_init(&child_node->expanded, false);
-            atomic_init(&child_node->next_unexpanded, 0);
-            atomic_init(&child_node->visits, 0);
-            atomic_init(&child_node->value, 0);
-            job->tree.nodes[job->tree.node_count++] = child_node;
-        } else {
-            free(child_node);
-            child_node = NULL;
+        if (job->tree.node_count < job->tree.node_capacity) {
+            child_node = &job->tree.nodes[job->tree.node_count++];
+            memset(child_node, 0, sizeof(*child_node));
+            if (!shogi_make_move_undo(position, child->move, undo)) {
+                --job->tree.node_count;
+                child_node = NULL;
+            }
+            if (child_node != NULL) {
+                child_node->hash = position->hash;
+                atomic_init(&child_node->expanded, false);
+                atomic_flag_clear(&child_node->expansion_lock);
+                atomic_init(&child_node->next_unexpanded, 0);
+                atomic_init(&child_node->visits, 0);
+                atomic_init(&child_node->value, 0);
+            }
         }
         atomic_store_explicit(&child->node, child_node, memory_order_release);
     }
@@ -256,10 +262,10 @@ static int static_evaluation(const ShogiPosition *position, ShogiColor perspecti
     ShogiMove moves[SHOGI_MAX_MOVES];
     ShogiPosition own = *position;
     own.side = perspective;
-    size_t own_moves = shogi_generate_legal(&own, moves, SHOGI_MAX_MOVES);
+    size_t own_moves = shogi_generate_pseudo(&own, moves, SHOGI_MAX_MOVES);
     ShogiPosition other = *position;
     other.side = (ShogiColor)(perspective ^ 1);
-    size_t opponent_moves = shogi_generate_legal(&other, moves, SHOGI_MAX_MOVES);
+    size_t opponent_moves = shogi_generate_pseudo(&other, moves, SHOGI_MAX_MOVES);
     score += (int)(own_moves * 5U);
     score -= (int)(opponent_moves * 5U);
     if (score > 1500) score = 1500;
@@ -286,7 +292,8 @@ typedef struct {
 
 static void backpropagate(SearchJob *job, const SearchPath *path, double value);
 
-static double rollout(SearchJob *job, ShogiPosition *position, uint64_t *rng) {
+static double rollout(SearchJob *job, ShogiPosition *position, ShogiUndo *undos,
+                      size_t *undo_length, uint64_t *rng) {
     int rollout_depth = job->limits.depth > 0 ? job->limits.depth : (int)job->options.rollout_depth;
     for (int ply = 0; ply < rollout_depth; ++ply) {
         if (should_stop(job)) break;
@@ -308,16 +315,19 @@ static double rollout(SearchJob *job, ShogiPosition *position, uint64_t *rng) {
             selected_weight -= weight;
         }
         if (choice >= count) choice = count - 1;
-        if (!shogi_make_move(position, moves[choice])) break;
+        if (*undo_length >= SEARCH_MAX_UNDO ||
+            !shogi_make_move_undo(position, moves[choice], &undos[*undo_length])) break;
+        ++*undo_length;
     }
     int score = static_evaluation(position, job->root_side);
     return 0.5 + (double)score / 3000.0;
 }
 
-static double run_simulation(SearchJob *job, uint64_t *rng) {
-    ShogiPosition position = job->root_position;
+static double run_simulation(SearchJob *job, ShogiPosition *position,
+                             ShogiUndo *undos, uint64_t *rng) {
     TreeNode *node = job->root;
     SearchPath path = {0};
+    size_t undo_length = 0;
 
     double value = 0.5;
     bool terminal = false;
@@ -325,38 +335,44 @@ static double run_simulation(SearchJob *job, uint64_t *rng) {
         if (should_stop(job)) break;
         ShogiMove moves[SHOGI_MAX_MOVES];
         size_t count = 0;
-        ShogiResult result = shogi_game_result_with_moves(&position, moves, SHOGI_MAX_MOVES, &count);
+        ShogiResult result = shogi_game_result_with_moves(position, moves, SHOGI_MAX_MOVES, &count);
         if (result != SHOGI_RESULT_ONGOING) {
             if (result == SHOGI_RESULT_DRAW) value = 0.5;
             else value = result == (job->root_side == SHOGI_BLACK ? SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN) ? 1.0 : 0.0;
             terminal = true;
             break;
         }
-        if (!node_expand(&job->tree, node, &position, moves, count)) break;
+        if (!node_expand(&job->tree, node, position, moves, count)) break;
         if (count == 0) break;
 
-        TreeChild *expanded = expand_one(job, node, &position);
+        TreeChild *expanded = expand_one(job, node, position, &undos[undo_length]);
         if (expanded != NULL) {
+            ++undo_length;
             if (path.length >= SEARCH_MAX_PATH) break;
             atomic_fetch_add_explicit(&expanded->virtual_loss, 1, memory_order_relaxed);
             path.edges[path.length++] = expanded;
-            if (!shogi_make_move(&position, expanded->move)) break;
             TreeNode *next = atomic_load_explicit(&expanded->node, memory_order_acquire);
             if (next == NULL) break;
             node = next;
             break;
         }
         if (path.length >= SEARCH_MAX_PATH) break;
-        TreeChild *selected = select_child(job, node, position.side == job->root_side);
+        TreeChild *selected = select_child(job, node, position->side == job->root_side);
         if (selected == NULL) break;
         path.edges[path.length++] = selected;
-        if (!shogi_make_move(&position, selected->move)) break;
+        if (undo_length >= SEARCH_MAX_UNDO ||
+            !shogi_make_move_undo(position, selected->move, &undos[undo_length])) break;
+        ++undo_length;
         TreeNode *next = atomic_load_explicit(&selected->node, memory_order_acquire);
         if (next == NULL) break;
         node = next;
     }
 
-    if (!terminal) value = rollout(job, &position, rng);
+    if (!terminal) value = rollout(job, position, undos, &undo_length, rng);
+    while (undo_length > 0) {
+        --undo_length;
+        (void)shogi_unmake_move(position, &undos[undo_length]);
+    }
     backpropagate(job, &path, value);
     return value;
 }
@@ -383,6 +399,8 @@ static void *worker_main(void *opaque) {
     SearchJob *job = argument->job;
     uint64_t rng = job->options.seed_auto ? monotonic_ns() ^ ((uint64_t)argument->id * UINT64_C(0x9e3779b9))
                                           : job->options.seed + (uint64_t)argument->id * UINT64_C(0x9e3779b97f4a7c15);
+    ShogiPosition position = job->root_position;
+    ShogiUndo undos[SEARCH_MAX_UNDO];
     while (!should_stop(job)) {
         if (job->limits.nodes != 0) {
             uint64_t current = atomic_load_explicit(&job->simulations, memory_order_relaxed);
@@ -398,7 +416,7 @@ static void *worker_main(void *opaque) {
         } else {
             atomic_fetch_add_explicit(&job->simulations, 1, memory_order_relaxed);
         }
-        double value = run_simulation(job, &rng);
+        double value = run_simulation(job, &position, undos, &rng);
         (void)value;
     }
     atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
@@ -512,6 +530,38 @@ size_t search_get_root_lines(const SearchJob *job, SearchLine *lines, size_t cap
         output = 1;
     }
     return output;
+}
+
+size_t search_get_root_policy(const SearchJob *job, SearchPolicyEntry *entries, size_t capacity) {
+    if (job == NULL || job->root == NULL || entries == NULL || capacity == 0) return 0;
+    size_t count = job->root->move_count;
+    if (count > capacity) count = capacity;
+    bool used[SHOGI_MAX_MOVES] = {false};
+    for (size_t output = 0; output < count; ++output) {
+        unsigned best_index = 0;
+        uint64_t best_visits = 0;
+        char best_text[16] = {0};
+        bool found = false;
+        for (unsigned index = 0; index < job->root->move_count; ++index) {
+            if (used[index]) continue;
+            TreeChild *child = &job->root->children[index];
+            uint64_t visits = atomic_load_explicit(&child->visits, memory_order_relaxed);
+            char text[16] = {0};
+            (void)shogi_move_to_usi(child->move, text, sizeof(text));
+            if (!found || visits > best_visits ||
+                (visits == best_visits && strcmp(text, best_text) < 0)) {
+                found = true;
+                best_index = index;
+                best_visits = visits;
+                memcpy(best_text, text, sizeof(best_text));
+            }
+        }
+        if (!found) break;
+        used[best_index] = true;
+        entries[output].move = job->root->children[best_index].move;
+        entries[output].visits = best_visits;
+    }
+    return count;
 }
 
 static unsigned default_threads(void) {

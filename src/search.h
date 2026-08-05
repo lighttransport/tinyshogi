@@ -63,6 +63,11 @@ typedef struct {
     ShogiMove pv[SEARCH_MAX_PV];
 } SearchLine;
 
+typedef struct {
+    ShogiMove move;
+    uint64_t visits;
+} SearchPolicyEntry;
+
 typedef struct SearchJob SearchJob;
 
 SearchJob *search_start(const ShogiPosition *position,
@@ -75,6 +80,7 @@ bool search_waits_for_stop(const SearchJob *job);
 bool search_ponderhit(SearchJob *job);
 bool search_get_progress(const SearchJob *job, SearchProgress *progress);
 size_t search_get_root_lines(const SearchJob *job, SearchLine *lines, size_t capacity);
+size_t search_get_root_policy(const SearchJob *job, SearchPolicyEntry *entries, size_t capacity);
 void search_request_stop(SearchJob *job);
 void search_join(SearchJob *job, SearchResult *result);
 void search_destroy(SearchJob *job);

@@ -76,6 +76,62 @@ Example:
 printf 'usi\nisready\nposition startpos\ngo nodes 1000\n' | ./build/tinyshogi
 ```
 
+Self-play data export is available as a separate command. It writes one JSONL
+record per position, including the SFEN, selected move, game result from the
+side-to-move perspective, and the complete root visit distribution:
+
+```sh
+./build/tinyshogi --selfplay --games 100 --simulations 256 \
+  --threads 1 --seed 7 --temperature 1000 --temperature-cutoff 30 \
+  --output selfplay.jsonl
+```
+
+Use `--temperature 0` for deterministic visit-max move selection. Games that
+reach `--max-plies` without a terminal result are recorded as draws. The JSONL
+format is versioned with `"version":1` and is intended for external training
+pipelines.
+
+The optional no-SDK CUDA handoff is documented in [cuda/README.md](cuda/README.md).
+It uses a CUEW-style runtime loader and builds the CUDA probe with only `cc` and
+`-ldl`; the normal CPU engine remains independent of CUDA.
+
+CUDA `TSM2` checkpoints can be quantized for deterministic CPU inference:
+
+```sh
+python3 tools/quantize_tsm2.py model.tsm model.tsm3
+```
+
+The `TSM3` evaluator in `src/int_model.c` uses fixed integer arithmetic,
+fixed-point softmax/exp/log/tanh helpers, and runtime AVX2 dispatch with a
+portable scalar fallback. Its output is deterministic for a fixed model and
+feature buffer.
+
+An integer-only CPU SGD baseline is available for reproducible calibration and
+small datasets:
+
+```sh
+make -C cpu train-int
+make -C cpu eval-int
+cpu/train_int selfplay.tsf selfplay.tfe model-int.tsm3 10
+cpu/eval_int model-int.tsm3 selfplay.tfe
+```
+
+`eval-int` prints fixed-point value/policy results and a checksum, which is
+useful for cross-machine reproducibility checks.
+
+For local automation and LLM-assisted play, `tools/tinyshogi_mcp.py` provides
+a dependency-free stdio MCP server. It exposes board queries, legal move
+control, search, background self-play start/status/stop, and an LLM context
+bridge. The bridge returns context to the connected client; it does not make
+an undocumented external LLM call.
+
+```sh
+python3 tools/tinyshogi_mcp.py
+```
+
+Set `TINYSHOGI_ENGINE` when the engine is elsewhere. MCP clients should launch
+the script as a stdio server and call `tools/list` followed by `tools/call`.
+
 ## License and provenance
 
 The project is distributed under the Apache License 2.0 in `LICENSE`.

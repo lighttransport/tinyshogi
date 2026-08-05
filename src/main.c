@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <math.h>
 
 typedef struct {
     ShogiPosition position;
@@ -284,6 +285,148 @@ static bool selftest(void) {
     return false;
 }
 
+typedef struct {
+    char sfen[512];
+    ShogiColor side;
+    ShogiMove selected;
+    SearchPolicyEntry policy[SHOGI_MAX_MOVES];
+    size_t policy_count;
+} SelfplaySample;
+
+static uint64_t selfplay_rng(uint64_t *state) {
+    uint64_t value = (*state += UINT64_C(0x9e3779b97f4a7c15));
+    value = (value ^ (value >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+    value = (value ^ (value >> 27)) * UINT64_C(0x94d049bb133111eb);
+    return value ^ (value >> 31);
+}
+
+static bool selfplay_option(const char *key, const char *value, uint64_t *out) {
+    if (key == NULL || value == NULL || out == NULL) return false;
+    if (value[0] == '-' || value[0] == '\0') return false;
+    char *end = NULL;
+    unsigned long long parsed = strtoull(value, &end, 10);
+    if (*end != '\0') return false;
+    (void)key;
+    *out = (uint64_t)parsed;
+    return true;
+}
+
+static size_t selfplay_choose(const SearchPolicyEntry *policy, size_t count,
+                              unsigned temperature_milli, unsigned ply, unsigned cutoff,
+                              uint64_t *rng) {
+    if (count == 0) return 0;
+    if (ply >= cutoff || temperature_milli == 0) {
+        size_t best = 0;
+        for (size_t index = 1; index < count; ++index) {
+            if (policy[index].visits > policy[best].visits) best = index;
+        }
+        return best;
+    }
+    double temperature = (double)temperature_milli / 1000.0;
+    double total = 0.0;
+    for (size_t index = 0; index < count; ++index) {
+        double weight = pow((double)policy[index].visits, 1.0 / temperature);
+        if (!isfinite(weight)) weight = policy[index].visits == 0 ? 0.0 : 1.0e300;
+        total += weight;
+    }
+    if (total <= 0.0 || !isfinite(total)) return (size_t)(selfplay_rng(rng) % count);
+    double selected = ((double)(selfplay_rng(rng) >> 11) / 9007199254740992.0) * total;
+    for (size_t index = 0; index < count; ++index) {
+        double weight = pow((double)policy[index].visits, 1.0 / temperature);
+        if (selected < weight) return index;
+        selected -= weight;
+    }
+    return count - 1;
+}
+
+static int selfplay_result_value(ShogiResult result, ShogiColor side) {
+    if (result == SHOGI_RESULT_DRAW || result == SHOGI_RESULT_ONGOING) return 0;
+    ShogiResult win = side == SHOGI_BLACK ? SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN;
+    return result == win ? 1 : -1;
+}
+
+static bool run_selfplay(int argc, char **argv) {
+    unsigned games = 1, simulations = 256, max_plies = 512;
+    unsigned threads = 1, temperature_milli = 1000, cutoff = 30;
+    uint64_t seed = 1;
+    const char *output_path = "selfplay.jsonl";
+    for (int index = 2; index < argc; ++index) {
+        uint64_t value;
+        const char *key = argv[index];
+        if (index + 1 >= argc) return false;
+        if (strcmp(key, "--output") == 0) {
+            output_path = argv[++index];
+            continue;
+        }
+        if (!selfplay_option(key, argv[index + 1], &value)) return false;
+        if (strcmp(key, "--games") == 0) games = (unsigned)value;
+        else if (strcmp(key, "--simulations") == 0) simulations = (unsigned)value;
+        else if (strcmp(key, "--threads") == 0) threads = (unsigned)value;
+        else if (strcmp(key, "--seed") == 0) seed = value;
+        else if (strcmp(key, "--temperature") == 0) temperature_milli = (unsigned)value;
+        else if (strcmp(key, "--temperature-cutoff") == 0) cutoff = (unsigned)value;
+        else if (strcmp(key, "--max-plies") == 0) max_plies = (unsigned)value;
+        else return false;
+        ++index;
+    }
+    if (games == 0 || simulations == 0 || max_plies == 0 || threads == 0) return false;
+    FILE *output = fopen(output_path, "w");
+    if (output == NULL) return false;
+    SelfplaySample *samples = calloc(max_plies, sizeof(*samples));
+    if (samples == NULL) { fclose(output); return false; }
+    for (unsigned game = 0; game < games; ++game) {
+        ShogiPosition position;
+        shogi_position_start(&position);
+        size_t sample_count = 0;
+        ShogiResult result = SHOGI_RESULT_ONGOING;
+        uint64_t rng = seed + (uint64_t)game * UINT64_C(0x9e3779b97f4a7c15);
+        for (unsigned ply = 0; ply < max_plies && result == SHOGI_RESULT_ONGOING; ++ply) {
+            if (!shogi_position_to_sfen(&position, samples[sample_count].sfen,
+                                        sizeof(samples[sample_count].sfen))) { free(samples); fclose(output); return false; }
+            samples[sample_count].side = position.side;
+            SearchOptions options = {threads, seed + ply + (uint64_t)game * 1000003U, false,
+                                     200000, 64, SEARCH_DEFAULT_EXPLORATION_MILLI, 1};
+            SearchLimits limits = {0};
+            limits.nodes = simulations;
+            SearchJob *job = search_start(&position, &limits, &options);
+            if (job == NULL) { free(samples); fclose(output); return false; }
+            search_join(job, NULL);
+            samples[sample_count].policy_count = search_get_root_policy(
+                job, samples[sample_count].policy, SHOGI_MAX_MOVES);
+            if (samples[sample_count].policy_count == 0) { search_destroy(job); break; }
+            size_t choice = selfplay_choose(samples[sample_count].policy,
+                                             samples[sample_count].policy_count,
+                                             temperature_milli, ply, cutoff, &rng);
+            samples[sample_count].selected = samples[sample_count].policy[choice].move;
+            ++sample_count;
+            search_destroy(job);
+            if (!shogi_make_move(&position, samples[sample_count - 1].selected)) break;
+            result = shogi_game_result(&position);
+        }
+        if (result == SHOGI_RESULT_ONGOING) result = SHOGI_RESULT_DRAW;
+        for (size_t sample = 0; sample < sample_count; ++sample) {
+            int value = selfplay_result_value(result, samples[sample].side);
+            char selected[16];
+            if (!shogi_move_to_usi(samples[sample].selected, selected, sizeof(selected))) continue;
+            fprintf(output, "{\"version\":1,\"game\":%u,\"ply\":%zu,\"sfen\":\"%s\",\"move\":\"%s\",\"value\":%d,\"policy\":[",
+                    game, sample, samples[sample].sfen, selected, value);
+            for (size_t entry = 0; entry < samples[sample].policy_count; ++entry) {
+                char move[16];
+                if (entry != 0) fputc(',', output);
+                if (!shogi_move_to_usi(samples[sample].policy[entry].move, move, sizeof(move))) continue;
+                fprintf(output, "[\"%s\",%llu]", move,
+                        (unsigned long long)samples[sample].policy[entry].visits);
+            }
+            fprintf(output, "]}\n");
+        }
+        fprintf(stderr, "selfplay game %u/%u result %d plies %zu\n", game + 1, games,
+                result, sample_count);
+    }
+    free(samples);
+    fclose(output);
+    return true;
+}
+
 static void process_line(Application *application, char *line) {
     char command[32] = {0};
     if (sscanf(line, "%31s", command) != 1) return;
@@ -328,12 +471,18 @@ static void process_line(Application *application, char *line) {
         finish_job(application, false);
         shogi_print_position(&application->position);
         fflush(stdout);
+    } else if (strcmp(command, "sfen") == 0) {
+        char sfen[512];
+        finish_job(application, false);
+        if (shogi_position_to_sfen(&application->position, sfen, sizeof(sfen))) puts(sfen);
+        fflush(stdout);
     }
 }
 
 int main(int argc, char **argv) {
     shogi_init();
     if (argc > 1 && strcmp(argv[1], "--selftest") == 0) return selftest() ? 0 : 1;
+    if (argc > 1 && strcmp(argv[1], "--selfplay") == 0) return run_selfplay(argc, argv) ? 0 : 1;
 
     Application application;
     memset(&application, 0, sizeof(application));

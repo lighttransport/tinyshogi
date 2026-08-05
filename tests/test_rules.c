@@ -8,6 +8,36 @@ static int fail(const char *message) {
     return 1;
 }
 
+static int check_undo_roundtrip(ShogiPosition *position, ShogiMove move, const char *label) {
+    ShogiPosition before = *position;
+    ShogiUndo undo;
+    if (!shogi_make_move_undo(position, move, &undo) || !shogi_unmake_move(position, &undo)) {
+        fprintf(stderr, "rules test failed: %s operation\n", label);
+        return 1;
+    }
+    if (memcmp(before.board, position->board, sizeof(before.board)) != 0 ||
+        memcmp(before.hand, position->hand, sizeof(before.hand)) != 0 ||
+        before.side != position->side || before.move_number != position->move_number ||
+        before.hash != position->hash || before.history_length != position->history_length ||
+        memcmp(before.king_square, position->king_square, sizeof(before.king_square)) != 0 ||
+        memcmp(before.history, position->history, before.history_length * sizeof(before.history[0])) != 0) {
+        fprintf(stderr, "rules test failed: %s state mismatch\n", label);
+        return 1;
+    }
+    return 0;
+}
+
+static int check_hash_roundtrip(const ShogiPosition *position, const char *label) {
+    char sfen[512];
+    ShogiPosition parsed;
+    if (!shogi_position_to_sfen(position, sfen, sizeof(sfen)) ||
+        !shogi_position_from_sfen(&parsed, sfen) || parsed.hash != position->hash) {
+        fprintf(stderr, "rules test failed: %s hash mismatch\n", label);
+        return 1;
+    }
+    return 0;
+}
+
 static uint64_t perft(const ShogiPosition *position, int depth) {
     if (depth == 0) return 1;
     ShogiMove moves[SHOGI_MAX_MOVES];
@@ -30,6 +60,13 @@ int main(void) {
     if (perft(&position, 2) != 900) return fail("initial perft depth 2");
     if (perft(&position, 3) != 25470) return fail("initial perft depth 3");
     if (!shogi_parse_and_make_move(&position, "7g7f")) return fail("initial pawn move");
+    if (check_hash_roundtrip(&position, "normal move") != 0) return 1;
+
+    ShogiPosition undo_position;
+    ShogiMove undo_move;
+    shogi_position_start(&undo_position);
+    if (!shogi_parse_usi_move("7g7f", &undo_move) ||
+        check_undo_roundtrip(&undo_position, undo_move, "normal move") != 0) return 1;
 
     char sfen[512];
     if (!shogi_position_to_sfen(&position, sfen, sizeof(sfen))) return fail("SFEN serialization");
@@ -52,9 +89,17 @@ int main(void) {
     if (!shogi_position_from_sfen(&parsed, "4k4/9/4P4/9/9/9/9/9/4K4 b - 1")) return fail("promotion SFEN");
     if (!shogi_parse_and_make_move(&parsed, "5c5b+")) return fail("promotion move");
     if (shogi_piece_type(parsed.board[1 * 9 + 4]) != SHOGI_PRO_PAWN) return fail("promotion piece");
+    if (check_hash_roundtrip(&parsed, "promotion move") != 0) return 1;
+    if (!shogi_position_from_sfen(&undo_position, "4k4/9/4P4/9/9/9/9/9/4K4 b - 1") ||
+        !shogi_parse_usi_move("5c5b+", &undo_move) ||
+        check_undo_roundtrip(&undo_position, undo_move, "promotion move") != 0) return 1;
 
     if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 b P 1")) return fail("drop SFEN");
     if (!shogi_parse_and_make_move(&parsed, "P*5e")) return fail("pawn drop");
+    if (check_hash_roundtrip(&parsed, "drop move") != 0) return 1;
+    if (!shogi_position_from_sfen(&undo_position, "4k4/9/9/9/9/9/9/9/4K4 b P 1") ||
+        !shogi_parse_usi_move("P*5e", &undo_move) ||
+        check_undo_roundtrip(&undo_position, undo_move, "drop move") != 0) return 1;
 
     if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/4P4/9/9/9/4K4 b P 1")) return fail("nifu SFEN");
     if (shogi_parse_and_make_move(&parsed, "P*5d")) return fail("nifu rejection");

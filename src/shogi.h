@@ -50,11 +50,28 @@ typedef struct {
 } ShogiMove;
 
 typedef struct {
+    ShogiMove move;
+    uint8_t moving_piece;
+    uint8_t captured_piece;
+    uint8_t color;
+    uint8_t hand_index;
+    uint8_t hand_before;
+    uint8_t hand_touched;
+    uint8_t valid;
+    ShogiColor previous_side;
+    unsigned previous_move_number;
+    uint64_t previous_hash;
+    size_t previous_history_length;
+    uint8_t previous_king_square[2];
+} ShogiUndo;
+
+typedef struct {
     uint8_t board[SHOGI_SQUARES];
     uint8_t hand[2][7];
     ShogiColor side;
     unsigned move_number;
     uint64_t hash;
+    uint8_t king_square[2];
     uint64_t history[SHOGI_MAX_HISTORY];
     uint8_t history_mover[SHOGI_MAX_HISTORY];
     uint8_t history_check[SHOGI_MAX_HISTORY];
@@ -67,6 +84,8 @@ bool shogi_position_from_sfen(ShogiPosition *position, const char *sfen);
 bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out_size);
 
 bool shogi_make_move(ShogiPosition *position, ShogiMove move);
+bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *undo);
+bool shogi_unmake_move(ShogiPosition *position, const ShogiUndo *undo);
 bool shogi_parse_usi_move(const char *text, ShogiMove *move);
 bool shogi_move_to_usi(ShogiMove move, char *out, size_t out_size);
 bool shogi_parse_and_make_move(ShogiPosition *position, const char *text);
@@ -74,6 +93,9 @@ bool shogi_parse_and_make_move(ShogiPosition *position, const char *text);
 size_t shogi_generate_legal(const ShogiPosition *position,
                             ShogiMove *moves,
                             size_t capacity);
+size_t shogi_generate_pseudo(const ShogiPosition *position,
+                              ShogiMove *moves,
+                              size_t capacity);
 ShogiResult shogi_game_result_with_moves(const ShogiPosition *position,
                                          ShogiMove *moves,
                                          size_t capacity,

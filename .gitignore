@@ -57,3 +57,9 @@ dkms.conf
 # Build directories
 build/
 .xmake/
+cuda/build/
+cpu/train_int
+cpu/eval_int
+__pycache__/
+*.py[cod]
+*$py.class

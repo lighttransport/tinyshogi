@@ -41,6 +41,18 @@ int main(void) {
     }
     SearchLine lines[2];
     if (search_get_root_lines(job, lines, 2) != 2) return fail("multipv root lines");
+    SearchPolicyEntry policy[SHOGI_MAX_MOVES];
+    size_t policy_count = search_get_root_policy(job, policy, SHOGI_MAX_MOVES);
+    ShogiMove legal_moves[SHOGI_MAX_MOVES];
+    size_t legal_count = shogi_generate_legal(&position, legal_moves, SHOGI_MAX_MOVES);
+    if (policy_count != legal_count || policy_count == 0) return fail("root policy move count");
+    uint64_t policy_visits = 0;
+    for (size_t policy_index = 0; policy_index < policy_count; ++policy_index) {
+        policy_visits += policy[policy_index].visits;
+        ShogiPosition policy_position = position;
+        if (!shogi_make_move(&policy_position, policy[policy_index].move)) return fail("root policy legality");
+    }
+    if (policy_visits > result.simulations) return fail("root policy visit total");
     if (lines[0].pv_length == 0 || lines[0].pv_length > SEARCH_MAX_PV ||
         lines[0].pv[0].from != lines[0].move.from || lines[0].pv[0].to != lines[0].move.to ||
         lines[0].pv[0].promote != lines[0].move.promote || lines[0].pv[0].drop != lines[0].move.drop) {
