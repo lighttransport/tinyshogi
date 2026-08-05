@@ -120,6 +120,28 @@ The optional no-SDK CUDA handoff is documented in [cuda/README.md](cuda/README.m
 It uses a CUEW-style runtime loader and builds the CUDA probe with only `cc` and
 `-ldl`; the normal CPU engine remains independent of CUDA.
 
+## External evaluators
+
+The search accepts an optional external evaluator through the small C ABI in
+[`src/eval.h`](src/eval.h). A shared library exports
+`tinyshogi_eval_plugin()`, which returns a `TinyShogiEvalPlugin`. Its
+`evaluate` callback receives an immutable `ShogiPosition` and the perspective
+color, and returns a perspective-relative centipawn score. This makes an NNUE
+or another model usable without adding its representation to the engine.
+
+The callback may be called concurrently by search threads, so plugin state must
+be immutable or internally synchronized. The example plugin can be built and
+loaded as follows:
+
+```sh
+cc -shared -fPIC -Isrc examples/tinyshogi_eval_plugin.c -o /tmp/tinyshogi-eval.so
+printf 'usi\nsetoption name EvalPlugin value /tmp/tinyshogi-eval.so\nposition startpos\ngo nodes 100\nquit\n' \
+  | ./build/tinyshogi
+```
+
+The equivalent runtime option is `setoption name EvalPlugin value <path>`;
+use `value none` to return to the built-in material/mobility evaluator.
+
 CUDA `TSM2` checkpoints can be quantized for deterministic CPU inference:
 
 ```sh
@@ -143,6 +165,20 @@ cpu/eval_int model-int.tsm3 selfplay.tfe
 
 `eval-int` prints fixed-point value/policy results and a checksum, which is
 useful for cross-machine reproducibility checks.
+
+## Fuzzing
+
+The rules parser and state transitions have a standalone libFuzzer harness.
+It requires Clang with the libFuzzer runtime:
+
+```sh
+make -C fuzz
+make -C fuzz run
+```
+
+The harness uses the seed corpus in `fuzz/corpus/` and enables AddressSanitizer
+and UndefinedBehaviorSanitizer. To run longer, pass options directly to the
+target, for example `fuzz/shogi-fuzz -max_total_time=300 fuzz/corpus`.
 
 For local automation and LLM-assisted play, `tools/tinyshogi_mcp.py` provides
 a dependency-free stdio MCP server. It exposes board queries, legal move

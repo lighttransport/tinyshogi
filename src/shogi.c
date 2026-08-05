@@ -727,6 +727,11 @@ bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *un
     undo->previous_move_number = position->move_number;
     undo->previous_hash = position->hash;
     undo->previous_history_length = position->history_length;
+    if (position->history_length > 0) {
+        size_t previous = position->history_length - 1;
+        undo->previous_history_mover = position->history_mover[previous];
+        undo->previous_history_check = position->history_check[previous];
+    }
     undo->previous_king_square[SHOGI_BLACK] = position->king_square[SHOGI_BLACK];
     undo->previous_king_square[SHOGI_WHITE] = position->king_square[SHOGI_WHITE];
     undo->moving_piece = move.from == SHOGI_SQ_NONE ?
@@ -761,6 +766,11 @@ bool shogi_unmake_move(ShogiPosition *position, const ShogiUndo *undo) {
     position->move_number = undo->previous_move_number;
     position->hash = undo->previous_hash;
     position->history_length = undo->previous_history_length;
+    if (position->history_length > 0) {
+        size_t previous = position->history_length - 1;
+        position->history_mover[previous] = undo->previous_history_mover;
+        position->history_check[previous] = undo->previous_history_check;
+    }
     position->king_square[SHOGI_BLACK] = undo->previous_king_square[SHOGI_BLACK];
     position->king_square[SHOGI_WHITE] = undo->previous_king_square[SHOGI_WHITE];
     return true;

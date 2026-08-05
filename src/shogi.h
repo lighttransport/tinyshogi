@@ -62,6 +62,8 @@ typedef struct {
     unsigned previous_move_number;
     uint64_t previous_hash;
     size_t previous_history_length;
+    uint8_t previous_history_mover;
+    uint8_t previous_history_check;
     uint8_t previous_king_square[2];
 } ShogiUndo;
 

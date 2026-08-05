@@ -20,7 +20,11 @@ static int check_undo_roundtrip(ShogiPosition *position, ShogiMove move, const c
         before.side != position->side || before.move_number != position->move_number ||
         before.hash != position->hash || before.history_length != position->history_length ||
         memcmp(before.king_square, position->king_square, sizeof(before.king_square)) != 0 ||
-        memcmp(before.history, position->history, before.history_length * sizeof(before.history[0])) != 0) {
+        memcmp(before.history, position->history, before.history_length * sizeof(before.history[0])) != 0 ||
+        memcmp(before.history_mover, position->history_mover,
+               before.history_length * sizeof(before.history_mover[0])) != 0 ||
+        memcmp(before.history_check, position->history_check,
+               before.history_length * sizeof(before.history_check[0])) != 0) {
         fprintf(stderr, "rules test failed: %s state mismatch\n", label);
         return 1;
     }

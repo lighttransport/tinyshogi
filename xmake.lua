@@ -4,8 +4,8 @@ add_rules("mode.debug", "mode.release")
 
 target("tinyshogi")
     set_kind("binary")
-    add_files("src/main.c", "src/search.c", "src/shogi.c", "src/thread_posix.c")
-    add_syslinks("pthread", "m")
+    add_files("src/main.c", "src/search.c", "src/shogi.c", "src/eval.c", "src/thread_posix.c")
+    add_syslinks("pthread", "m", "dl")
 
 target("tinyshogi-rules-test")
     set_kind("binary")
@@ -14,8 +14,8 @@ target("tinyshogi-rules-test")
 
 target("tinyshogi-search-test")
     set_kind("binary")
-    add_files("tests/test_search.c", "src/search.c", "src/shogi.c", "src/thread_posix.c")
-    add_syslinks("pthread", "m")
+    add_files("tests/test_search.c", "src/search.c", "src/shogi.c", "src/eval.c", "src/thread_posix.c")
+    add_syslinks("pthread", "m", "dl")
 
 target("tinyshogi-integer-test")
     set_kind("binary")

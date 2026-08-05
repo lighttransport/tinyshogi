@@ -245,7 +245,14 @@ static int piece_value(ShogiPieceType type) {
     }
 }
 
-static int static_evaluation(const ShogiPosition *position, ShogiColor perspective) {
+static int static_evaluation(const SearchJob *job, const ShogiPosition *position,
+                             ShogiColor perspective) {
+    if (shogi_evaluator_active(job->options.evaluator)) {
+        int score = shogi_evaluator_score(job->options.evaluator, position, perspective);
+        if (score > 1500) return 1500;
+        if (score < -1500) return -1500;
+        return score;
+    }
     int score = 0;
     for (size_t square = 0; square < SHOGI_SQUARES; ++square) {
         uint8_t piece = position->board[square];
@@ -319,7 +326,7 @@ static double rollout(SearchJob *job, ShogiPosition *position, ShogiUndo *undos,
             !shogi_make_move_undo(position, moves[choice], &undos[*undo_length])) break;
         ++*undo_length;
     }
-    int score = static_evaluation(position, job->root_side);
+    int score = static_evaluation(job, position, job->root_side);
     return 0.5 + (double)score / 3000.0;
 }
 

@@ -18,6 +18,7 @@
 typedef struct {
     ShogiPosition position;
     SearchOptions options;
+    ShogiEvaluator evaluator;
     SearchJob *job;
     uint64_t last_info_ns;
     bool quit;
@@ -236,6 +237,7 @@ static void print_usi(void) {
     printf("option name RolloutDepth type spin default %u min 1 max 512\n", SEARCH_DEFAULT_ROLLOUT_DEPTH);
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
+    puts("option name EvalPlugin type string default none");
     puts("usiok");
     fflush(stdout);
 }
@@ -268,6 +270,24 @@ static void set_option(Application *application, char *line) {
         if (value >= 1 && value <= 3000) application->options.exploration_milli = (unsigned)value;
     } else if (strcmp(tokens[2], "MultiPV") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= SEARCH_MAX_MULTIPV) application->options.multi_pv = (unsigned)value;
+    } else if (strcmp(tokens[2], "EvalPlugin") == 0) {
+        if (strcmp(tokens[value_index], "none") == 0) {
+            shogi_evaluator_destroy(&application->evaluator);
+            application->options.evaluator = &application->evaluator;
+        } else {
+            ShogiEvaluator next;
+            shogi_evaluator_init(&next);
+            if (shogi_evaluator_load(&next, tokens[value_index], NULL)) {
+                shogi_evaluator_destroy(&application->evaluator);
+                application->evaluator = next;
+                application->options.evaluator = &application->evaluator;
+                printf("info string evaluator loaded %s\n",
+                       application->evaluator.name == NULL ? tokens[value_index] : application->evaluator.name);
+            } else {
+                printf("info string evaluator load failed: %s\n", shogi_evaluator_error());
+            }
+        }
+        fflush(stdout);
     }
 }
 
@@ -385,7 +405,7 @@ static bool run_selfplay(int argc, char **argv) {
                                         sizeof(samples[sample_count].sfen))) { free(samples); fclose(output); return false; }
             samples[sample_count].side = position.side;
             SearchOptions options = {threads, seed + ply + (uint64_t)game * 1000003U, false,
-                                     200000, 64, SEARCH_DEFAULT_EXPLORATION_MILLI, 1};
+                                     200000, 64, SEARCH_DEFAULT_EXPLORATION_MILLI, 1, NULL};
             SearchLimits limits = {0};
             limits.nodes = simulations;
             SearchJob *job = search_start(&position, &limits, &options);
@@ -486,6 +506,7 @@ int main(int argc, char **argv) {
 
     Application application;
     memset(&application, 0, sizeof(application));
+    shogi_evaluator_init(&application.evaluator);
     shogi_position_start(&application.position);
     application.options.threads = detected_threads();
     application.options.seed_auto = true;
@@ -493,6 +514,7 @@ int main(int argc, char **argv) {
     application.options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
     application.options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     application.options.multi_pv = SEARCH_DEFAULT_MULTIPV;
+    application.options.evaluator = &application.evaluator;
 
     char line[4096];
     bool input_eof = false;
@@ -531,5 +553,6 @@ int main(int argc, char **argv) {
         }
     }
     finish_job(&application, false);
+    shogi_evaluator_destroy(&application.evaluator);
     return 0;
 }

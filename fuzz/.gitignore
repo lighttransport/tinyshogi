@@ -1,0 +1,4 @@
+/shogi-fuzz
+/crash-*
+/corpus/*
+!/corpus/*.sfen

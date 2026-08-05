@@ -2,6 +2,7 @@
 #define TINYSHOGI_SEARCH_H
 
 #include "shogi.h"
+#include "eval.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,6 +37,7 @@ typedef struct {
     unsigned rollout_depth;
     unsigned exploration_milli;
     unsigned multi_pv;
+    const ShogiEvaluator *evaluator;
 } SearchOptions;
 
 typedef struct {
