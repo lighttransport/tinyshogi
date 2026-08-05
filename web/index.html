@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tinyshogi</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>tinyshogi</h1>
+    <p id="status">Loading…</p>
+    <div id="hand-1" class="hand" aria-label="White pieces in hand"></div>
+    <div id="board" class="board" aria-label="Shogi board"></div>
+    <div id="hand-0" class="hand" aria-label="Black pieces in hand"></div>
+    <button id="reset" type="button">New game</button>
+    <p class="hint">Click a piece, then a highlighted square.</p>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
