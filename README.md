@@ -51,7 +51,9 @@ enable pthreads by default. It provides a small human-vs-human click-to-move
 app in `web/`; select a piece and a highlighted destination, or select a
 captured piece from a hand to make a drop. Every destination comes from the
 engine's legal-move generator, including promotion and drop restrictions. The
-generated files are written to `web/build/`.
+The app also supports undo/redo, Ctrl/Cmd-Z, SFEN import/export, and an
+optional single-thread engine move running in a Web Worker. The generated files
+are written to `web/build/`.
 
 The core is C11. The initial threading and CLI backend uses POSIX pthreads and
 `poll`; no third-party runtime or source dependency is required.
@@ -90,6 +92,8 @@ thread count is `min(available CPUs, 8)`. Set `Threads` to `1` and provide a
 nonzero `Seed` for reproducible searches.
 `RolloutDepth` controls the heuristic rollout horizon (default 256 plies), and
 `UCTExploration` is the UCT exploration constant in thousandths (default 1414).
+`QuiescenceDepth` adds a small tactical capture/promotion/check search at rollout
+leaves (default 2 plies; set it to 0 to disable it).
 `MultiPV` controls how many root candidates are reported in periodic `info`
 lines; `bestmove` remains the top-ranked candidate.
 `go ponder` keeps searching without a clock deadline until `ponderhit` changes

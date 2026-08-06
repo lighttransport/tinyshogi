@@ -74,10 +74,47 @@ static void exercise_game(const uint8_t *data, size_t size) {
     }
 }
 
+static void exercise_undo_sequence(const uint8_t *data, size_t size) {
+    ShogiPosition position;
+    ShogiPosition original;
+    ShogiUndo undos[64];
+    shogi_position_start(&position);
+    original = position;
+    size_t length = 0;
+    for (size_t offset = 0; offset < size && length < 64; ++offset) {
+        ShogiMove moves[SHOGI_MAX_MOVES];
+        size_t count = shogi_generate_legal(&position, moves, SHOGI_MAX_MOVES);
+        if (count == 0) break;
+        if (!shogi_make_move_undo(&position, moves[data[offset] % count], &undos[length])) abort();
+        ++length;
+        char sfen[512];
+        ShogiPosition parsed;
+        if (!shogi_position_to_sfen(&position, sfen, sizeof(sfen)) ||
+            !shogi_position_from_sfen(&parsed, sfen) || parsed.hash != position.hash) abort();
+        if (shogi_game_result(&position) != SHOGI_RESULT_ONGOING) break;
+    }
+    while (length > 0) {
+        --length;
+        if (!shogi_unmake_move(&position, &undos[length])) abort();
+    }
+    if (memcmp(position.board, original.board, sizeof(position.board)) != 0 ||
+        memcmp(position.hand, original.hand, sizeof(position.hand)) != 0 ||
+        position.side != original.side || position.move_number != original.move_number ||
+        position.hash != original.hash || position.history_length != original.history_length ||
+        memcmp(position.king_square, original.king_square, sizeof(position.king_square)) != 0 ||
+        memcmp(position.history, original.history,
+               original.history_length * sizeof(original.history[0])) != 0 ||
+        memcmp(position.history_mover, original.history_mover,
+               original.history_length * sizeof(original.history_mover[0])) != 0 ||
+        memcmp(position.history_check, original.history_check,
+               original.history_length * sizeof(original.history_check[0])) != 0) abort();
+}
+
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     if (data == NULL || size == 0) return 0;
     shogi_init();
     try_sfen(data, size);
     exercise_game(data, size);
+    exercise_undo_sequence(data, size);
     return 0;
 }

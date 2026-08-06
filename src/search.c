@@ -20,6 +20,18 @@
 typedef struct TreeNode TreeNode;
 
 typedef struct {
+    uint64_t hash;
+    TreeNode *node;
+} TreeHashEntry;
+
+typedef struct {
+    uint64_t hash;
+    int score;
+    uint8_t perspective;
+    bool valid;
+} EvalCacheEntry;
+
+typedef struct {
     ShogiMove move;
     _Atomic(TreeNode *) node;
     atomic_uint_least64_t visits;
@@ -43,6 +55,8 @@ typedef struct {
     TreeNode *nodes;
     size_t node_count;
     size_t node_capacity;
+    TreeHashEntry *hash_table;
+    size_t hash_capacity;
     TsMutex expansion_mutex;
 } SearchTree;
 
@@ -59,6 +73,10 @@ struct SearchJob {
     atomic_uint workers_done;
     atomic_uint_least64_t simulations;
     atomic_uint_least64_t deadline_ns;
+    EvalCacheEntry *eval_cache;
+    size_t eval_cache_capacity;
+    TsMutex eval_mutex;
+    bool eval_mutex_ready;
     uint64_t start_ns;
     ShogiColor root_side;
     SearchResult result;
@@ -106,8 +124,44 @@ static void tree_destroy(SearchTree *tree) {
     if (tree == NULL) return;
     for (size_t index = 0; index < tree->node_count; ++index) tree_free_node(&tree->nodes[index]);
     free(tree->nodes);
+    free(tree->hash_table);
     ts_mutex_destroy(&tree->expansion_mutex);
     memset(tree, 0, sizeof(*tree));
+}
+
+static size_t tree_hash_index(const SearchTree *tree, uint64_t hash) {
+    hash ^= hash >> 30;
+    hash *= UINT64_C(0xbf58476d1ce4e5b9);
+    hash ^= hash >> 27;
+    hash *= UINT64_C(0x94d049bb133111eb);
+    hash ^= hash >> 31;
+    return (size_t)hash & (tree->hash_capacity - 1);
+}
+
+static TreeNode *tree_find_hash(const SearchTree *tree, uint64_t hash) {
+    if (tree->hash_table == NULL || tree->hash_capacity == 0) return NULL;
+    size_t index = tree_hash_index(tree, hash);
+    for (size_t probe = 0; probe < tree->hash_capacity; ++probe) {
+        const TreeHashEntry *entry = &tree->hash_table[index];
+        if (entry->node == NULL) return NULL;
+        if (entry->hash == hash) return entry->node;
+        index = (index + 1) & (tree->hash_capacity - 1);
+    }
+    return NULL;
+}
+
+static void tree_insert_hash(SearchTree *tree, uint64_t hash, TreeNode *node) {
+    if (tree->hash_table == NULL || tree->hash_capacity == 0) return;
+    size_t index = tree_hash_index(tree, hash);
+    for (size_t probe = 0; probe < tree->hash_capacity; ++probe) {
+        TreeHashEntry *entry = &tree->hash_table[index];
+        if (entry->node == NULL || entry->hash == hash) {
+            entry->hash = hash;
+            entry->node = node;
+            return;
+        }
+        index = (index + 1) & (tree->hash_capacity - 1);
+    }
 }
 
 static TreeNode *tree_new_node(SearchTree *tree, uint64_t hash) {
@@ -122,6 +176,7 @@ static TreeNode *tree_new_node(SearchTree *tree, uint64_t hash) {
         atomic_init(&node->next_unexpanded, 0);
         atomic_init(&node->visits, 0);
         atomic_init(&node->value, 0);
+        tree_insert_hash(tree, hash, node);
     }
     ts_mutex_unlock(&tree->expansion_mutex);
     return node;
@@ -204,21 +259,23 @@ static TreeChild *expand_one(SearchJob *job, TreeNode *node, ShogiPosition *posi
     TreeChild *child = &node->children[index];
     TreeNode *child_node = atomic_load_explicit(&child->node, memory_order_relaxed);
     if (child_node == NULL) {
-        if (job->tree.node_count < job->tree.node_capacity) {
-            child_node = &job->tree.nodes[job->tree.node_count++];
-            memset(child_node, 0, sizeof(*child_node));
-            if (!shogi_make_move_undo(position, child->move, undo)) {
-                --job->tree.node_count;
-                child_node = NULL;
-            }
-            if (child_node != NULL) {
+        bool made = shogi_make_move_undo(position, child->move, undo);
+        if (!made) {
+            child_node = NULL;
+        } else {
+            child_node = tree_find_hash(&job->tree, position->hash);
+            if (child_node == NULL && job->tree.node_count < job->tree.node_capacity) {
+                child_node = &job->tree.nodes[job->tree.node_count++];
+                memset(child_node, 0, sizeof(*child_node));
                 child_node->hash = position->hash;
                 atomic_init(&child_node->expanded, false);
                 atomic_flag_clear(&child_node->expansion_lock);
                 atomic_init(&child_node->next_unexpanded, 0);
                 atomic_init(&child_node->visits, 0);
                 atomic_init(&child_node->value, 0);
+                tree_insert_hash(&job->tree, position->hash, child_node);
             }
+            if (child_node == NULL) (void)shogi_unmake_move(position, undo);
         }
         atomic_store_explicit(&child->node, child_node, memory_order_release);
     }
@@ -248,7 +305,26 @@ static int piece_value(ShogiPieceType type) {
 static int static_evaluation(const SearchJob *job, const ShogiPosition *position,
                              ShogiColor perspective) {
     if (shogi_evaluator_active(job->options.evaluator)) {
-        int score = shogi_evaluator_score(job->options.evaluator, position, perspective);
+        int score;
+        if (job->eval_cache != NULL && job->eval_cache_capacity != 0) {
+            size_t index = (size_t)(position->hash ^ (uint64_t)perspective) &
+                           (job->eval_cache_capacity - 1);
+            ts_mutex_lock((TsMutex *)&job->eval_mutex);
+            EvalCacheEntry *entry = &job->eval_cache[index];
+            if (entry->valid && entry->hash == position->hash &&
+                entry->perspective == (uint8_t)perspective) {
+                score = entry->score;
+            } else {
+                score = shogi_evaluator_score(job->options.evaluator, position, perspective);
+                entry->hash = position->hash;
+                entry->perspective = (uint8_t)perspective;
+                entry->score = score;
+                entry->valid = true;
+            }
+            ts_mutex_unlock((TsMutex *)&job->eval_mutex);
+        } else {
+            score = shogi_evaluator_score(job->options.evaluator, position, perspective);
+        }
         if (score > 1500) return 1500;
         if (score < -1500) return -1500;
         return score;
@@ -293,6 +369,87 @@ static unsigned rollout_move_weight(const ShogiPosition *position, ShogiMove mov
 }
 
 typedef struct {
+    ShogiMove move;
+    int score;
+} TacticalMove;
+
+static int tactical_move_score(const ShogiPosition *position, ShogiMove move) {
+    int score = 0;
+    if (move.from != SHOGI_SQ_NONE && position->board[move.to] != SHOGI_EMPTY) {
+        score += 1000 + piece_value(shogi_piece_type(position->board[move.to]));
+    }
+    if (move.promote) score += 500;
+
+    ShogiPosition next = *position;
+    ShogiUndo undo;
+    if (shogi_make_move_undo(&next, move, &undo)) {
+        if (shogi_is_in_check(&next, next.side)) score += 750;
+        (void)shogi_unmake_move(&next, &undo);
+    }
+    return score;
+}
+
+static int quiescence_search(const SearchJob *job, const ShogiPosition *position,
+                             ShogiColor perspective, unsigned depth,
+                             int alpha, int beta) {
+    if (should_stop(job)) return static_evaluation(job, position, perspective);
+
+    ShogiMove moves[SHOGI_MAX_MOVES];
+    size_t move_count = 0;
+    ShogiResult result = shogi_game_result_with_moves(position, moves,
+                                                       SHOGI_MAX_MOVES, &move_count);
+    if (result != SHOGI_RESULT_ONGOING) {
+        if (result == SHOGI_RESULT_DRAW) return 0;
+        ShogiResult win = perspective == SHOGI_BLACK ? SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN;
+        return result == win ? 3000 : -3000;
+    }
+
+    int stand_pat = static_evaluation(job, position, perspective);
+    if (depth == 0) return stand_pat;
+    bool in_check = shogi_is_in_check(position, position->side);
+    TacticalMove tactical[SHOGI_MAX_MOVES];
+    size_t tactical_count = 0;
+    for (size_t index = 0; index < move_count; ++index) {
+        ShogiMove move = moves[index];
+        int score = tactical_move_score(position, move);
+        bool is_tactical = in_check || score > 0;
+        if (is_tactical && tactical_count < SHOGI_MAX_MOVES) {
+            tactical[tactical_count++] = (TacticalMove){move, score};
+        }
+    }
+    if (tactical_count == 0) return stand_pat;
+
+    bool maximizing = position->side == perspective;
+    int best = maximizing ? -30000 : 30000;
+    for (size_t index = 0; index < tactical_count; ++index) {
+        size_t best_index = index;
+        for (size_t candidate = index + 1; candidate < tactical_count; ++candidate) {
+            if (tactical[candidate].score > tactical[best_index].score) best_index = candidate;
+        }
+        if (best_index != index) {
+            TacticalMove swap = tactical[index];
+            tactical[index] = tactical[best_index];
+            tactical[best_index] = swap;
+        }
+
+        ShogiPosition next = *position;
+        ShogiUndo undo;
+        if (!shogi_make_move_undo(&next, tactical[index].move, &undo)) continue;
+        int score = quiescence_search(job, &next, perspective, depth - 1, alpha, beta);
+        (void)shogi_unmake_move(&next, &undo);
+        if (maximizing) {
+            if (score > best) best = score;
+            if (best > alpha) alpha = best;
+        } else {
+            if (score < best) best = score;
+            if (best < beta) beta = best;
+        }
+        if (alpha >= beta) break;
+    }
+    return best == (maximizing ? -30000 : 30000) ? stand_pat : best;
+}
+
+typedef struct {
     TreeChild *edges[SEARCH_MAX_PATH];
     size_t length;
 } SearchPath;
@@ -326,7 +483,11 @@ static double rollout(SearchJob *job, ShogiPosition *position, ShogiUndo *undos,
             !shogi_make_move_undo(position, moves[choice], &undos[*undo_length])) break;
         ++*undo_length;
     }
-    int score = static_evaluation(job, position, job->root_side);
+    int score = quiescence_search(job, position, job->root_side,
+                                  job->options.quiescence_depth,
+                                  -3000, 3000);
+    if (score > 1500) score = 1500;
+    if (score < -1500) score = -1500;
     return 0.5 + (double)score / 3000.0;
 }
 
@@ -633,6 +794,7 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     if (job->options.max_tree_nodes < 1000) job->options.max_tree_nodes = DEFAULT_MAX_TREE_NODES;
     job->root_side = position->side;
     if (job->options.rollout_depth == 0) job->options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
+    if (job->options.quiescence_depth > 8) job->options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
     if (job->options.exploration_milli == 0) job->options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     if (job->options.multi_pv == 0) job->options.multi_pv = SEARCH_DEFAULT_MULTIPV;
     if (job->options.multi_pv > SEARCH_MAX_MULTIPV) job->options.multi_pv = SEARCH_MAX_MULTIPV;
@@ -644,11 +806,30 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     job->start_ns = monotonic_ns();
     job->tree.node_capacity = job->options.max_tree_nodes;
     job->tree.nodes = calloc(job->tree.node_capacity, sizeof(*job->tree.nodes));
-    if (job->tree.nodes == NULL || ts_mutex_init(&job->tree.expansion_mutex) != 0) {
+    job->tree.hash_capacity = 1;
+    while (job->tree.hash_capacity < job->tree.node_capacity * 2 &&
+           job->tree.hash_capacity <= (SIZE_MAX / 2)) {
+        job->tree.hash_capacity <<= 1;
+    }
+    job->tree.hash_table = calloc(job->tree.hash_capacity, sizeof(*job->tree.hash_table));
+    job->eval_cache_capacity = 1U << 16;
+    job->eval_cache = calloc(job->eval_cache_capacity, sizeof(*job->eval_cache));
+    if (job->tree.nodes == NULL || job->tree.hash_table == NULL ||
+        job->eval_cache == NULL ||
+        ts_mutex_init(&job->tree.expansion_mutex) != 0) {
         free(job->tree.nodes);
+        free(job->tree.hash_table);
+        free(job->eval_cache);
         free(job);
         return NULL;
     }
+    if (ts_mutex_init(&job->eval_mutex) != 0) {
+        tree_destroy(&job->tree);
+        free(job->eval_cache);
+        free(job);
+        return NULL;
+    }
+    job->eval_mutex_ready = true;
     job->root = tree_new_node(&job->tree, position->hash);
     ShogiMove moves[SHOGI_MAX_MOVES];
     size_t move_count = shogi_generate_legal(position, moves, SHOGI_MAX_MOVES);
@@ -776,6 +957,8 @@ void search_destroy(SearchJob *job) {
         search_join(job, NULL);
     }
     free(job->workers);
+    if (job->eval_mutex_ready) ts_mutex_destroy(&job->eval_mutex);
+    free(job->eval_cache);
     tree_destroy(&job->tree);
     free(job);
 }

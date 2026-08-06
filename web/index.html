@@ -13,7 +13,15 @@
     <div id="hand-1" class="hand" aria-label="White pieces in hand"></div>
     <div id="board" class="board" aria-label="Shogi board"></div>
     <div id="hand-0" class="hand" aria-label="Black pieces in hand"></div>
-    <button id="reset" type="button">New game</button>
+    <div class="controls">
+      <button id="undo" type="button">Undo</button>
+      <button id="redo" type="button">Redo</button>
+      <button id="reset" type="button">New game</button>
+      <button id="engine-move" type="button">Engine move</button>
+    </div>
+    <label class="sfen-label" for="sfen">SFEN position</label>
+    <textarea id="sfen" rows="2" spellcheck="false"></textarea>
+    <button id="load-sfen" type="button">Load SFEN</button>
     <p class="hint">Click a piece, then a highlighted square.</p>
   </main>
   <script type="module" src="app.js"></script>

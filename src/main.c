@@ -235,6 +235,7 @@ static void print_usi(void) {
     printf("option name Seed type spin default 0 min 0 max 2147483647\n");
     printf("option name MaxTreeNodes type spin default 1000000 min 1000 max 10000000\n");
     printf("option name RolloutDepth type spin default %u min 1 max 512\n", SEARCH_DEFAULT_ROLLOUT_DEPTH);
+    printf("option name QuiescenceDepth type spin default %u min 0 max 8\n", SEARCH_DEFAULT_QUIESCENCE_DEPTH);
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
     puts("option name EvalPlugin type string default none");
@@ -266,6 +267,8 @@ static void set_option(Application *application, char *line) {
         if (value >= 1000 && value <= 10000000) application->options.max_tree_nodes = (size_t)value;
     } else if (strcmp(tokens[2], "RolloutDepth") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= 512) application->options.rollout_depth = (unsigned)value;
+    } else if (strcmp(tokens[2], "QuiescenceDepth") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        if (value <= 8) application->options.quiescence_depth = (unsigned)value;
     } else if (strcmp(tokens[2], "UCTExploration") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= 3000) application->options.exploration_milli = (unsigned)value;
     } else if (strcmp(tokens[2], "MultiPV") == 0 && parse_unsigned(tokens[value_index], &value)) {
@@ -405,7 +408,8 @@ static bool run_selfplay(int argc, char **argv) {
                                         sizeof(samples[sample_count].sfen))) { free(samples); fclose(output); return false; }
             samples[sample_count].side = position.side;
             SearchOptions options = {threads, seed + ply + (uint64_t)game * 1000003U, false,
-                                     200000, 64, SEARCH_DEFAULT_EXPLORATION_MILLI, 1, NULL};
+                                     200000, 64, SEARCH_DEFAULT_QUIESCENCE_DEPTH,
+                                     SEARCH_DEFAULT_EXPLORATION_MILLI, 1, NULL};
             SearchLimits limits = {0};
             limits.nodes = simulations;
             SearchJob *job = search_start(&position, &limits, &options);
@@ -512,6 +516,7 @@ int main(int argc, char **argv) {
     application.options.seed_auto = true;
     application.options.max_tree_nodes = 1000000;
     application.options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
+    application.options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
     application.options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     application.options.multi_pv = SEARCH_DEFAULT_MULTIPV;
     application.options.evaluator = &application.evaluator;
