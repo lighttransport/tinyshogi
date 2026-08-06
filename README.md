@@ -120,6 +120,47 @@ The optional no-SDK CUDA handoff is documented in [cuda/README.md](cuda/README.m
 It uses a CUEW-style runtime loader and builds the CUDA probe with only `cc` and
 `-ldl`; the normal CPU engine remains independent of CUDA.
 
+An external Linux YaneuraOu NNUE engine can be downloaded and built with:
+
+```sh
+./scripts/download_yaneuraou.sh
+```
+
+The script uses the upstream `YANEURAOU_ENGINE_NNUE` edition, `AVX2`, and
+`clang++` by default. Override `YANEURAOU_REF`, `YANEURAOU_TARGET_CPU`,
+`YANEURAOU_COMPILER`, `JOBS`, `YANEURAOU_SOURCE_DIR`, or
+`YANEURAOU_OUTPUT_DIR` as needed. The checkout is placed under ignored
+`third_party/YaneuraOu/`, and the executable under `build/yaneuraou/`.
+NNUE weights are separate from the source build; place the upstream `nn.bin`
+where YaneuraOu expects it before running the engine.
+
+To run a local USI self-play match, first build a YaneuraOu variant, then run:
+
+```sh
+YANEURAOU_EDITION=YANEURAOU_ENGINE_MATERIAL \
+  ./scripts/download_yaneuraou.sh
+python3 scripts/selfplay_match.py --games 10 --nodes 256 \
+  --output selfplay-tiny-yaneuraou.jsonl
+```
+
+The match runner alternates colors, disables YaneuraOu opening-book use, and
+writes one JSONL record per played position. Use the NNUE binary instead after
+placing a compatible `eval/nn.bin` beside it with
+`--yaneuraou build/yaneuraou/YaneuraOu`.
+
+For another YaneuraOu-compatible NNUE, such as AobaNNUE, pass its Linux build
+and evaluation directory explicitly:
+
+```sh
+python3 scripts/selfplay_match.py --games 2 --nodes 64 \
+  --yaneuraou eval/AobaNNUE/source/YaneuraOu-by-gcc \
+  --yaneuraou-eval-dir "$PWD/eval/AobaNNUE/eval" \
+  --output selfplay-tiny-aobannue.jsonl
+```
+
+When driving an external engine through a pipe, wait for its `bestmove`
+response before sending `quit` or closing the engine's standard input.
+
 ## External evaluators
 
 The search accepts an optional external evaluator through the small C ABI in
@@ -141,6 +182,22 @@ printf 'usi\nsetoption name EvalPlugin value /tmp/tinyshogi-eval.so\nposition st
 
 The equivalent runtime option is `setoption name EvalPlugin value <path>`;
 use `value none` to return to the built-in material/mobility evaluator.
+
+For YaneuraOu NNUE compatibility, build the included USI adapter:
+
+```sh
+./scripts/build_yaneuraou_eval_adapter.sh
+printf 'setoption name EvalPlugin value %s\\n' \
+  "$PWD/build/yaneuraou-eval-adapter.so" | \
+  env YANEURAOU_EVAL_ENGINE=$PWD/build/yaneuraou/YaneuraOu \
+      YANEURAOU_EVAL_DIR=$PWD/build/yaneuraou/eval build/tinyshogi
+```
+
+The adapter keeps one YaneuraOu process alive and translates TinyShogi
+positions to SFEN/USI. It uses YaneuraOu's `nn.bin` through its normal NNUE
+loader; this is intentionally a process adapter rather than a reimplementation
+of YaneuraOu's private binary format. Set `YANEURAOU_EVAL_DIR` to the directory
+containing `nn.bin`.
 
 CUDA `TSM2` checkpoints can be quantized for deterministic CPU inference:
 

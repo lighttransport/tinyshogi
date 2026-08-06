@@ -58,6 +58,9 @@ dkms.conf
 build/
 .xmake/
 cuda/build/
+third_party/YaneuraOu/
+third_party/elmo_for_learn/
+eval/
 cpu/train_int
 cpu/eval_int
 __pycache__/
