@@ -1,0 +1,16 @@
+{"version": 1, "game": 0, "ply": 0, "sfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", "side": "b", "move": "3g3f", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 1, "sfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/6P2/PPPPPP1PP/1B5R1/LNSGKGSNL w - 2", "side": "w", "move": "8c8d", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 2, "sfen": "lnsgkgsnl/1r5b1/p1ppppppp/1p7/9/6P2/PPPPPP1PP/1B5R1/LNSGKGSNL b - 3", "side": "b", "move": "3f3e", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 3, "sfen": "lnsgkgsnl/1r5b1/p1ppppppp/1p7/6P2/9/PPPPPP1PP/1B5R1/LNSGKGSNL w - 4", "side": "w", "move": "8d8e", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 4, "sfen": "lnsgkgsnl/1r5b1/p1ppppppp/9/1p4P2/9/PPPPPP1PP/1B5R1/LNSGKGSNL b - 5", "side": "b", "move": "3e3d", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 5, "sfen": "lnsgkgsnl/1r5b1/p1ppppppp/6P2/1p7/9/PPPPPP1PP/1B5R1/LNSGKGSNL w - 6", "side": "w", "move": "3c3d", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 6, "sfen": "lnsgkgsnl/1r5b1/p1pppp1pp/6p2/1p7/9/PPPPPP1PP/1B5R1/LNSGKGSNL b p 7", "side": "b", "move": "2g2f", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 7, "sfen": "lnsgkgsnl/1r5b1/p1pppp1pp/6p2/1p7/7P1/PPPPPP2P/1B5R1/LNSGKGSNL w p 8", "side": "w", "move": "2b3c", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 8, "sfen": "lnsgkgsnl/1r7/p1ppppbpp/6p2/1p7/7P1/PPPPPP2P/1B5R1/LNSGKGSNL b p 9", "side": "b", "move": "2f2e", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 9, "sfen": "lnsgkgsnl/1r7/p1ppppbpp/6p2/1p5P1/9/PPPPPP2P/1B5R1/LNSGKGSNL w p 10", "side": "w", "move": "3a2b", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 10, "sfen": "lnsgkg1nl/1r5s1/p1ppppbpp/6p2/1p5P1/9/PPPPPP2P/1B5R1/LNSGKGSNL b p 11", "side": "b", "move": "2e2d", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 11, "sfen": "lnsgkg1nl/1r5s1/p1ppppbpp/6pP1/1p7/9/PPPPPP2P/1B5R1/LNSGKGSNL w p 12", "side": "w", "move": "2c2d", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 12, "sfen": "lnsgkg1nl/1r5s1/p1ppppb1p/6pp1/1p7/9/PPPPPP2P/1B5R1/LNSGKGSNL b 2p 13", "side": "b", "move": "1g1f", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 13, "sfen": "lnsgkg1nl/1r5s1/p1ppppb1p/6pp1/1p7/8P/PPPPPP3/1B5R1/LNSGKGSNL w 2p 14", "side": "w", "move": "8e8f", "engine": "YaneuraOu", "result": "draw"}
+{"version": 1, "game": 0, "ply": 14, "sfen": "lnsgkg1nl/1r5s1/p1ppppb1p/6pp1/9/1p6P/PPPPPP3/1B5R1/LNSGKGSNL b 2p 15", "side": "b", "move": "1f1e", "engine": "tinyshogi", "result": "draw"}
+{"version": 1, "game": 0, "ply": 15, "sfen": "lnsgkg1nl/1r5s1/p1ppppb1p/6pp1/8P/1p7/PPPPPP3/1B5R1/LNSGKGSNL w 2p 16", "side": "w", "move": "8f8g+", "engine": "YaneuraOu", "result": "draw"}
