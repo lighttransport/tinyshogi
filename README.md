@@ -46,14 +46,15 @@ npm run build     # writes web/dist/
 npm run preview
 ```
 
-The browser build links only the rules library (`src/shogi.c`) and does not
+The browser build links the rules, evaluator, and search sources and does not
 enable pthreads by default. It provides a small human-vs-human click-to-move
 app in `web/`; select a piece and a highlighted destination, or select a
 captured piece from a hand to make a drop. Every destination comes from the
 engine's legal-move generator, including promotion and drop restrictions. The
-The app also supports undo/redo, Ctrl/Cmd-Z, SFEN import/export, and an
-optional single-thread engine move running in a Web Worker. The generated files
-are written to `web/build/`.
+app also supports undo/redo, Ctrl/Cmd-Z, SFEN import/export, and an optional
+single-thread engine move running in a Web Worker. The Makefile-generated
+Emscripten files are written to `web/build/`; Vite's production bundle is
+written to `web/dist/`.
 
 The core is C11. The initial threading and CLI backend uses POSIX pthreads and
 `poll`; no third-party runtime or source dependency is required.
