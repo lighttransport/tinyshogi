@@ -1,5 +1,6 @@
 import createTinyshogi from './build/tinyshogi.js';
 
+async function main() {
 const module = await createTinyshogi();
 const api = {
   init: module.cwrap('web_init', null, []),
@@ -13,11 +14,21 @@ const api = {
   promotes: module.cwrap('web_move_promotes', 'number', ['number']),
   drop: module.cwrap('web_move_drop', 'number', ['number']),
   play: module.cwrap('web_play_move', 'number', ['number']),
+  playUsi: module.cwrap('web_play_usi', 'number', ['string']),
+  canUndo: module.cwrap('web_can_undo', 'number', []),
+  canRedo: module.cwrap('web_can_redo', 'number', []),
+  undo: module.cwrap('web_undo', 'number', []),
+  redo: module.cwrap('web_redo', 'number', []),
+  getSfen: module.cwrap('web_get_sfen', 'string', []),
+  setSfen: module.cwrap('web_set_sfen', 'number', ['string']),
   result: module.cwrap('web_game_result', 'number', [])
 };
+const engineWorker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
+let engineBusy = false;
 
 const board = document.querySelector('#board');
 const status = document.querySelector('#status');
+const sfen = document.querySelector('#sfen');
 let selected = -1;
 let selectedDrop = 0;
 
@@ -52,6 +63,10 @@ function render() {
   const result = api.result();
   status.textContent = result === 0 ? (api.side() === 0 ? 'Black to move' : 'White to move')
     : result === 1 ? 'Black wins' : result === 2 ? 'White wins' : 'Draw';
+  sfen.value = api.getSfen();
+  document.querySelector('#undo').disabled = !api.canUndo();
+  document.querySelector('#redo').disabled = !api.canRedo();
+  document.querySelector('#engine-move').disabled = engineBusy || result !== 0;
 }
 
 function renderHands() {
@@ -99,6 +114,35 @@ function clickSquare(square, moves) {
   render();
 }
 
-document.querySelector('#reset').addEventListener('click', () => { api.reset(); selected = -1; selectedDrop = 0; render(); });
+function refresh() { selected = -1; selectedDrop = 0; render(); }
+document.querySelector('#reset').addEventListener('click', () => { api.reset(); refresh(); });
+document.querySelector('#undo').addEventListener('click', () => { if (api.undo()) refresh(); });
+document.querySelector('#redo').addEventListener('click', () => { if (api.redo()) refresh(); });
+document.querySelector('#load-sfen').addEventListener('click', () => {
+  if (!api.setSfen(sfen.value.trim())) window.alert('Invalid SFEN');
+  refresh();
+});
+document.querySelector('#engine-move').addEventListener('click', () => {
+  if (engineBusy) return;
+  engineBusy = true;
+  render();
+  engineWorker.postMessage({ sfen: api.getSfen(), nodes: 64 });
+});
+engineWorker.onmessage = event => {
+  engineBusy = false;
+  if (event.data.error || !event.data.move || !api.playUsi(event.data.move)) {
+    window.alert(event.data.error || 'Engine search failed');
+  }
+  refresh();
+};
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+    event.preventDefault();
+    if (event.shiftKey ? api.redo() : api.undo()) refresh();
+  }
+});
 api.init();
 render();
+}
+
+main();

@@ -2,6 +2,7 @@
 """Run a small USI self-play match between tinyshogi and YaneuraOu."""
 
 import argparse
+from collections import Counter
 import json
 import os
 import selectors
@@ -125,6 +126,7 @@ def main():
         yaneura_options["EvalDir"] = args.yaneuraou_eval_dir
     tiny = yaneura = None
     records = []
+    results = []
     try:
         tiny = Engine("tinyshogi", args.tinyshogi, tiny_options, args.timeout)
         yaneura = Engine("YaneuraOu", args.yaneuraou, yaneura_options, args.timeout)
@@ -158,6 +160,7 @@ def main():
             for record in game_records:
                 record["result"] = result
             records.extend(game_records)
+            results.append(result)
             print(f"game {game + 1}/{args.games}: {result} ({len(moves)} plies)", flush=True)
     finally:
         if tiny is not None:
@@ -170,6 +173,8 @@ def main():
         for record in records:
             output.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"wrote {len(records)} records to {args.output}")
+    print("results: " + ", ".join(
+        f"{name}={count}" for name, count in sorted(Counter(results).items())))
 
 
 if __name__ == "__main__":

@@ -2,5 +2,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   // The production bundle can be served from any static subdirectory.
-  base: './'
+  base: './',
+  build: {
+    target: 'esnext',
+    rollupOptions: {
+      output: { format: 'es' }
+    }
+  }
 });

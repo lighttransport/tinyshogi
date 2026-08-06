@@ -16,6 +16,7 @@ static SearchOptions test_options(void) {
     options.seed_auto = false;
     options.max_tree_nodes = 10000;
     options.rollout_depth = 64;
+    options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
     options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     options.multi_pv = 2;
     return options;

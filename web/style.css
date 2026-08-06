@@ -16,4 +16,7 @@ h1 { margin-bottom: .25rem; }
 .square.selected { background: #f4d57d; outline: 3px solid #477b45; outline-offset: -3px; }
 .square.target { background: #b8d486; }
 button { padding: .5rem .9rem; font: inherit; }
+.controls { display: flex; justify-content: center; gap: .4rem; flex-wrap: wrap; }
+.sfen-label { display: block; margin-top: 1rem; font-size: .9rem; }
+#sfen { box-sizing: border-box; width: min(92vw, 540px); margin: .35rem auto; font: .85rem ui-monospace, monospace; }
 .hint { color: #6d5b49; font-size: .9rem; }

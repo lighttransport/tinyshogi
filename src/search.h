@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #define SEARCH_DEFAULT_ROLLOUT_DEPTH 256U
+#define SEARCH_DEFAULT_QUIESCENCE_DEPTH 2U
 #define SEARCH_DEFAULT_EXPLORATION_MILLI 1414U
 #define SEARCH_DEFAULT_MULTIPV 1U
 #define SEARCH_MAX_MULTIPV 8U
@@ -35,6 +36,7 @@ typedef struct {
     bool seed_auto;
     size_t max_tree_nodes;
     unsigned rollout_depth;
+    unsigned quiescence_depth;
     unsigned exploration_milli;
     unsigned multi_pv;
     const ShogiEvaluator *evaluator;
