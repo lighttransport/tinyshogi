@@ -1,0 +1,14 @@
+diff --git a/eval/AobaNNUE/source/usi.cpp b/eval/AobaNNUE/source/usi.cpp
+--- a/eval/AobaNNUE/source/usi.cpp
++++ b/eval/AobaNNUE/source/usi.cpp
+@@ -204,4 +204,9 @@ bool USIEngine::usi_cmdexec(const std::string& cmd) {
+         // "stop"コマンドが来るとEngine.stop()が呼び出され、その結果threads.stop = trueとなる。
+         engine.stop();
+
++    // quit may be generated from EOF when the engine is driven by a pipe. Do
++    // not destroy the engine and its transposition table while the search
++    // thread is still emitting its final info/bestmove.
++    if (token == "quit")
++        engine.wait_for_search_finished();
+
+     // The GUI sends 'ponderhit' to tell that the user has played the expected move.
