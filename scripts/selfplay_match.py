@@ -92,9 +92,13 @@ def parse_args():
     parser.add_argument("--tinyshogi", type=Path, default=root / "build/tinyshogi")
     parser.add_argument("--tinyshogi-eval-plugin", type=Path,
                         help="EvalPlugin shared library for TinyShogi")
+    parser.add_argument("--tinyshogi-eval-model", type=Path,
+                        help="native EvalModel checkpoint for TinyShogi")
     parser.add_argument("--yaneuraou", type=Path, default=root / "build/yaneuraou/YaneuraOu-material")
     parser.add_argument("--yaneuraou-eval-dir", type=Path,
                         help="EvalDir option for YaneuraOu-compatible engines")
+    parser.add_argument("--yaneuraou-eval-model", type=Path,
+                        help="EvalModel checkpoint when the opponent is TinyShogi")
     parser.add_argument("--games", type=int, default=2)
     parser.add_argument("--nodes", type=int, default=256)
     parser.add_argument("--movetime-ms", type=int)
@@ -119,11 +123,15 @@ def main():
     tiny_options = {"Threads": 1, "Seed": args.seed, "MaxTreeNodes": 100000}
     if args.tinyshogi_eval_plugin is not None:
         tiny_options["EvalPlugin"] = args.tinyshogi_eval_plugin
+    if args.tinyshogi_eval_model is not None:
+        tiny_options["EvalModel"] = args.tinyshogi_eval_model
     yaneura_options = {
         "Threads": 1, "USI_Hash": 64, "USI_OwnBook": "false", "BookFile": "no_book"
     }
     if args.yaneuraou_eval_dir is not None:
         yaneura_options["EvalDir"] = args.yaneuraou_eval_dir
+    if args.yaneuraou_eval_model is not None:
+        yaneura_options["EvalModel"] = args.yaneuraou_eval_model
     tiny = yaneura = None
     records = []
     results = []

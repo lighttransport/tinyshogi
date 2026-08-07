@@ -15,6 +15,12 @@ jobs:
         run: ./scripts/run_regression.sh
       - name: Run fuzz smoke test
         run: RUN_FUZZ=1 FUZZ_SECONDS=10 ./scripts/run_regression.sh
+      - name: Build CPU NNUE trainer
+        run: |
+          make -C cpu train-nnue
+          python3 tools/prepare_nnue.py selfplay-tiny-yaneuraou.jsonl \
+            -o /tmp/tinyshogi-ci.ndf1 --limit 8
+          cpu/train_nnue /tmp/tinyshogi-ci.ndf1 /tmp/tinyshogi-ci.nnue 1 0.01
 
   web:
     runs-on: ubuntu-latest

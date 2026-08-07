@@ -114,6 +114,10 @@ side-to-move perspective, and the complete root visit distribution:
 ./build/tinyshogi --selfplay --games 100 --simulations 256 \
   --threads 1 --seed 7 --temperature 1000 --temperature-cutoff 30 \
   --output selfplay.jsonl
+
+# Continue self-play with a native NNUE evaluator:
+./build/tinyshogi --selfplay --eval-model model.nnue --games 100 \
+  --simulations 256 --output selfplay.nnue.jsonl
 ```
 
 Use `--temperature 0` for deterministic visit-max move selection. Games that
@@ -227,6 +231,49 @@ cpu/eval_int model-int.tsm3 selfplay.tfe
 
 `eval-int` prints fixed-point value/policy results and a checksum, which is
 useful for cross-machine reproducibility checks.
+
+## Native NNUE training
+
+TinyShogi includes a native value-only NNUE path using a versioned `NNUE1`
+artifact, HalfKP-style sparse features, two perspective accumulators, and a
+default 256-unit hidden layer:
+
+```sh
+python3 tools/prepare_nnue.py selfplay.jsonl -o selfplay.ndf1 --shuffle
+make -C cpu train-nnue
+cpu/train_nnue selfplay.ndf1 model.nnue 5 0.01
+printf 'setoption name EvalModel value %s\n' "$PWD/model.nnue" | build/tinyshogi
+```
+
+The converter accepts TinyShogi self-play records, older USI-match records with
+`result`, and records containing `teacher_value`. Bounded USI search can add
+teacher labels:
+
+```sh
+python3 tools/bruteforce_teacher.py positions.jsonl teacher.jsonl \
+  --engine build/tinyshogi --nodes 256
+python3 tools/prepare_nnue.py selfplay.jsonl teacher.jsonl -o mixed.ndf1 --shuffle
+```
+
+CUDA and HIP/ROCm use the same sparse trainer and emit the same artifact:
+
+```sh
+make -C gpu cuda       # or: make -C gpu rocm
+gpu/build/tinyshogi-train-nnue-cuda mixed.ndf1 model.nnue 5 0.01
+```
+
+The GPU trainer is a correctness/reference implementation using atomic sparse
+updates and is suitable for a roughly 16 GB card. Larger-scale training can
+later add gradient reduction and mixed precision without changing the dataset
+or model format.
+
+One generation can be automated with optional match gating:
+
+```sh
+python3 scripts/nnue_iteration.py --games 100 --match-games 100
+python3 scripts/nnue_iteration.py --current nnue-runs/gen-001/candidate.nnue \
+  --output-dir nnue-runs/gen-002 --games 100 --match-games 100
+```
 
 ## Fuzzing
 
