@@ -14,8 +14,8 @@ extern "C" {
 #define GPU_SUCCESS hipSuccess
 #define gpuMalloc hipMalloc
 #define gpuFree hipFree
-#define gpuMemcpyHtoD hipMemcpyHtoD
-#define gpuMemcpyDtoH hipMemcpyDtoH
+#define gpuMemcpyHtoD hipMemcpy
+#define gpuMemcpyDtoH hipMemcpy
 #define gpuMemcpyHostToDevice hipMemcpyHostToDevice
 #define gpuMemcpyDeviceToHost hipMemcpyDeviceToHost
 #define gpuMemset hipMemset
