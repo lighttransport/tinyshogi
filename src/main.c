@@ -246,6 +246,7 @@ static void print_usi(void) {
     printf("option name QuiescenceDepth type spin default %u min 0 max 8\n", SEARCH_DEFAULT_QUIESCENCE_DEPTH);
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
+    puts("option name SearchMode type combo default mcts var mcts var alphabeta");
     puts("option name EvalPlugin type string default none");
     puts("option name EvalModel type string default none");
     puts("usiok");
@@ -282,6 +283,11 @@ static void set_option(Application *application, char *line) {
         if (value >= 1 && value <= 3000) application->options.exploration_milli = (unsigned)value;
     } else if (strcmp(tokens[2], "MultiPV") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= SEARCH_MAX_MULTIPV) application->options.multi_pv = (unsigned)value;
+    } else if (strcmp(tokens[2], "SearchMode") == 0) {
+        if (strcmp(tokens[value_index], "alphabeta") == 0)
+            application->options.mode = SEARCH_MODE_ALPHABETA;
+        else if (strcmp(tokens[value_index], "mcts") == 0)
+            application->options.mode = SEARCH_MODE_MCTS;
     } else if (strcmp(tokens[2], "EvalPlugin") == 0) {
         if (strcmp(tokens[value_index], "none") == 0) {
             shogi_evaluator_destroy(&application->evaluator);
@@ -460,7 +466,7 @@ static bool run_selfplay(int argc, char **argv) {
             if (!shogi_position_to_sfen(&position, samples[sample_count].sfen,
                                         sizeof(samples[sample_count].sfen))) goto selfplay_fail;
             samples[sample_count].side = position.side;
-            SearchOptions options = {threads, seed + ply + (uint64_t)game * 1000003U, false,
+            SearchOptions options = {SEARCH_MODE_MCTS, threads, seed + ply + (uint64_t)game * 1000003U, false,
                                      200000, 64, SEARCH_DEFAULT_QUIESCENCE_DEPTH,
                                      SEARCH_DEFAULT_EXPLORATION_MILLI, 1, &evaluator};
             SearchLimits limits = {0};
@@ -576,6 +582,7 @@ int main(int argc, char **argv) {
     shogi_nnue_model_init(&application.nnue);
     shogi_position_start(&application.position);
     application.options.threads = detected_threads();
+    application.options.mode = SEARCH_MODE_MCTS;
     application.options.seed_auto = true;
     application.options.max_tree_nodes = 1000000;
     application.options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;

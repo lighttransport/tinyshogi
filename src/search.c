@@ -309,19 +309,27 @@ static int static_evaluation(const SearchJob *job, const ShogiPosition *position
         if (job->eval_cache != NULL && job->eval_cache_capacity != 0) {
             size_t index = (size_t)(position->hash ^ (uint64_t)perspective) &
                            (job->eval_cache_capacity - 1);
-            ts_mutex_lock((TsMutex *)&job->eval_mutex);
             EvalCacheEntry *entry = &job->eval_cache[index];
-            if (entry->valid && entry->hash == position->hash &&
-                entry->perspective == (uint8_t)perspective) {
+            bool hit;
+            ts_mutex_lock((TsMutex *)&job->eval_mutex);
+            hit = entry->valid && entry->hash == position->hash &&
+                  entry->perspective == (uint8_t)perspective;
+            if (hit) {
                 score = entry->score;
-            } else {
+            }
+            ts_mutex_unlock((TsMutex *)&job->eval_mutex);
+            if (!hit) {
+                /* Do not hold the cache mutex across the expensive NNUE
+                 * evaluation; concurrent misses may duplicate work, but
+                 * workers continue evaluating in parallel. */
                 score = shogi_evaluator_score(job->options.evaluator, position, perspective);
+                ts_mutex_lock((TsMutex *)&job->eval_mutex);
                 entry->hash = position->hash;
                 entry->perspective = (uint8_t)perspective;
                 entry->score = score;
                 entry->valid = true;
+                ts_mutex_unlock((TsMutex *)&job->eval_mutex);
             }
-            ts_mutex_unlock((TsMutex *)&job->eval_mutex);
         } else {
             score = shogi_evaluator_score(job->options.evaluator, position, perspective);
         }
@@ -545,6 +553,57 @@ static double run_simulation(SearchJob *job, ShogiPosition *position,
     return value;
 }
 
+static int alpha_beta(SearchJob *job, const ShogiPosition *position, int depth,
+                      int alpha, int beta) {
+    if (should_stop(job)) return static_evaluation(job, position, job->root_side);
+    atomic_fetch_add_explicit(&job->simulations, 1, memory_order_relaxed);
+    ShogiMove moves[SHOGI_MAX_MOVES];
+    size_t count = 0;
+    ShogiResult result = shogi_game_result_with_moves(position, moves,
+                                                       SHOGI_MAX_MOVES, &count);
+    if (result != SHOGI_RESULT_ONGOING) {
+        if (result == SHOGI_RESULT_DRAW) return 0;
+        ShogiResult win = job->root_side == SHOGI_BLACK ?
+            SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN;
+        return result == win ? 3000 : -3000;
+    }
+    if (depth <= 0 || count == 0) return static_evaluation(job, position, job->root_side);
+    bool maximizing = position->side == job->root_side;
+    int best = maximizing ? -30000 : 30000;
+    for (size_t i = 0; i < count; ++i) {
+        if (should_stop(job)) break;
+        ShogiPosition next = *position;
+        if (!shogi_make_move(&next, moves[i])) continue;
+        int score = alpha_beta(job, &next, depth - 1, alpha, beta);
+        if (maximizing) {
+            if (score > best) best = score;
+            if (best > alpha) alpha = best;
+        } else {
+            if (score < best) best = score;
+            if (best < beta) beta = best;
+        }
+        if (alpha >= beta) break;
+    }
+    return best == (maximizing ? -30000 : 30000) ?
+        static_evaluation(job, position, job->root_side) : best;
+}
+
+static void run_alpha_beta(SearchJob *job) {
+    int depth = job->limits.depth > 0 ? job->limits.depth : 4;
+    for (unsigned i = 0; i < job->root->move_count; ++i) {
+        if (should_stop(job)) break;
+        ShogiPosition next = job->root_position;
+        if (!shogi_make_move(&next, job->root->children[i].move)) continue;
+        int score = alpha_beta(job, &next, depth - 1, -30000, 30000);
+        if (score > 1000) score = 1000;
+        if (score < -1000) score = -1000;
+        atomic_store_explicit(&job->root->children[i].visits, 1, memory_order_relaxed);
+        atomic_store_explicit(&job->root->children[i].value,
+                              (uint64_t)(score + 1000) * VALUE_SCALE / 2000U,
+                              memory_order_relaxed);
+    }
+}
+
 static void backpropagate(SearchJob *job, const SearchPath *path, double value) {
     uint64_t scaled = (uint64_t)(value * (double)VALUE_SCALE);
     atomic_fetch_add_explicit(&job->root->visits, 1, memory_order_relaxed);
@@ -569,6 +628,12 @@ static void *worker_main(void *opaque) {
                                           : job->options.seed + (uint64_t)argument->id * UINT64_C(0x9e3779b97f4a7c15);
     ShogiPosition position = job->root_position;
     ShogiUndo undos[SEARCH_MAX_UNDO];
+    if (job->options.mode == SEARCH_MODE_ALPHABETA) {
+        if (argument->id == 0) run_alpha_beta(job);
+        atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
+        free(argument);
+        return NULL;
+    }
     while (!should_stop(job)) {
         if (job->limits.nodes != 0) {
             uint64_t current = atomic_load_explicit(&job->simulations, memory_order_relaxed);
@@ -599,8 +664,8 @@ static TreeChild *best_root_child(const SearchJob *job, uint64_t *best_visits) {
     char best_text[16] = {0};
     for (unsigned index = 0; index < job->root->move_count; ++index) {
         TreeChild *child = &job->root->children[index];
-        if (atomic_load_explicit(&child->node, memory_order_acquire) == NULL) continue;
         uint64_t visits = atomic_load_explicit(&child->visits, memory_order_relaxed);
+        if (visits == 0 && atomic_load_explicit(&child->node, memory_order_acquire) == NULL) continue;
         char text[16] = {0};
         (void)shogi_move_to_usi(child->move, text, sizeof(text));
         if (best == NULL || visits > visits_for_best ||
@@ -669,8 +734,8 @@ size_t search_get_root_lines(const SearchJob *job, SearchLine *lines, size_t cap
         for (unsigned index = 0; index < job->root->move_count; ++index) {
             if (used[index]) continue;
             TreeChild *child = &job->root->children[index];
-            if (atomic_load_explicit(&child->node, memory_order_acquire) == NULL) continue;
             uint64_t visits = atomic_load_explicit(&child->visits, memory_order_relaxed);
+            if (visits == 0 && atomic_load_explicit(&child->node, memory_order_acquire) == NULL) continue;
             char text[16] = {0};
             (void)shogi_move_to_usi(child->move, text, sizeof(text));
             if (best == NULL || visits > best_visits ||
@@ -789,7 +854,9 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     job->root_position = *position;
     job->limits = *limits;
     job->options = *options;
-    if (job->options.threads == 0) job->options.threads = default_threads();
+    if (job->options.mode != SEARCH_MODE_ALPHABETA && job->options.threads == 0)
+        job->options.threads = default_threads();
+    if (job->options.mode == SEARCH_MODE_ALPHABETA) job->options.threads = 1;
     if (job->options.threads > 64) job->options.threads = 64;
     if (job->options.max_tree_nodes < 1000) job->options.max_tree_nodes = DEFAULT_MAX_TREE_NODES;
     job->root_side = position->side;

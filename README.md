@@ -215,9 +215,77 @@ python3 tools/quantize_tsm2.py model.tsm model.tsm3
 ```
 
 The `TSM3` evaluator in `src/int_model.c` uses fixed integer arithmetic,
-fixed-point softmax/exp/log/tanh helpers, and runtime AVX2 dispatch with a
-portable scalar fallback. Its output is deterministic for a fixed model and
-feature buffer.
+fixed-point softmax/exp/log/tanh helpers, and architecture dispatch with AVX2,
+ARM64 NEON, A64FX SVE/SDOT, and a portable scalar fallback. Its output is
+deterministic for a fixed model and feature buffer. NNUE accumulation uses the
+same backend.
+
+The search mode defaults to shared-tree MCTS. Alpha-beta/PVS can be selected
+through USI with `setoption name SearchMode value alphabeta`; use `mcts` to
+restore the default.
+
+ARM64 functional validation requires an external AArch64 GCC or Clang driver,
+sysroot, and QEMU user-mode emulator:
+
+```sh
+ARM64_ARCH=neon ./scripts/build_arm64_qemu.sh
+ARM64_ARCH=sve ./scripts/build_arm64_qemu.sh
+```
+
+The SVE build targets 512-bit vectors. Set `AARCH64_CC` to a cross compiler
+command and `AARCH64_SYSROOT` when they are not installed at the defaults. For
+the Debian-hosted Clang cross driver, for example:
+
+```sh
+export AARCH64_CC='clang --target=aarch64-linux-gnu --sysroot=/ --gcc-toolchain=/usr -B/usr/lib/gcc-cross/aarch64-linux-gnu/14'
+export AARCH64_SYSROOT=/usr/aarch64-linux-gnu
+```
+
+For QLAIR AArch64 functional/statistical checking, run:
+
+```sh
+./scripts/run_clair_a64fx.sh build-arm64/test-simd
+```
+
+The wrapper uses QLAIR native functional/statistical execution. To run the
+A64FX cycle-level pipeline model and export its hardware-style report, use:
+
+```sh
+QLAIR_PROFILE_REPORT=/tmp/tinyshogi-a64fx.json \
+  ./scripts/run_clair_a64fx_pipeline.sh build-arm64/test-simd
+```
+
+QLAIR reports A64FX cycles, IPC, cache/TLB behavior, bandwidth, stalls, and
+INT8/INT16 SDOT or FP32 GFLOPS efficiency. The standalone
+`bench/a64fx_sim_bench.c` harness is useful for profiling one arithmetic
+kernel without mixing in other work. The actual NNUE row-update loop can be
+profiled directly with:
+
+```sh
+QLAIR_PROFILE_FUNCTION=tinyshogi_nnue_add_i16_i32_rows_sve_4way \
+  ./scripts/run_clair_a64fx_pipeline.sh build-arm64/a64fx-nnue-rows 10
+```
+
+The SVE NNUE full-rebuild path uses a four-bank accumulator schedule for
+hidden sizes of at least 128 with 512-bit SVE; small or irregular and
+incremental paths retain the general SVE implementation. The evaluator builds
+only the requested perspective, while the public accumulator-build API still
+constructs both perspectives. Validate the assembly path with static QEMU
+before interpreting QLAIR cycle data.
+For GEMM steady-state profiling, the wrapper enables QLAIR's A64FX owner-mode
+pipeline (`QLAIR_SIM_OOO=2`); override it explicitly when comparing simulator
+models. Set `QLAIR_MAX_INSTR=10M` for long-running benchmark rounds so QLAIR's
+default instruction cap does not truncate the measurement.
+
+The SVE cross-build also runs packed 4×5 and 6×4 INT8/INT16 SDOT GEMM tiles in
+`src/a64fx_sdot_gemm.S`, `src/a64fx_sdot_6x4.S`, and
+`src/a64fx_sdot_6x4_i16.S`, plus a packed FP32 tile in `src/a64fx_sgemm.S`.
+The 6×4 paths use Clair's register-renaming schedule and 24 independent
+accumulators; the FP32 path uses the corresponding two-step FLA/FLB schedule.
+
+The SIMD microbenchmark is available through Meson as `tinyshogi-simd-bench`;
+its kernel operation rates can be combined with Clair's cycle report for the
+A64FX kernel-efficiency target.
 
 An integer-only CPU SGD baseline is available for reproducible calibration and
 small datasets:

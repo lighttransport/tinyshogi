@@ -14,6 +14,11 @@
 #define SEARCH_MAX_MULTIPV 8U
 #define SEARCH_MAX_PV 64U
 
+typedef enum {
+    SEARCH_MODE_MCTS = 0,
+    SEARCH_MODE_ALPHABETA = 1
+} SearchMode;
+
 typedef struct {
     uint64_t nodes;
     int depth;
@@ -31,6 +36,7 @@ typedef struct {
 } SearchLimits;
 
 typedef struct {
+    SearchMode mode;
     unsigned threads;
     uint64_t seed;
     bool seed_auto;

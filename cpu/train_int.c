@@ -8,6 +8,7 @@
 #endif
 
 #include "../src/int_math.h"
+#include "../src/simd.h"
 
 #define D (30U * 81U)
 #define H 64U
@@ -80,12 +81,16 @@ error:
 }
 
 static int32_t dot_hidden(const int8_t *features, const int16_t *weights) {
+#if defined(__aarch64__)
+    return tinyshogi_dot_i16_i8(weights, features, D);
+#else
     int32_t result = 0;
     for (unsigned i = 0; i < D; ++i) result += (int32_t)features[i] * weights[i];
     return result;
+#endif
 }
 
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
 __attribute__((target("avx2")))
 static int32_t dot_hidden_avx2(const int8_t *features, const int16_t *weights) {
     __m256i sum = _mm256_setzero_si256();
@@ -145,7 +150,7 @@ int main(int argc, char **argv) {
     int32_t *policy = calloc((size_t)A * H, sizeof(int32_t));
     int16_t hidden[H]; if (!w1 || !value || !policy) return 1;
     int32_t (*dot)(const int8_t *, const int16_t *) = dot_hidden;
-#if defined(__GNUC__) || defined(__clang__)
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
     if (__builtin_cpu_supports("avx2")) dot = dot_hidden_avx2;
 #endif
     for (unsigned unit = 0; unit < H; ++unit) for (unsigned feature = 0; feature < D; ++feature) {
