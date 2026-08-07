@@ -1,4 +1,5 @@
 #include "../src/nnue.h"
+#include "../src/simd.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -103,10 +104,11 @@ int main(int argc, char **argv) {
             ShogiPosition position; make_position(&records[sample], &position);
             size_t active = shogi_nnue_feature_ids(&position, position.side, ids, SHOGI_SQUARES + 14U);
             float hidden_values[DEFAULT_HIDDEN];
+            memset(hidden_values, 0, sizeof(hidden_values));
+            for (size_t item = 0; item < active; ++item)
+                tinyshogi_add_f32(hidden_values, weights + (size_t)ids[item] * hidden, hidden);
             for (uint32_t unit = 0; unit < hidden; ++unit) {
-                float sum = 0.0f;
-                for (size_t item = 0; item < active; ++item) sum += weights[(size_t)ids[item] * hidden + unit];
-                hidden_values[unit] = sum > 0.0f ? sum : 0.0f;
+                if (hidden_values[unit] < 0.0f) hidden_values[unit] = 0.0f;
             }
             float prediction = 0.0f;
             for (uint32_t unit = 0; unit < hidden; ++unit) prediction += hidden_values[unit] * output[position.side * hidden + unit];

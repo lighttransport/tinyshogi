@@ -109,6 +109,19 @@ int main(void) {
     if (!result.has_move) return fail("stopped search fallback");
     search_destroy(job);
 
+    SearchOptions alphabeta = options;
+    alphabeta.mode = SEARCH_MODE_ALPHABETA;
+    limits.infinite = false;
+    limits.nodes = 200;
+    limits.depth = 2;
+    job = search_start(&position, &limits, &alphabeta);
+    if (job == NULL) return fail("alpha-beta search creation");
+    search_join(job, &result);
+    if (!result.has_move || result.simulations == 0) return fail("alpha-beta search result");
+    ShogiPosition alpha_next = position;
+    if (!shogi_make_move(&alpha_next, result.move)) return fail("alpha-beta legal move");
+    search_destroy(job);
+
     memset(&limits, 0, sizeof(limits));
     limits.ponder = true;
     limits.movetime_ms = 20;

@@ -12,6 +12,7 @@ engine_sources = files(
   'src/search.c',
   'src/shogi.c',
   'src/nnue.c',
+  'src/simd.c',
   'src/eval.c',
   'src/thread_posix.c'
 )
@@ -29,7 +30,7 @@ search_test = executable('tinyshogi-search-test', 'tests/test_search.c',
 test('search', search_test)
 
 nnue_test = executable('tinyshogi-nnue-test', 'tests/test_nnue.c',
-  sources : ['src/nnue.c', 'src/shogi.c'], dependencies : [math_dep], install : false)
+  sources : ['src/nnue.c', 'src/simd.c', 'src/shogi.c'], dependencies : [math_dep], install : false)
 test('nnue', nnue_test)
 
 brute_test = executable('tinyshogi-brute-test', 'tests/test_brute.c',
@@ -37,5 +38,13 @@ brute_test = executable('tinyshogi-brute-test', 'tests/test_brute.c',
 test('brute', brute_test)
 
 integer_test = executable('tinyshogi-integer-test', 'tests/test_int.c',
-  sources : ['src/int_math.c', 'src/int_model.c'], dependencies : [math_dep], install : false)
+  sources : ['src/int_math.c', 'src/int_model.c', 'src/simd.c'], dependencies : [math_dep], install : false)
 test('integer', integer_test)
+
+simd_test = executable('tinyshogi-simd-test', 'tests/test_simd.c',
+  sources : ['src/simd.c'], install : false)
+test('simd', simd_test)
+
+simd_bench = executable('tinyshogi-simd-bench', 'bench/simd_bench.c',
+  sources : ['src/simd.c'], install : false)
+benchmark('simd', simd_bench)

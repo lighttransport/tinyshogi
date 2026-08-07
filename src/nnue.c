@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "nnue.h"
+#include "simd.h"
 
 #include <limits.h>
 #include <math.h>
@@ -170,23 +171,29 @@ void shogi_nnue_accumulator_destroy(ShogiNnueAccumulator *accumulator) {
     memset(accumulator, 0, sizeof(*accumulator));
 }
 
+static bool shogi_nnue_accumulator_build_perspective(
+    const ShogiNnueModel *model, const ShogiPosition *position,
+    ShogiNnueAccumulator *accumulator, unsigned perspective) {
+    if (model == NULL || position == NULL || accumulator == NULL ||
+        model->feature_weights == NULL || accumulator->hidden_dim != model->hidden_dim ||
+        perspective > SHOGI_WHITE) return false;
+    memset(accumulator->sum[perspective], 0, model->hidden_dim * sizeof(int32_t));
+    uint32_t ids[SHOGI_SQUARES + 14];
+    const int16_t *rows[SHOGI_SQUARES + 14];
+    size_t count = shogi_nnue_feature_ids(position, (ShogiColor)perspective, ids,
+                                          sizeof(ids) / sizeof(ids[0]));
+    for (size_t item = 0; item < count; ++item)
+        rows[item] = model->feature_weights + (size_t)ids[item] * model->hidden_dim;
+    tinyshogi_add_i16_i32_rows(accumulator->sum[perspective], rows, count,
+                               model->hidden_dim, 1);
+    return true;
+}
+
 bool shogi_nnue_accumulator_build(const ShogiNnueModel *model,
                                   const ShogiPosition *position,
                                   ShogiNnueAccumulator *accumulator) {
-    if (model == NULL || position == NULL || accumulator == NULL ||
-        model->feature_weights == NULL || accumulator->hidden_dim != model->hidden_dim) return false;
-    memset(accumulator->sum[0], 0, model->hidden_dim * sizeof(int32_t));
-    memset(accumulator->sum[1], 0, model->hidden_dim * sizeof(int32_t));
-    uint32_t ids[SHOGI_SQUARES + 14];
-    for (unsigned perspective = 0; perspective < 2; ++perspective) {
-        size_t count = shogi_nnue_feature_ids(position, (ShogiColor)perspective, ids,
-                                              sizeof(ids) / sizeof(ids[0]));
-        for (size_t item = 0; item < count; ++item) {
-            const int16_t *weights = model->feature_weights + (size_t)ids[item] * model->hidden_dim;
-            for (uint32_t unit = 0; unit < model->hidden_dim; ++unit) accumulator->sum[perspective][unit] += weights[unit];
-        }
-    }
-    return true;
+    return shogi_nnue_accumulator_build_perspective(model, position, accumulator, 0) &&
+           shogi_nnue_accumulator_build_perspective(model, position, accumulator, 1);
 }
 
 bool shogi_nnue_accumulator_update(const ShogiNnueModel *model,
@@ -196,19 +203,20 @@ bool shogi_nnue_accumulator_update(const ShogiNnueModel *model,
     if (model == NULL || before == NULL || after == NULL || accumulator == NULL ||
         model->feature_weights == NULL || accumulator->hidden_dim != model->hidden_dim) return false;
     uint32_t old_ids[SHOGI_SQUARES + 14], new_ids[SHOGI_SQUARES + 14];
+    const int16_t *removed[SHOGI_SQUARES + 14], *added[SHOGI_SQUARES + 14];
     for (unsigned perspective = 0; perspective < 2; ++perspective) {
         size_t old_count = shogi_nnue_feature_ids(before, (ShogiColor)perspective,
                                                   old_ids, sizeof(old_ids) / sizeof(old_ids[0]));
         size_t new_count = shogi_nnue_feature_ids(after, (ShogiColor)perspective,
                                                   new_ids, sizeof(new_ids) / sizeof(new_ids[0]));
+        size_t removed_count = 0, added_count = 0;
         for (size_t index = 0; index < old_count; ++index) {
             bool remains = false;
             for (size_t next = 0; next < new_count; ++next)
                 if (old_ids[index] == new_ids[next]) { remains = true; break; }
             if (!remains) {
-                const int16_t *weights = model->feature_weights + (size_t)old_ids[index] * model->hidden_dim;
-                for (uint32_t unit = 0; unit < model->hidden_dim; ++unit)
-                    accumulator->sum[perspective][unit] -= weights[unit];
+                removed[removed_count++] = model->feature_weights +
+                    (size_t)old_ids[index] * model->hidden_dim;
             }
         }
         for (size_t index = 0; index < new_count; ++index) {
@@ -216,11 +224,14 @@ bool shogi_nnue_accumulator_update(const ShogiNnueModel *model,
             for (size_t old = 0; old < old_count; ++old)
                 if (new_ids[index] == old_ids[old]) { already = true; break; }
             if (!already) {
-                const int16_t *weights = model->feature_weights + (size_t)new_ids[index] * model->hidden_dim;
-                for (uint32_t unit = 0; unit < model->hidden_dim; ++unit)
-                    accumulator->sum[perspective][unit] += weights[unit];
+                added[added_count++] = model->feature_weights +
+                    (size_t)new_ids[index] * model->hidden_dim;
             }
         }
+        tinyshogi_add_i16_i32_rows(accumulator->sum[perspective], removed,
+                                   removed_count, model->hidden_dim, -1);
+        tinyshogi_add_i16_i32_rows(accumulator->sum[perspective], added,
+                                   added_count, model->hidden_dim, 1);
     }
     return true;
 }
@@ -232,10 +243,8 @@ int shogi_nnue_evaluate(const ShogiNnueModel *model,
         perspective > SHOGI_WHITE || accumulator->hidden_dim != model->hidden_dim) return 0;
     int64_t value = (int64_t)model->output_bias * model->feature_scale;
     const int16_t *weights = model->output_weights + (size_t)perspective * model->hidden_dim;
-    for (uint32_t unit = 0; unit < model->hidden_dim; ++unit) {
-        int32_t hidden_sum = accumulator->sum[perspective][unit];
-        if (hidden_sum > 0) value += (int64_t)hidden_sum * weights[unit];
-    }
+    value += tinyshogi_dot_relu_i32_i16(accumulator->sum[perspective], weights,
+                                        model->hidden_dim);
     /* Training targets are normalized to [-1, 1]; search consumes centipawns. */
     int64_t scale = (int64_t)model->feature_scale * model->output_scale;
     double normalized = scale == 0 ? (double)value : (double)value / (double)scale;
@@ -249,13 +258,39 @@ int shogi_nnue_evaluate_position(const ShogiNnueModel *model,
                                  const ShogiPosition *position,
                                  ShogiColor perspective) {
     if (model == NULL || position == NULL) return 0;
-    ShogiNnueAccumulator accumulator = {0};
-    if (!shogi_nnue_accumulator_init(&accumulator, model->hidden_dim) ||
-        !shogi_nnue_accumulator_build(model, position, &accumulator)) {
-        shogi_nnue_accumulator_destroy(&accumulator);
-        return 0;
+    /* Search evaluates positions from worker threads. Reuse one scratch
+     * accumulator per thread to keep the hot path free of malloc/free while
+     * retaining thread safety and the public accumulator API. */
+    static _Thread_local ShogiNnueAccumulator scratch;
+    static _Thread_local const ShogiNnueModel *scratch_model;
+    static _Thread_local const int16_t *scratch_feature_weights;
+    static _Thread_local const int16_t *scratch_output_weights;
+    static _Thread_local uint64_t scratch_hash;
+    static _Thread_local unsigned scratch_valid_perspectives;
+    if (scratch.hidden_dim != model->hidden_dim ||
+        scratch.sum[0] == NULL || scratch.sum[1] == NULL) {
+        shogi_nnue_accumulator_destroy(&scratch);
+        if (!shogi_nnue_accumulator_init(&scratch, model->hidden_dim)) {
+            scratch_valid_perspectives = 0;
+            return 0;
+        }
+        scratch_valid_perspectives = 0;
     }
-    int value = shogi_nnue_evaluate(model, &accumulator, perspective);
-    shogi_nnue_accumulator_destroy(&accumulator);
-    return value;
+    if (scratch_model != model || scratch_feature_weights != model->feature_weights ||
+        scratch_output_weights != model->output_weights || scratch_hash != position->hash)
+        scratch_valid_perspectives = 0;
+    if ((scratch_valid_perspectives & (1U << perspective)) != 0U &&
+        scratch_model == model &&
+        scratch_feature_weights == model->feature_weights &&
+        scratch_output_weights == model->output_weights &&
+        scratch_hash == position->hash)
+        return shogi_nnue_evaluate(model, &scratch, perspective);
+    if (!shogi_nnue_accumulator_build_perspective(model, position, &scratch, perspective))
+        return 0;
+    scratch_model = model;
+    scratch_feature_weights = model->feature_weights;
+    scratch_output_weights = model->output_weights;
+    scratch_hash = position->hash;
+    scratch_valid_perspectives |= 1U << perspective;
+    return shogi_nnue_evaluate(model, &scratch, perspective);
 }

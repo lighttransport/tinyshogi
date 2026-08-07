@@ -1,6 +1,7 @@
 #include "int_model.h"
 
 #include "int_math.h"
+#include "simd.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -58,17 +59,25 @@ __attribute__((target("avx2"))) static int32_t dot_i16_i8_avx2(const int16_t *le
 #endif
 
 static int32_t dot_i8(const int8_t *left, const int8_t *right, size_t count) {
+#if defined(__aarch64__)
+    return tinyshogi_dot_i8_i8(left, right, count);
+#else
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
     if (__builtin_cpu_supports("avx2")) return dot_avx2(left, right, count);
 #endif
     return dot_scalar(left, right, count);
+#endif
 }
 
 static int32_t dot_i16_i8(const int16_t *left, const int8_t *right, size_t count) {
+#if defined(__aarch64__)
+    return tinyshogi_dot_i16_i8(left, right, count);
+#else
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
     if (__builtin_cpu_supports("avx2")) return dot_i16_i8_avx2(left, right, count);
 #endif
     return dot_i16_i8_scalar(left, right, count);
+#endif
 }
 
 static int16_t clamp_i16(int32_t value) {

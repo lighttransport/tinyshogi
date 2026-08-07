@@ -12,7 +12,7 @@ int main(void) {
     shogi_init();
     ShogiNnueModel model;
     shogi_nnue_model_init(&model);
-    if (!shogi_nnue_model_init_default(&model, 8)) return fail("model init");
+    if (!shogi_nnue_model_init_default(&model, 64)) return fail("model init");
     for (size_t index = 0; index < (size_t)model.feature_count * model.hidden_dim; ++index)
         model.feature_weights[index] = (int16_t)((index % 7) - 3);
     for (size_t index = 0; index < (size_t)model.hidden_dim * 2U; ++index)
@@ -38,7 +38,12 @@ int main(void) {
     if (memcmp(first.sum[0], rebuilt.sum[0], model.hidden_dim * sizeof(int32_t)) != 0 ||
         memcmp(first.sum[1], rebuilt.sum[1], model.hidden_dim * sizeof(int32_t)) != 0)
         return fail("incremental accumulator mismatch");
-    (void)shogi_nnue_evaluate(&model, &first, SHOGI_BLACK);
+    int expected_black = shogi_nnue_evaluate(&model, &rebuilt, SHOGI_BLACK);
+    int expected_white = shogi_nnue_evaluate(&model, &rebuilt, SHOGI_WHITE);
+    if (shogi_nnue_evaluate_position(&model, &next, SHOGI_BLACK) != expected_black ||
+        shogi_nnue_evaluate_position(&model, &next, SHOGI_WHITE) != expected_white ||
+        shogi_nnue_evaluate_position(&model, &next, SHOGI_BLACK) != expected_black)
+        return fail("position evaluation cache mismatch");
 
     const char *path = "/tmp/tinyshogi-nnue-test.nnue";
     if (!shogi_nnue_model_save(&model, path)) return fail("model save");
