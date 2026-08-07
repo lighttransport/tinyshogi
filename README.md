@@ -330,6 +330,18 @@ make -C gpu cuda       # or: make -C gpu rocm
 gpu/build/tinyshogi-train-nnue-cuda mixed.ndf1 model.nnue 5 0.01
 ```
 
+The ROCm runtime can also be checked without installing ROCm headers or
+linking the CPU engine against HIP:
+
+```sh
+make -C rocm
+rocm/build/tinyshogi-rocm-probe
+```
+
+The probe uses `rocm/rocew.[ch]`, a small CUEW-style dynamic loader based on
+the `rocew` implementation in the gemm project. `make -C gpu rocm` remains
+the HIP compiler path for the GPU trainer; the normal CPU build is unchanged.
+
 The GPU trainer is a correctness/reference implementation using atomic sparse
 updates and is suitable for a roughly 16 GB card. Larger-scale training can
 later add gradient reduction and mixed precision without changing the dataset
