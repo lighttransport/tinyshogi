@@ -2,6 +2,7 @@
 
 #include "search.h"
 #include "shogi.h"
+#include "nnue.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -19,10 +20,17 @@ typedef struct {
     ShogiPosition position;
     SearchOptions options;
     ShogiEvaluator evaluator;
+    ShogiNnueModel nnue;
     SearchJob *job;
     uint64_t last_info_ns;
     bool quit;
 } Application;
+
+static int nnue_evaluator_callback(void *userdata, const ShogiPosition *position,
+                                   ShogiColor perspective) {
+    return shogi_nnue_evaluate_position((const ShogiNnueModel *)userdata,
+                                         position, perspective);
+}
 
 static uint64_t monotonic_ns_main(void) {
     struct timespec time;
@@ -239,6 +247,7 @@ static void print_usi(void) {
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
     puts("option name EvalPlugin type string default none");
+    puts("option name EvalModel type string default none");
     puts("usiok");
     fflush(stdout);
 }
@@ -288,6 +297,28 @@ static void set_option(Application *application, char *line) {
                        application->evaluator.name == NULL ? tokens[value_index] : application->evaluator.name);
             } else {
                 printf("info string evaluator load failed: %s\n", shogi_evaluator_error());
+            }
+        }
+        fflush(stdout);
+    } else if (strcmp(tokens[2], "EvalModel") == 0) {
+        if (strcmp(tokens[value_index], "none") == 0) {
+            shogi_evaluator_destroy(&application->evaluator);
+            application->options.evaluator = &application->evaluator;
+        } else {
+            ShogiNnueModel next;
+            shogi_nnue_model_init(&next);
+            if (shogi_nnue_model_load(&next, tokens[value_index])) {
+                ShogiNnueModel old = application->nnue;
+                application->nnue = next;
+                shogi_nnue_model_destroy(&old);
+                shogi_evaluator_destroy(&application->evaluator);
+                shogi_evaluator_set(&application->evaluator, &application->nnue,
+                                    nnue_evaluator_callback, NULL, "tinyshogi-nnue");
+                application->options.evaluator = &application->evaluator;
+                printf("info string NNUE model loaded %s\n", tokens[value_index]);
+            } else {
+                shogi_nnue_model_destroy(&next);
+                puts("info string NNUE model load failed");
             }
         }
         fflush(stdout);
@@ -373,12 +404,17 @@ static bool run_selfplay(int argc, char **argv) {
     unsigned threads = 1, temperature_milli = 1000, cutoff = 30;
     uint64_t seed = 1;
     const char *output_path = "selfplay.jsonl";
+    const char *eval_model_path = NULL;
     for (int index = 2; index < argc; ++index) {
         uint64_t value;
         const char *key = argv[index];
         if (index + 1 >= argc) return false;
         if (strcmp(key, "--output") == 0) {
             output_path = argv[++index];
+            continue;
+        }
+        if (strcmp(key, "--eval-model") == 0) {
+            eval_model_path = argv[++index];
             continue;
         }
         if (!selfplay_option(key, argv[index + 1], &value)) return false;
@@ -393,10 +429,27 @@ static bool run_selfplay(int argc, char **argv) {
         ++index;
     }
     if (games == 0 || simulations == 0 || max_plies == 0 || threads == 0) return false;
+    ShogiNnueModel eval_model;
+    ShogiEvaluator evaluator;
+    shogi_nnue_model_init(&eval_model);
+    shogi_evaluator_init(&evaluator);
+    if (eval_model_path != NULL) {
+        if (!shogi_nnue_model_load(&eval_model, eval_model_path) ||
+            !shogi_evaluator_set(&evaluator, &eval_model, nnue_evaluator_callback,
+                                 NULL, "tinyshogi-nnue")) {
+            shogi_nnue_model_destroy(&eval_model);
+            shogi_evaluator_destroy(&evaluator);
+            return false;
+        }
+    }
     FILE *output = fopen(output_path, "w");
-    if (output == NULL) return false;
+    if (output == NULL) {
+        shogi_evaluator_destroy(&evaluator); shogi_nnue_model_destroy(&eval_model); return false;
+    }
     SelfplaySample *samples = calloc(max_plies, sizeof(*samples));
-    if (samples == NULL) { fclose(output); return false; }
+    if (samples == NULL) {
+        fclose(output); shogi_evaluator_destroy(&evaluator); shogi_nnue_model_destroy(&eval_model); return false;
+    }
     for (unsigned game = 0; game < games; ++game) {
         ShogiPosition position;
         shogi_position_start(&position);
@@ -405,15 +458,15 @@ static bool run_selfplay(int argc, char **argv) {
         uint64_t rng = seed + (uint64_t)game * UINT64_C(0x9e3779b97f4a7c15);
         for (unsigned ply = 0; ply < max_plies && result == SHOGI_RESULT_ONGOING; ++ply) {
             if (!shogi_position_to_sfen(&position, samples[sample_count].sfen,
-                                        sizeof(samples[sample_count].sfen))) { free(samples); fclose(output); return false; }
+                                        sizeof(samples[sample_count].sfen))) goto selfplay_fail;
             samples[sample_count].side = position.side;
             SearchOptions options = {threads, seed + ply + (uint64_t)game * 1000003U, false,
                                      200000, 64, SEARCH_DEFAULT_QUIESCENCE_DEPTH,
-                                     SEARCH_DEFAULT_EXPLORATION_MILLI, 1, NULL};
+                                     SEARCH_DEFAULT_EXPLORATION_MILLI, 1, &evaluator};
             SearchLimits limits = {0};
             limits.nodes = simulations;
             SearchJob *job = search_start(&position, &limits, &options);
-            if (job == NULL) { free(samples); fclose(output); return false; }
+            if (job == NULL) goto selfplay_fail;
             search_join(job, NULL);
             samples[sample_count].policy_count = search_get_root_policy(
                 job, samples[sample_count].policy, SHOGI_MAX_MOVES);
@@ -448,7 +501,16 @@ static bool run_selfplay(int argc, char **argv) {
     }
     free(samples);
     fclose(output);
+    shogi_evaluator_destroy(&evaluator);
+    shogi_nnue_model_destroy(&eval_model);
     return true;
+
+selfplay_fail:
+    free(samples);
+    fclose(output);
+    shogi_evaluator_destroy(&evaluator);
+    shogi_nnue_model_destroy(&eval_model);
+    return false;
 }
 
 static void process_line(Application *application, char *line) {
@@ -511,6 +573,7 @@ int main(int argc, char **argv) {
     Application application;
     memset(&application, 0, sizeof(application));
     shogi_evaluator_init(&application.evaluator);
+    shogi_nnue_model_init(&application.nnue);
     shogi_position_start(&application.position);
     application.options.threads = detected_threads();
     application.options.seed_auto = true;
@@ -559,5 +622,6 @@ int main(int argc, char **argv) {
     }
     finish_job(&application, false);
     shogi_evaluator_destroy(&application.evaluator);
+    shogi_nnue_model_destroy(&application.nnue);
     return 0;
 }

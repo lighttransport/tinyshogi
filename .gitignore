@@ -65,6 +65,9 @@ third_party/elmo_for_learn/
 eval/
 cpu/train_int
 cpu/eval_int
+cpu/train_nnue
+cpu/eval_nnue
+cpu/brute_server
 __pycache__/
 *.py[cod]
 *$py.class

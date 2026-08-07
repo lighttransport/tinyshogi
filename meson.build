@@ -11,6 +11,7 @@ engine_sources = files(
   'src/main.c',
   'src/search.c',
   'src/shogi.c',
+  'src/nnue.c',
   'src/eval.c',
   'src/thread_posix.c'
 )
@@ -26,6 +27,14 @@ search_test = executable('tinyshogi-search-test', 'tests/test_search.c',
   sources : ['src/search.c', 'src/shogi.c', 'src/eval.c', 'src/thread_posix.c'],
   dependencies : [threads_dep, math_dep, dl_dep], install : false)
 test('search', search_test)
+
+nnue_test = executable('tinyshogi-nnue-test', 'tests/test_nnue.c',
+  sources : ['src/nnue.c', 'src/shogi.c'], dependencies : [math_dep], install : false)
+test('nnue', nnue_test)
+
+brute_test = executable('tinyshogi-brute-test', 'tests/test_brute.c',
+  sources : ['src/brute.c', 'src/shogi.c'], dependencies : [math_dep], install : false)
+test('brute', brute_test)
 
 integer_test = executable('tinyshogi-integer-test', 'tests/test_int.c',
   sources : ['src/int_math.c', 'src/int_model.c'], dependencies : [math_dep], install : false)
