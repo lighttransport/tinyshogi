@@ -263,10 +263,24 @@ static void make_position(const ShogiNdfRecord *record, ShogiPosition *position)
     }
 }
 
-static int compare_occurrence(const void *left, const void *right) {
-    const Occurrence *a = left, *b = right;
-    if (a->id != b->id) return (a->id > b->id) - (a->id < b->id);
-    return (a->sample > b->sample) - (a->sample < b->sample);
+static void radix_sort_occurrences(Occurrence *values, Occurrence *scratch,
+                                   size_t count) {
+    enum { RADIX_BITS = 11, RADIX = 1 << RADIX_BITS };
+    size_t bins[RADIX];
+    Occurrence *source = values, *target = scratch;
+    for (unsigned shift = 0; shift < 22; shift += RADIX_BITS) {
+        memset(bins, 0, sizeof(bins));
+        for (size_t i = 0; i < count; ++i)
+            ++bins[(source[i].id >> shift) & (RADIX - 1U)];
+        size_t offset = 0;
+        for (unsigned bin = 0; bin < RADIX; ++bin) {
+            size_t amount = bins[bin]; bins[bin] = offset; offset += amount;
+        }
+        for (size_t i = 0; i < count; ++i)
+            target[bins[(source[i].id >> shift) & (RADIX - 1U)]++] = source[i];
+        Occurrence *temporary = source; source = target; target = temporary;
+    }
+    if (source != values) memcpy(values, source, count * sizeof(*values));
 }
 
 static int16_t quantize(float value, float scale) {
@@ -357,50 +371,65 @@ static void flush_momentum(float *weight, float *velocity, uint64_t *last_step,
 
 /* Orthogonalize a rows x cols update with Muon's quintic Newton-Schulz map. */
 static void muon_step(float *weight, float *velocity, const float *gradient,
-                      unsigned rows, unsigned cols, float rate, float momentum) {
+                      unsigned rows, unsigned cols, float rate, float momentum,
+                      float *workspace) {
     size_t count = (size_t)rows * cols;
     float norm2 = 1.0e-14f;
+#pragma omp parallel for schedule(static)
     for (size_t i = 0; i < count; ++i) {
         velocity[i] = momentum * velocity[i] + (1.0f - momentum) * gradient[i];
     }
-    float *x = malloc(count * sizeof(*x));
-    float *y = malloc(count * sizeof(*y));
-    float *a = malloc((size_t)rows * rows * sizeof(*a));
-    float *b = malloc((size_t)rows * rows * sizeof(*b));
-    float *a2 = malloc((size_t)rows * rows * sizeof(*a2));
-    if (x == NULL || y == NULL || a == NULL || b == NULL || a2 == NULL) {
-        free(a2); free(b); free(a); free(y); free(x); return;
-    }
+    size_t square = (size_t)rows * rows;
+    float *x = workspace;
+    float *y = x + count;
+    float *a = y + count;
+    float *b = a + square;
+#pragma omp parallel for schedule(static) reduction(+:norm2)
     for (size_t i = 0; i < count; ++i) {
         x[i] = (1.0f - momentum) * gradient[i] + momentum * velocity[i];
         norm2 += x[i] * x[i];
     }
     float inverse_norm = 1.0f / sqrtf(norm2);
+#pragma omp parallel for schedule(static)
     for (size_t i = 0; i < count; ++i) x[i] *= inverse_norm;
     for (unsigned iteration = 0; iteration < 5; ++iteration) {
+#pragma omp parallel for schedule(static)
         for (unsigned i = 0; i < rows; ++i)
-            for (unsigned j = 0; j < rows; ++j) {
+            for (unsigned j = 0; j <= i; ++j) {
                 float sum = 0.0f;
                 for (unsigned k = 0; k < cols; ++k) sum += x[(size_t)i * cols + k] * x[(size_t)j * cols + k];
                 a[(size_t)i * rows + j] = sum;
+                a[(size_t)j * rows + i] = sum;
             }
+#pragma omp parallel for schedule(static)
         for (unsigned i = 0; i < rows; ++i)
-            for (unsigned j = 0; j < rows; ++j) {
+            for (unsigned j = 0; j <= i; ++j) {
                 float sum = 0.0f;
                 for (unsigned k = 0; k < rows; ++k) sum += a[(size_t)i * rows + k] * a[(size_t)k * rows + j];
-                a2[(size_t)i * rows + j] = sum;
-                b[(size_t)i * rows + j] = -4.7750f * a[(size_t)i * rows + j] + 2.0315f * sum;
+                float value = -4.7750f * a[(size_t)i * rows + j] + 2.0315f * sum;
+                b[(size_t)i * rows + j] = value;
+                b[(size_t)j * rows + i] = value;
             }
+#pragma omp parallel for schedule(static)
         for (unsigned i = 0; i < rows; ++i)
-            for (unsigned k = 0; k < cols; ++k) {
-                float sum = 3.4445f * x[(size_t)i * cols + k];
-                for (unsigned j = 0; j < rows; ++j) sum += b[(size_t)i * rows + j] * x[(size_t)j * cols + k];
-                y[(size_t)i * cols + k] = sum;
+        {
+            float *output = y + (size_t)i * cols;
+            const float *input_row = x + (size_t)i * cols;
+#pragma omp simd
+            for (unsigned k = 0; k < cols; ++k)
+                output[k] = 3.4445f * input_row[k];
+            for (unsigned j = 0; j < rows; ++j) {
+                float coefficient = b[(size_t)i * rows + j];
+                const float *source = x + (size_t)j * cols;
+#pragma omp simd
+                for (unsigned k = 0; k < cols; ++k)
+                    output[k] += coefficient * source[k];
             }
+        }
         float *temporary = x; x = y; y = temporary;
     }
+#pragma omp parallel for schedule(static)
     for (size_t i = 0; i < count; ++i) weight[i] -= rate * x[i];
-    free(a2); free(b); free(a); free(y); free(x);
 }
 
 int main(int argc, char **argv) {
@@ -427,6 +456,26 @@ int main(int argc, char **argv) {
     if (global_count == 0) abort_mpi(rank, "training set is empty");
     int owners[KING_BUCKETS];
     assign_owners(global_buckets, ranks, owners);
+    if (rank == 0) {
+        uint64_t *owner_loads = calloc((size_t)ranks, sizeof(*owner_loads));
+        if (owner_loads == NULL) abort_mpi(rank, "cannot allocate owner diagnostics");
+        unsigned nonempty = 0;
+        for (unsigned bucket = 0; bucket < KING_BUCKETS; ++bucket) {
+            owner_loads[owners[bucket]] += global_buckets[bucket];
+            if (global_buckets[bucket] != 0) ++nonempty;
+        }
+        uint64_t maximum = owner_loads[0];
+        for (int owner = 1; owner < ranks; ++owner)
+            if (owner_loads[owner] > maximum) maximum = owner_loads[owner];
+        double balance = maximum == 0 ? 1.0 :
+            (double)global_count / ((double)ranks * (double)maximum);
+        fprintf(stderr,
+                "nnue-mpi data records=%llu nonempty-king-buckets=%u "
+                "maximum-owner-load=%llu owner-balance=%.1f%%\n",
+                (unsigned long long)global_count, nonempty,
+                (unsigned long long)maximum, balance * 100.0);
+        free(owner_loads);
+    }
     rewind(input);
     if (!shogi_ndf_read_header(input, &local_count)) abort_mpi(rank, "cannot rewind NDF1");
     RecordVector buckets[KING_BUCKETS] = {{0}};
@@ -468,11 +517,14 @@ int main(int argc, char **argv) {
     float *final_bias = calloc(2U, sizeof(*final_bias));
     float *final_bias_velocity = calloc(2U, sizeof(*final_bias_velocity));
     float *final_bias_gradient = calloc(2U, sizeof(*final_bias_gradient));
+    size_t muon_workspace_values = 2U * HEAD * HIDDEN + 2U * HEAD * HEAD;
+    float *muon_workspace = malloc(muon_workspace_values * sizeof(*muon_workspace));
     if (weights == NULL || velocity == NULL || feature_gradient == NULL || last_step == NULL ||
         head == NULL || head_velocity == NULL || head_gradient == NULL || head_bias == NULL ||
         head_bias_velocity == NULL || head_bias_gradient == NULL || final == NULL ||
         final_velocity == NULL || final_gradient == NULL || final_bias == NULL ||
-        final_bias_velocity == NULL || final_bias_gradient == NULL)
+        final_bias_velocity == NULL || final_bias_gradient == NULL ||
+        muon_workspace == NULL)
         abort_mpi(rank, "cannot allocate model and optimizer");
 
 #pragma omp parallel for schedule(static)
@@ -500,8 +552,17 @@ int main(int argc, char **argv) {
     uint32_t *ids = malloc(max_local_batch * MAX_ACTIVE * sizeof(*ids));
     uint16_t *active = malloc(max_local_batch * sizeof(*active));
     Occurrence *occurrences = malloc(max_local_batch * MAX_ACTIVE * sizeof(*occurrences));
+    Occurrence *occurrence_scratch = malloc(max_local_batch * MAX_ACTIVE *
+                                             sizeof(*occurrence_scratch));
+    size_t *group_starts = malloc((max_local_batch * MAX_ACTIVE + 1U) *
+                                  sizeof(*group_starts));
+    size_t hand_values = (size_t)SHOGI_NNUE_HAND_FEATURES * HIDDEN;
+    size_t sync_count = hand_values + head_values + 64U + 64U + 2U;
+    float *sync = malloc(sync_count * sizeof(*sync));
     if (batch == NULL || hidden == NULL || dhidden == NULL || head_raw == NULL ||
-        head_act == NULL || dhead == NULL || ids == NULL || active == NULL || occurrences == NULL)
+        head_act == NULL || dhead == NULL || ids == NULL || active == NULL ||
+        occurrences == NULL || occurrence_scratch == NULL || group_starts == NULL ||
+        sync == NULL)
         abort_mpi(rank, "cannot allocate minibatch workspace");
 
     shogi_init();
@@ -602,7 +663,7 @@ int main(int argc, char **argv) {
                 for (unsigned item = 0; item < active[sample]; ++item)
                     occurrences[occurrence_count++] =
                         (Occurrence){ids[sample * MAX_ACTIVE + item], (uint32_t)sample};
-            qsort(occurrences, occurrence_count, sizeof(*occurrences), compare_occurrence);
+            radix_sort_occurrences(occurrences, occurrence_scratch, occurrence_count);
             size_t group_count = 0;
             for (size_t index = 0; index < occurrence_count;) {
                 uint32_t id = occurrences[index].id;
@@ -611,8 +672,6 @@ int main(int argc, char **argv) {
                 ++group_count;
                 index = next;
             }
-            size_t *group_starts = malloc((group_count + 1U) * sizeof(*group_starts));
-            if (group_starts == NULL) abort_mpi(rank, "cannot allocate sparse groups");
             size_t group = 0;
             for (size_t index = 0; index < occurrence_count;) {
                 group_starts[group++] = index;
@@ -665,10 +724,6 @@ int main(int argc, char **argv) {
             }
             float inverse = 1.0f / (float)actual_global;
             size_t hand_first = SHOGI_NNUE_BOARD_FEATURES;
-            size_t hand_values = (size_t)SHOGI_NNUE_HAND_FEATURES * HIDDEN;
-            size_t sync_count = hand_values + head_values + 64U + 64U + 2U;
-            float *sync = malloc(sync_count * sizeof(*sync));
-            if (sync == NULL) abort_mpi(rank, "cannot allocate collective buffer");
             size_t cursor = 0;
             memcpy(sync + cursor, feature_gradient + hand_first * HIDDEN,
                    hand_values * sizeof(*sync)); cursor += hand_values;
@@ -687,7 +742,6 @@ int main(int argc, char **argv) {
             memcpy(head_bias_gradient, sync + cursor, 64U * sizeof(*sync)); cursor += 64U;
             memcpy(final_gradient, sync + cursor, 64U * sizeof(*sync)); cursor += 64U;
             memcpy(final_bias_gradient, sync + cursor, 2U * sizeof(*sync));
-            free(sync);
             ++step_number;
             bool nesterov = options.optimizer == OPT_NESTEROV;
 #pragma omp parallel for schedule(dynamic, 8)
@@ -718,10 +772,17 @@ int main(int argc, char **argv) {
                     float *gradient = head_gradient + (size_t)side * HEAD * HIDDEN;
                     for (size_t index = 0; index < (size_t)HEAD * HIDDEN; ++index)
                         gradient[index] *= inverse;
-                    muon_step(head + (size_t)side * HEAD * HIDDEN,
-                              head_velocity + (size_t)side * HEAD * HIDDEN,
-                              gradient, HEAD, HIDDEN,
-                              options.muon_learning_rate, options.momentum);
+                    int matrix_owner = (int)side % ranks;
+                    if (rank == matrix_owner)
+                        muon_step(head + (size_t)side * HEAD * HIDDEN,
+                                  head_velocity + (size_t)side * HEAD * HIDDEN,
+                                  gradient, HEAD, HIDDEN,
+                                  options.muon_learning_rate, options.momentum,
+                                  muon_workspace);
+                    double broadcast_start = MPI_Wtime();
+                    MPI_Bcast(head + (size_t)side * HEAD * HIDDEN,
+                              HEAD * HIDDEN, MPI_FLOAT, matrix_owner, MPI_COMM_WORLD);
+                    communication += MPI_Wtime() - broadcast_start;
                 }
             } else {
 #pragma omp parallel for schedule(static)
@@ -756,7 +817,6 @@ int main(int argc, char **argv) {
             MPI_Allreduce(&local_loss, &global_loss, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
             epoch_loss += global_loss;
             epoch_samples += actual_global;
-            free(group_starts);
         }
         double elapsed = MPI_Wtime() - epoch_start, max_elapsed, max_comm;
         MPI_Reduce(&elapsed, &max_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -795,9 +855,10 @@ int main(int argc, char **argv) {
     if (!saved) abort_mpi(rank, "cannot save NNUE3 checkpoint");
     if (rank == 0) fprintf(stderr, "saved %s\n", options.output_path);
 
-    free(gathered); free(occurrences); free(active); free(ids); free(dhead);
+    free(gathered); free(sync); free(group_starts); free(occurrence_scratch);
+    free(occurrences); free(active); free(ids); free(dhead);
     free(head_act); free(head_raw); free(dhidden); free(hidden); free(batch);
-    free(final_bias_gradient); free(final_bias_velocity); free(final_bias);
+    free(muon_workspace); free(final_bias_gradient); free(final_bias_velocity); free(final_bias);
     free(final_gradient); free(final_velocity); free(final);
     free(head_bias_gradient); free(head_bias_velocity); free(head_bias);
     free(head_gradient); free(head_velocity); free(head);
