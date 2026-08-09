@@ -365,6 +365,21 @@ set and needs regularization, lower matrix learning rate, or early stopping.
 The next meaningful sweep is Muon matrix LR and checkpointed early stopping
 against held-out loss, followed by playing-strength matches.
 
+The follow-up sweep found that `--muon-learning-rate 0.005` was the most stable
+tested setting. Held-out MSE over training duration was:
+
+| Muon epochs | Held-out MSE |
+|---:|---:|
+| 100 | 9,909.750 |
+| 300 | 10,014.342 |
+| 600 | 10,532.301 |
+| 1,000 | 9,962.271 |
+
+The best Muon point is close to, but still slightly worse than, the Momentum
+SGD baseline. The non-monotonic curve makes checkpointed early stopping
+essential; the final checkpoint should be selected by held-out loss, followed
+by a strength match rather than by training loss.
+
 ## 10. Performance methodology
 
 Use three distinct gates:
