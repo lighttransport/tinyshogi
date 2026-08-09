@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT=${OUT_DIR:-"$ROOT/build-fcc-a64fx"}
 FCC=${FCC:-/opt/FJSVxtclanga/tcsds-1.2.43/bin/fcc}
+MPIFCC=${MPIFCC:-/opt/FJSVxtclanga/tcsds-1.2.43/bin/mpifcc}
 mkdir -p "$OUT/obj"
 
 [[ -x "$FCC" ]] || { echo "FCC not found: $FCC" >&2; exit 1; }
@@ -58,6 +59,17 @@ nnue_objects=(
 )
 for source in "${assembly[@]}"; do nnue_objects+=("$OUT/obj/$source.o"); done
 "$FCC" "${nnue_objects[@]}" -lm -o "$OUT/nnue-state-bench"
+
+OPAL_PREFIX=/opt/FJSVxtclanga/tcsds-1.2.43 "$MPIFCC" \
+  -O3 -Kfast -Kopenmp -std=c11 -I"$ROOT/src" \
+  -c "$ROOT/cpu/train_nnue_mpi.c" -o "$OUT/obj/train_nnue_mpi.o"
+mpi_train_objects=(
+  "$OUT/obj/train_nnue_mpi.o" "$OUT/obj/shogi.o" "$OUT/obj/nnue.o"
+  "$OUT/obj/simd.o"
+)
+for source in "${assembly[@]}"; do mpi_train_objects+=("$OUT/obj/$source.o"); done
+OPAL_PREFIX=/opt/FJSVxtclanga/tcsds-1.2.43 "$MPIFCC" \
+  "${mpi_train_objects[@]}" -Kopenmp -lm -o "$OUT/train_nnue_mpi"
 
 "$FCC" "${sve[@]}" -c "$ROOT/tests/test_simd.c" -o "$OUT/obj/test_simd.o"
 simd_test_objects=("$OUT/obj/test_simd.o" "$OUT/obj/simd.o")
