@@ -98,6 +98,19 @@ the gradients did not reach those clip thresholds. The recommended Muon
 configuration therefore remains Nesterov enabled, matrix LR `0.005`, and
 held-out checkpoint selection around the 100-epoch point.
 
+Warmup and decoupled weight decay were also tested at matrix LR `0.005`:
+
+| Warmup steps | Weight decay | Held-out MSE |
+|---:|---:|---:|
+| 500 | 0.00 | 10,496.771 |
+| 500 | 0.01 | 10,666.096 |
+| 500 | 0.10 | 10,275.670 |
+
+All three were worse than the unclipped, no-warmup baseline (`9,962.271`).
+These controls remain available for future datasets but are disabled by
+default; the current stable Muon baseline is Nesterov enabled, no clipping,
+no warmup, no weight decay, and early checkpoint selection.
+
 ## Muon implementation and performance
 
 The optimized Muon implementation includes:

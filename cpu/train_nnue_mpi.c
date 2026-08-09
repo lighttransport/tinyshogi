@@ -44,6 +44,8 @@ typedef struct {
     unsigned checkpoint_epochs;
     bool muon_nesterov;
     float muon_gradient_clip;
+    float muon_weight_decay;
+    uint64_t muon_warmup_steps;
     int32_t activation_clip;
     unsigned head_dim;
     uint64_t seed;
@@ -64,7 +66,7 @@ static bool parse_unsigned(const char *text, unsigned *value) {
 
 static bool parse_options(int argc, char **argv, Options *options) {
     *options = (Options){NULL, NULL, 5U, 2304U, 0.03f, 0.9f, 0.02f,
-                         OPT_MOMENTUM, NULL, NULL, 0U, true, 0.0f,
+                         OPT_MOMENTUM, NULL, NULL, 0U, true, 0.0f, 0.0f, 0U,
                          INT16_MAX, 32U, 7U};
     for (int index = 1; index < argc; ++index) {
         if (index + 1 >= argc) return false;
@@ -82,6 +84,13 @@ static bool parse_options(int argc, char **argv, Options *options) {
         } else if (strcmp(key, "--muon-gradient-clip") == 0) {
             char *end = NULL; options->muon_gradient_clip = strtof(value, &end);
             if (*end != '\0' || options->muon_gradient_clip < 0.0f) return false;
+        } else if (strcmp(key, "--muon-weight-decay") == 0) {
+            char *end = NULL; options->muon_weight_decay = strtof(value, &end);
+            if (*end != '\0' || options->muon_weight_decay < 0.0f) return false;
+        } else if (strcmp(key, "--muon-warmup-steps") == 0) {
+            unsigned warmup;
+            if (!parse_unsigned(value, &warmup)) return false;
+            options->muon_warmup_steps = warmup;
         }
         else if (strcmp(key, "--epochs") == 0) {
             if (!parse_unsigned(value, &options->epochs)) return false;
@@ -479,7 +488,8 @@ static void flush_momentum(float *weight, float *velocity, uint64_t *last_step,
 /* Orthogonalize a rows x cols update with Muon's quintic Newton-Schulz map. */
 static void muon_step(float *weight, float *velocity, const float *gradient,
                       unsigned rows, unsigned cols, float rate, float momentum,
-                      float *workspace, bool nesterov, float gradient_clip) {
+                      float *workspace, bool nesterov, float gradient_clip,
+                      float weight_decay) {
     size_t count = (size_t)rows * cols;
     float norm2 = 1.0e-14f;
     size_t square = (size_t)rows * rows;
@@ -546,7 +556,10 @@ static void muon_step(float *weight, float *velocity, const float *gradient,
         float *temporary = x; x = y; y = temporary;
     }
 #pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < count; ++i) weight[i] -= rate * x[i];
+    for (size_t i = 0; i < count; ++i) {
+        weight[i] *= 1.0f - rate * weight_decay;
+        weight[i] -= rate * x[i];
+    }
 }
 
 int main(int argc, char **argv) {
@@ -558,7 +571,7 @@ int main(int argc, char **argv) {
     if (provided < MPI_THREAD_FUNNELED) abort_mpi(rank, "MPI thread support is insufficient");
     Options options;
     if (!parse_options(argc, argv, &options))
-        abort_mpi(rank, "usage: --data PATH --output PATH [--epochs N --global-batch N --optimizer momentum|nesterov|muon --learning-rate F --muon-learning-rate F --momentum F --checkpoint PATH --checkpoint-epochs N --resume PATH --activation-clip N --head-dim 32 --seed N]");
+        abort_mpi(rank, "usage: --data PATH --output PATH [--epochs N --global-batch N --optimizer momentum|nesterov|muon --learning-rate F --muon-learning-rate F --momentum F --muon-nesterov 0|1 --muon-gradient-clip F --muon-weight-decay F --muon-warmup-steps N --checkpoint PATH --checkpoint-epochs N --resume PATH --activation-clip N --head-dim 32 --seed N]");
 
     uint32_t local_count;
     FILE *input = open_ndf(options.data_path, &local_count);
@@ -907,13 +920,19 @@ int main(int argc, char **argv) {
                     for (size_t index = 0; index < (size_t)HEAD * HIDDEN; ++index)
                         gradient[index] *= inverse;
                     int matrix_owner = (int)side % ranks;
+                    float muon_rate = options.muon_learning_rate;
+                    if (options.muon_warmup_steps != 0 &&
+                        step_number < options.muon_warmup_steps)
+                        muon_rate *= (float)(step_number + 1U) /
+                                     (float)options.muon_warmup_steps;
                     if (rank == matrix_owner)
                         muon_step(head + (size_t)side * HEAD * HIDDEN,
                                   head_velocity + (size_t)side * HEAD * HIDDEN,
                                   gradient, HEAD, HIDDEN,
-                                  options.muon_learning_rate, options.momentum,
+                                  muon_rate, options.momentum,
                                   muon_workspace, options.muon_nesterov,
-                                  options.muon_gradient_clip);
+                                  options.muon_gradient_clip,
+                                  options.muon_weight_decay);
                     double broadcast_start = MPI_Wtime();
                     MPI_Bcast(head + (size_t)side * HEAD * HIDDEN,
                               HEAD * HIDDEN, MPI_FLOAT, matrix_owner, MPI_COMM_WORLD);
