@@ -42,6 +42,8 @@ typedef struct {
     const char *checkpoint_path;
     const char *resume_path;
     unsigned checkpoint_epochs;
+    bool muon_nesterov;
+    float muon_gradient_clip;
     int32_t activation_clip;
     unsigned head_dim;
     uint64_t seed;
@@ -62,7 +64,8 @@ static bool parse_unsigned(const char *text, unsigned *value) {
 
 static bool parse_options(int argc, char **argv, Options *options) {
     *options = (Options){NULL, NULL, 5U, 2304U, 0.03f, 0.9f, 0.02f,
-                         OPT_MOMENTUM, NULL, NULL, 0U, INT16_MAX, 32U, 7U};
+                         OPT_MOMENTUM, NULL, NULL, 0U, true, 0.0f,
+                         INT16_MAX, 32U, 7U};
     for (int index = 1; index < argc; ++index) {
         if (index + 1 >= argc) return false;
         const char *key = argv[index], *value = argv[++index];
@@ -72,6 +75,13 @@ static bool parse_options(int argc, char **argv, Options *options) {
         else if (strcmp(key, "--resume") == 0) options->resume_path = value;
         else if (strcmp(key, "--checkpoint-epochs") == 0) {
             if (!parse_unsigned(value, &options->checkpoint_epochs)) return false;
+        } else if (strcmp(key, "--muon-nesterov") == 0) {
+            unsigned enabled;
+            if (!parse_unsigned(value, &enabled) || enabled > 1U) return false;
+            options->muon_nesterov = enabled != 0U;
+        } else if (strcmp(key, "--muon-gradient-clip") == 0) {
+            char *end = NULL; options->muon_gradient_clip = strtof(value, &end);
+            if (*end != '\0' || options->muon_gradient_clip < 0.0f) return false;
         }
         else if (strcmp(key, "--epochs") == 0) {
             if (!parse_unsigned(value, &options->epochs)) return false;
@@ -469,13 +479,9 @@ static void flush_momentum(float *weight, float *velocity, uint64_t *last_step,
 /* Orthogonalize a rows x cols update with Muon's quintic Newton-Schulz map. */
 static void muon_step(float *weight, float *velocity, const float *gradient,
                       unsigned rows, unsigned cols, float rate, float momentum,
-                      float *workspace) {
+                      float *workspace, bool nesterov, float gradient_clip) {
     size_t count = (size_t)rows * cols;
     float norm2 = 1.0e-14f;
-#pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < count; ++i) {
-        velocity[i] = momentum * velocity[i] + (1.0f - momentum) * gradient[i];
-    }
     size_t square = (size_t)rows * rows;
     float *x = workspace;
     float *y = x + count;
@@ -483,7 +489,21 @@ static void muon_step(float *weight, float *velocity, const float *gradient,
     float *b = a + square;
 #pragma omp parallel for schedule(static) reduction(+:norm2)
     for (size_t i = 0; i < count; ++i) {
-        x[i] = (1.0f - momentum) * gradient[i] + momentum * velocity[i];
+        norm2 += gradient[i] * gradient[i];
+    }
+    float gradient_scale = gradient_clip > 0.0f && sqrtf(norm2) > gradient_clip ?
+        gradient_clip / sqrtf(norm2) : 1.0f;
+#pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < count; ++i)
+        x[i] = gradient[i] * gradient_scale;
+#pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < count; ++i)
+        velocity[i] = momentum * velocity[i] + (1.0f - momentum) * x[i];
+    norm2 = 1.0e-14f;
+#pragma omp parallel for schedule(static) reduction(+:norm2)
+    for (size_t i = 0; i < count; ++i) {
+        x[i] = nesterov ? (1.0f - momentum) * x[i] + momentum * velocity[i]
+                        : velocity[i];
         norm2 += x[i] * x[i];
     }
     float inverse_norm = 1.0f / sqrtf(norm2);
@@ -892,7 +912,8 @@ int main(int argc, char **argv) {
                                   head_velocity + (size_t)side * HEAD * HIDDEN,
                                   gradient, HEAD, HIDDEN,
                                   options.muon_learning_rate, options.momentum,
-                                  muon_workspace);
+                                  muon_workspace, options.muon_nesterov,
+                                  options.muon_gradient_clip);
                     double broadcast_start = MPI_Wtime();
                     MPI_Bcast(head + (size_t)side * HEAD * HIDDEN,
                               HEAD * HIDDEN, MPI_FLOAT, matrix_owner, MPI_COMM_WORLD);

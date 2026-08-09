@@ -90,6 +90,14 @@ At matrix LR `0.005`, early stopping produced:
 The best Muon point is close to, but still slightly worse than, Momentum SGD.
 The non-monotonic curve makes checkpointed early stopping essential.
 
+Additional stabilization tests were run on the same split. Disabling Muon's
+Nesterov look-ahead at matrix LR `0.005` produced held-out MSE `10,351.391`,
+worse than the default Nesterov form. Gradient-norm clipping at `0.1`, `0.25`,
+and `0.5` produced `9,962.271` in each case, identical to unclipped Muon;
+the gradients did not reach those clip thresholds. The recommended Muon
+configuration therefore remains Nesterov enabled, matrix LR `0.005`, and
+held-out checkpoint selection around the 100-epoch point.
+
 ## Muon implementation and performance
 
 The optimized Muon implementation includes:
@@ -151,6 +159,12 @@ mpiexec -n 12 build/train_nnue_mpi \
   --epochs 1000 --global-batch 2304 --optimizer muon \
   --learning-rate 0.001 --muon-learning-rate 0.005 \
   --momentum 0.9 --checkpoint state --checkpoint-epochs 100
+```
+
+The stabilizer controls are also available for experiments:
+
+```sh
+--muon-nesterov 0|1 --muon-gradient-clip N
 ```
 
 ## Decision
