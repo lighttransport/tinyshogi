@@ -437,6 +437,10 @@ scripts/train_a64fx.py --nodes 12 --games 12000 --simulations 100000 \
 Use `--global-batch`, `--learning-rate`, `--momentum`, and `--epochs` to tune
 the exact synchronous momentum-SGD run. `--archive-data` is optional because
 copying large shards back to the shared filesystem can dominate an iteration.
+The MPI trainer also accepts `--optimizer nesterov` and `--optimizer muon`.
+Muon applies five-step Newton--Schulz orthogonalization to the hidden 32x256
+matrices; sparse features, classifier weights, and biases retain SGD momentum.
+Set its matrix step independently with `--muon-learning-rate`.
 Shards can be consolidated without decoding records:
 
 ```sh

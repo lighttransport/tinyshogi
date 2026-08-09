@@ -32,6 +32,9 @@ def main():
     parser.add_argument("--global-batch", type=int, default=2304)
     parser.add_argument("--learning-rate", type=float, default=0.03)
     parser.add_argument("--momentum", type=float, default=0.9)
+    parser.add_argument("--optimizer", choices=("momentum", "nesterov", "muon"),
+                        default="momentum")
+    parser.add_argument("--muon-learning-rate", type=float, default=0.02)
     parser.add_argument("--archive-data", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -100,6 +103,8 @@ exec "$dir/tinyshogi" --selfplay --games "$n" --game-offset "$before" \
                "--output", str(candidate), "--epochs", str(args.epochs),
                "--global-batch", str(args.global_batch), "--learning-rate",
                str(args.learning_rate), "--momentum", str(args.momentum),
+               "--optimizer", args.optimizer, "--muon-learning-rate",
+               str(args.muon_learning_rate),
                "--seed", str(args.seed)], env=env, dry_run=args.dry_run)
 
     if args.archive_data:
