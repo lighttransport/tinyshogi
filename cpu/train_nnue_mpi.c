@@ -36,6 +36,8 @@ typedef struct {
     unsigned global_batch;
     float learning_rate;
     float momentum;
+    float muon_learning_rate;
+    enum { OPT_MOMENTUM, OPT_NESTEROV, OPT_MUON } optimizer;
     int32_t activation_clip;
     unsigned head_dim;
     uint64_t seed;
@@ -55,8 +57,8 @@ static bool parse_unsigned(const char *text, unsigned *value) {
 }
 
 static bool parse_options(int argc, char **argv, Options *options) {
-    *options = (Options){NULL, NULL, 5U, 2304U, 0.03f, 0.9f,
-                         INT16_MAX, 32U, 7U};
+    *options = (Options){NULL, NULL, 5U, 2304U, 0.03f, 0.9f, 0.02f,
+                         OPT_MOMENTUM, INT16_MAX, 32U, 7U};
     for (int index = 1; index < argc; ++index) {
         if (index + 1 >= argc) return false;
         const char *key = argv[index], *value = argv[++index];
@@ -72,6 +74,14 @@ static bool parse_options(int argc, char **argv, Options *options) {
         } else if (strcmp(key, "--momentum") == 0) {
             char *end = NULL; options->momentum = strtof(value, &end);
             if (*end != '\0') return false;
+        } else if (strcmp(key, "--muon-learning-rate") == 0) {
+            char *end = NULL; options->muon_learning_rate = strtof(value, &end);
+            if (*end != '\0') return false;
+        } else if (strcmp(key, "--optimizer") == 0) {
+            if (strcmp(value, "momentum") == 0) options->optimizer = OPT_MOMENTUM;
+            else if (strcmp(value, "nesterov") == 0) options->optimizer = OPT_NESTEROV;
+            else if (strcmp(value, "muon") == 0) options->optimizer = OPT_MUON;
+            else return false;
         } else if (strcmp(key, "--activation-clip") == 0) {
             char *end = NULL; long parsed = strtol(value, &end, 10);
             if (*end != '\0' || parsed < 1 || parsed > INT16_MAX) return false;
@@ -86,7 +96,8 @@ static bool parse_options(int argc, char **argv, Options *options) {
     return options->data_path != NULL && options->output_path != NULL &&
            options->epochs > 0 && options->global_batch > 0 &&
            options->learning_rate > 0.0f && options->momentum >= 0.0f &&
-           options->momentum < 1.0f && options->head_dim == 32U;
+           options->momentum < 1.0f && options->muon_learning_rate > 0.0f &&
+           options->head_dim == 32U;
 }
 
 static unsigned record_bucket(const ShogiNdfRecord *record) {
@@ -308,11 +319,12 @@ static bool save_model(const char *path, const float *features, const float *hea
 
 static void lazy_momentum(float *weight, float *velocity, uint64_t *last_step,
                           const float *gradient, uint64_t step, float rate,
-                          float momentum, size_t count) {
+                          float momentum, size_t count, bool nesterov) {
     uint64_t skipped = step - *last_step - 1U;
     if (skipped != 0 && momentum != 0.0f) {
         float decay = powf(momentum, (float)skipped);
-        float drift = momentum * (1.0f - decay) / (1.0f - momentum);
+        float drift = (nesterov ? momentum * momentum : momentum) *
+                      (1.0f - decay) / (1.0f - momentum);
         for (size_t unit = 0; unit < count; ++unit) {
             weight[unit] -= rate * velocity[unit] * drift;
             velocity[unit] *= decay;
@@ -320,23 +332,75 @@ static void lazy_momentum(float *weight, float *velocity, uint64_t *last_step,
     }
     for (size_t unit = 0; unit < count; ++unit) {
         velocity[unit] = momentum * velocity[unit] + gradient[unit];
-        weight[unit] -= rate * velocity[unit];
+        float update = nesterov ? gradient[unit] + momentum * velocity[unit]
+                                : velocity[unit];
+        weight[unit] -= rate * update;
     }
     *last_step = step;
 }
 
 static void flush_momentum(float *weight, float *velocity, uint64_t *last_step,
-                           uint64_t step, float rate, float momentum, size_t count) {
+                           uint64_t step, float rate, float momentum, size_t count,
+                           bool nesterov) {
     uint64_t skipped = step - *last_step;
     if (skipped != 0 && momentum != 0.0f) {
         float decay = powf(momentum, (float)skipped);
-        float drift = momentum * (1.0f - decay) / (1.0f - momentum);
+        float drift = (nesterov ? momentum * momentum : momentum) *
+                      (1.0f - decay) / (1.0f - momentum);
         for (size_t unit = 0; unit < count; ++unit) {
             weight[unit] -= rate * velocity[unit] * drift;
             velocity[unit] *= decay;
         }
     }
     *last_step = step;
+}
+
+/* Orthogonalize a rows x cols update with Muon's quintic Newton-Schulz map. */
+static void muon_step(float *weight, float *velocity, const float *gradient,
+                      unsigned rows, unsigned cols, float rate, float momentum) {
+    size_t count = (size_t)rows * cols;
+    float norm2 = 1.0e-14f;
+    for (size_t i = 0; i < count; ++i) {
+        velocity[i] = momentum * velocity[i] + (1.0f - momentum) * gradient[i];
+    }
+    float *x = malloc(count * sizeof(*x));
+    float *y = malloc(count * sizeof(*y));
+    float *a = malloc((size_t)rows * rows * sizeof(*a));
+    float *b = malloc((size_t)rows * rows * sizeof(*b));
+    float *a2 = malloc((size_t)rows * rows * sizeof(*a2));
+    if (x == NULL || y == NULL || a == NULL || b == NULL || a2 == NULL) {
+        free(a2); free(b); free(a); free(y); free(x); return;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        x[i] = (1.0f - momentum) * gradient[i] + momentum * velocity[i];
+        norm2 += x[i] * x[i];
+    }
+    float inverse_norm = 1.0f / sqrtf(norm2);
+    for (size_t i = 0; i < count; ++i) x[i] *= inverse_norm;
+    for (unsigned iteration = 0; iteration < 5; ++iteration) {
+        for (unsigned i = 0; i < rows; ++i)
+            for (unsigned j = 0; j < rows; ++j) {
+                float sum = 0.0f;
+                for (unsigned k = 0; k < cols; ++k) sum += x[(size_t)i * cols + k] * x[(size_t)j * cols + k];
+                a[(size_t)i * rows + j] = sum;
+            }
+        for (unsigned i = 0; i < rows; ++i)
+            for (unsigned j = 0; j < rows; ++j) {
+                float sum = 0.0f;
+                for (unsigned k = 0; k < rows; ++k) sum += a[(size_t)i * rows + k] * a[(size_t)k * rows + j];
+                a2[(size_t)i * rows + j] = sum;
+                b[(size_t)i * rows + j] = -4.7750f * a[(size_t)i * rows + j] + 2.0315f * sum;
+            }
+        for (unsigned i = 0; i < rows; ++i)
+            for (unsigned k = 0; k < cols; ++k) {
+                float sum = 3.4445f * x[(size_t)i * cols + k];
+                for (unsigned j = 0; j < rows; ++j) sum += b[(size_t)i * rows + j] * x[(size_t)j * cols + k];
+                y[(size_t)i * cols + k] = sum;
+            }
+        float *temporary = x; x = y; y = temporary;
+    }
+    for (size_t i = 0; i < count; ++i) weight[i] -= rate * x[i];
+    free(a2); free(b); free(a); free(y); free(x);
 }
 
 int main(int argc, char **argv) {
@@ -348,7 +412,7 @@ int main(int argc, char **argv) {
     if (provided < MPI_THREAD_FUNNELED) abort_mpi(rank, "MPI thread support is insufficient");
     Options options;
     if (!parse_options(argc, argv, &options))
-        abort_mpi(rank, "usage: --data PATH --output PATH [--epochs N --global-batch N --learning-rate F --momentum F --activation-clip N --head-dim 32 --seed N]");
+        abort_mpi(rank, "usage: --data PATH --output PATH [--epochs N --global-batch N --optimizer momentum|nesterov|muon --learning-rate F --muon-learning-rate F --momentum F --activation-clip N --head-dim 32 --seed N]");
 
     uint32_t local_count;
     FILE *input = open_ndf(options.data_path, &local_count);
@@ -625,6 +689,7 @@ int main(int argc, char **argv) {
             memcpy(final_bias_gradient, sync + cursor, 2U * sizeof(*sync));
             free(sync);
             ++step_number;
+            bool nesterov = options.optimizer == OPT_NESTEROV;
 #pragma omp parallel for schedule(dynamic, 8)
             for (size_t g = 0; g < group_count; ++g) {
                 uint32_t id = occurrences[group_starts[g]].id;
@@ -634,7 +699,7 @@ int main(int argc, char **argv) {
                 lazy_momentum(weights + (size_t)id * HIDDEN,
                               velocity + (size_t)id * HIDDEN, &last_step[id],
                               gradient, step_number, options.learning_rate,
-                              options.momentum, HIDDEN);
+                              options.momentum, HIDDEN, nesterov);
                 memset(gradient, 0, HIDDEN * sizeof(*gradient));
             }
 #pragma omp parallel for schedule(static)
@@ -644,27 +709,48 @@ int main(int argc, char **argv) {
                 for (unsigned unit = 0; unit < HIDDEN; ++unit) gradient[unit] *= inverse;
                 lazy_momentum(weights + (size_t)id * HIDDEN,
                               velocity + (size_t)id * HIDDEN, &last_step[id], gradient,
-                              step_number, options.learning_rate, options.momentum, HIDDEN);
+                              step_number, options.learning_rate, options.momentum,
+                              HIDDEN, nesterov);
                 memset(gradient, 0, HIDDEN * sizeof(*gradient));
             }
+            if (options.optimizer == OPT_MUON) {
+                for (unsigned side = 0; side < 2; ++side) {
+                    float *gradient = head_gradient + (size_t)side * HEAD * HIDDEN;
+                    for (size_t index = 0; index < (size_t)HEAD * HIDDEN; ++index)
+                        gradient[index] *= inverse;
+                    muon_step(head + (size_t)side * HEAD * HIDDEN,
+                              head_velocity + (size_t)side * HEAD * HIDDEN,
+                              gradient, HEAD, HIDDEN,
+                              options.muon_learning_rate, options.momentum);
+                }
+            } else {
 #pragma omp parallel for schedule(static)
-            for (size_t index = 0; index < head_values; ++index) {
-                head_velocity[index] = options.momentum * head_velocity[index] +
-                                       head_gradient[index] * inverse;
-                head[index] -= options.learning_rate * head_velocity[index];
+                for (size_t index = 0; index < head_values; ++index) {
+                    float gradient = head_gradient[index] * inverse;
+                    head_velocity[index] = options.momentum * head_velocity[index] + gradient;
+                    float update = nesterov ? gradient + options.momentum * head_velocity[index]
+                                            : head_velocity[index];
+                    head[index] -= options.learning_rate * update;
+                }
             }
             for (unsigned index = 0; index < 64U; ++index) {
                 head_bias_velocity[index] = options.momentum * head_bias_velocity[index] +
                                             head_bias_gradient[index] * inverse;
-                head_bias[index] -= options.learning_rate * head_bias_velocity[index];
+                head_bias[index] -= options.learning_rate *
+                    (nesterov ? head_bias_gradient[index] * inverse +
+                     options.momentum * head_bias_velocity[index] : head_bias_velocity[index]);
                 final_velocity[index] = options.momentum * final_velocity[index] +
                                         final_gradient[index] * inverse;
-                final[index] -= options.learning_rate * final_velocity[index];
+                final[index] -= options.learning_rate *
+                    (nesterov ? final_gradient[index] * inverse +
+                     options.momentum * final_velocity[index] : final_velocity[index]);
             }
             for (unsigned index = 0; index < 2U; ++index) {
                 final_bias_velocity[index] = options.momentum * final_bias_velocity[index] +
                                              final_bias_gradient[index] * inverse;
-                final_bias[index] -= options.learning_rate * final_bias_velocity[index];
+                final_bias[index] -= options.learning_rate *
+                    (nesterov ? final_bias_gradient[index] * inverse +
+                     options.momentum * final_bias_velocity[index] : final_bias_velocity[index]);
             }
             double global_loss;
             MPI_Allreduce(&local_loss, &global_loss, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -692,7 +778,7 @@ int main(int argc, char **argv) {
             flush_momentum(weights + (size_t)id * HIDDEN,
                            velocity + (size_t)id * HIDDEN, &last_step[id],
                            step_number, options.learning_rate, options.momentum,
-                           HIDDEN);
+                           HIDDEN, options.optimizer == OPT_NESTEROV);
     }
     float *gathered = rank == 0 ? malloc(feature_values * sizeof(*gathered)) : NULL;
     if (rank == 0 && gathered == NULL) abort_mpi(rank, "cannot gather model");
