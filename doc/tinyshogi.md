@@ -339,6 +339,32 @@ tiny, duplicated between ranks, and has no held-out split, so this result only
 establishes implementation stability; it does not establish generalization or
 playing-strength superiority.
 
+### Real non-duplicated comparison
+
+A live 12-node run generated 10,904 records from 96 distinct games using
+disjoint rank game ranges. After removing 911 repeated opening positions, the
+corpus contained 9,993 unique records. A deterministic 80/20 split produced
+7,994 training records across 12 rank shards and 1,999 held-out records. Each
+optimizer saw the same training shards, seed, global batch (2,304), and 1,000
+epochs:
+
+| Optimizer | Wall time | Final train MSE | Held-out MSE* | Final throughput |
+|---|---:|---:|---:|---:|
+| Momentum SGD | 46.55 s | 0.00990645 | 9,905.355 | 98.7k samples/s |
+| Nesterov SGD | 46.92 s | 0.00990646 | 9,905.355 | 187.2k samples/s |
+| Muon hybrid | 55.63 s | 0.00061604 | 10,935.603 | 159.4k samples/s |
+
+\* `eval_nnue` reports the model's fixed-point output against the original
+NDF1 value units. The absolute scale is less important here than the matched
+comparison.
+
+Muon fit the training records much more aggressively but had approximately 10%
+higher held-out error than SGD. On this real, non-duplicated split, Muon is not
+yet a quality improvement; it is a faster optimizer for fitting the training
+set and needs regularization, lower matrix learning rate, or early stopping.
+The next meaningful sweep is Muon matrix LR and checkpointed early stopping
+against held-out loss, followed by playing-strength matches.
+
 ## 10. Performance methodology
 
 Use three distinct gates:
