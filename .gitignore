@@ -56,6 +56,7 @@ dkms.conf
 
 # Build directories
 build/
+build-fcc-*/
 web/node_modules/
 web/dist/
 .xmake/
@@ -67,6 +68,7 @@ cpu/train_int
 cpu/eval_int
 cpu/train_nnue
 cpu/eval_nnue
+cpu/compare_nnue
 cpu/brute_server
 __pycache__/
 *.py[cod]

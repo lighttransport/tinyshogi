@@ -47,6 +47,54 @@ bool shogi_evaluator_set(ShogiEvaluator *evaluator, void *userdata,
     return true;
 }
 
+bool shogi_evaluator_set_state_callbacks(ShogiEvaluator *evaluator,
+                                         TinyShogiEvalStateCreate create,
+                                         TinyShogiEvalStateDestroy destroy,
+                                         TinyShogiEvalStateMove make,
+                                         TinyShogiEvalStateMove unmake,
+                                         TinyShogiEvalStateScore score) {
+    if (!shogi_evaluator_active(evaluator) || create == NULL || destroy == NULL ||
+        make == NULL || unmake == NULL || score == NULL) {
+        set_error("stateful evaluator callbacks are incomplete");
+        return false;
+    }
+    evaluator->state_create = create;
+    evaluator->state_destroy = destroy;
+    evaluator->state_make = make;
+    evaluator->state_unmake = unmake;
+    evaluator->state_score = score;
+    evaluator->state_score_batch = NULL;
+    evaluator->state_rewind = NULL;
+    evaluator->state_score_batch_size = 0;
+    evaluator_error[0] = '\0';
+    return true;
+}
+
+bool shogi_evaluator_set_state_batch_callback(ShogiEvaluator *evaluator,
+                                              TinyShogiEvalStateScoreBatch batch,
+                                              unsigned preferred_batch_size) {
+    if (!shogi_evaluator_active(evaluator) || batch == NULL || preferred_batch_size == 0) {
+        set_error("state batch evaluator callback is incomplete");
+        return false;
+    }
+    evaluator->state_score_batch = batch;
+    evaluator->state_score_batch_size = preferred_batch_size;
+    evaluator_error[0] = '\0';
+    return true;
+}
+
+bool shogi_evaluator_set_state_rewind_callback(ShogiEvaluator *evaluator,
+                                               TinyShogiEvalStateRewind rewind) {
+    if (!shogi_evaluator_active(evaluator) || rewind == NULL ||
+        evaluator->state_create == NULL) {
+        set_error("state rewind evaluator callback is incomplete");
+        return false;
+    }
+    evaluator->state_rewind = rewind;
+    evaluator_error[0] = '\0';
+    return true;
+}
+
 bool shogi_evaluator_load(ShogiEvaluator *evaluator, const char *path,
                           const char *config) {
     if (evaluator == NULL || path == NULL || path[0] == '\0') {
@@ -104,6 +152,56 @@ int shogi_evaluator_score(const ShogiEvaluator *evaluator,
                           ShogiColor perspective) {
     if (!shogi_evaluator_active(evaluator) || position == NULL) return 0;
     return evaluator->evaluate(evaluator->userdata, position, perspective);
+}
+
+void *shogi_evaluator_state_create(const ShogiEvaluator *evaluator,
+                                   const ShogiPosition *position,
+                                   ShogiColor perspective) {
+    if (!shogi_evaluator_active(evaluator) || evaluator->state_create == NULL ||
+        position == NULL) return NULL;
+    return evaluator->state_create(evaluator->userdata, position, perspective);
+}
+
+void shogi_evaluator_state_destroy(const ShogiEvaluator *evaluator, void *state) {
+    if (evaluator != NULL && evaluator->state_destroy != NULL && state != NULL)
+        evaluator->state_destroy(state);
+}
+
+bool shogi_evaluator_state_make(const ShogiEvaluator *evaluator, void *state,
+                                const ShogiPosition *after, const ShogiUndo *undo) {
+    return evaluator != NULL && evaluator->state_make != NULL && state != NULL &&
+           evaluator->state_make(state, after, undo);
+}
+
+bool shogi_evaluator_state_unmake(const ShogiEvaluator *evaluator, void *state,
+                                  const ShogiPosition *before, const ShogiUndo *undo) {
+    return evaluator != NULL && evaluator->state_unmake != NULL && state != NULL &&
+           evaluator->state_unmake(state, before, undo);
+}
+
+bool shogi_evaluator_state_rewind(const ShogiEvaluator *evaluator, void *state,
+                                  const ShogiPosition *root) {
+    return evaluator != NULL && evaluator->state_rewind != NULL && state != NULL &&
+           root != NULL && evaluator->state_rewind(state, root);
+}
+
+int shogi_evaluator_state_score(const ShogiEvaluator *evaluator, const void *state) {
+    if (evaluator == NULL || evaluator->state_score == NULL || state == NULL) return 0;
+    return evaluator->state_score(state);
+}
+
+bool shogi_evaluator_state_score_batch(const ShogiEvaluator *evaluator,
+                                       const void *const *states, size_t count,
+                                       int *scores) {
+    if (evaluator == NULL || states == NULL || scores == NULL || count == 0 ||
+        evaluator->state_score == NULL) return false;
+    if (evaluator->state_score_batch != NULL &&
+        evaluator->state_score_batch(states, count, scores)) return true;
+    for (size_t index = 0; index < count; ++index) {
+        if (states[index] == NULL) return false;
+        scores[index] = evaluator->state_score(states[index]);
+    }
+    return true;
 }
 
 const char *shogi_evaluator_error(void) {

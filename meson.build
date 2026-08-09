@@ -41,6 +41,12 @@ integer_test = executable('tinyshogi-integer-test', 'tests/test_int.c',
   sources : ['src/int_math.c', 'src/int_model.c', 'src/simd.c'], dependencies : [math_dep], install : false)
 test('integer', integer_test)
 
+integer_batch_test = executable('tinyshogi-integer-batch-test',
+  'tests/test_int_batch.c',
+  sources : ['src/int_math.c', 'src/int_model.c', 'src/simd.c'],
+  dependencies : [math_dep], install : false)
+test('integer-batch', integer_batch_test)
+
 simd_test = executable('tinyshogi-simd-test', 'tests/test_simd.c',
   sources : ['src/simd.c'], install : false)
 test('simd', simd_test)
@@ -48,3 +54,15 @@ test('simd', simd_test)
 simd_bench = executable('tinyshogi-simd-bench', 'bench/simd_bench.c',
   sources : ['src/simd.c'], install : false)
 benchmark('simd', simd_bench)
+
+nnue_state_bench = executable('tinyshogi-nnue-state-bench',
+  'bench/nnue_state_bench.c',
+  sources : ['src/nnue.c', 'src/simd.c', 'src/shogi.c'],
+  dependencies : [math_dep], install : false)
+benchmark('nnue-state', nnue_state_bench)
+
+nnue_batch_bench = executable('tinyshogi-nnue-batch-bench',
+  'bench/nnue_batch_bench.c',
+  sources : ['src/nnue.c', 'src/simd.c', 'src/shogi.c'],
+  dependencies : [math_dep], install : false)
+benchmark('nnue-batch', nnue_batch_bench)

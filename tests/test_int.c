@@ -1,5 +1,6 @@
 #include "../src/int_math.h"
 #include "../src/int_model.h"
+#include "../src/simd.h"
 
 #include <stdio.h>
 #include <limits.h>
@@ -10,6 +11,19 @@ static int fail(const char *message) {
 }
 
 int main(void) {
+    int8_t tile_left[256], tile_weights[8 * 256];
+    int32_t tile_out[8], tile_ref[8] = {0};
+    for (int i = 0; i < 256; ++i) {
+        tile_left[i] = (int8_t)(i % 17 - 8);
+        for (int lane = 0; lane < 8; ++lane)
+            tile_weights[lane * 256 + i] = (int8_t)((i + lane * 3) % 13 - 6);
+    }
+    tinyshogi_dot_i8_i8_8(tile_left, tile_weights, 256, 256, tile_out);
+    for (int lane = 0; lane < 8; ++lane) {
+        for (int i = 0; i < 256; ++i)
+            tile_ref[lane] += (int32_t)tile_left[i] * tile_weights[lane * 256 + i];
+        if (tile_out[lane] != tile_ref[lane]) return fail("int8 SDOT tile");
+    }
     int32_t extreme_logits[3] = {INT32_MAX, INT32_MIN, 0};
     int32_t extreme_probabilities[3];
     int_softmax_q16(extreme_logits, extreme_probabilities, 3);

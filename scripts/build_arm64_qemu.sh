@@ -34,7 +34,13 @@ if [[ "$ARCH" == "sve" ]]; then
             "$ROOT/src/a64fx_nnue_add_rows_4row.S" \
             "$ROOT/src/a64fx_nnue_add_rows.S" \
             "$ROOT/src/a64fx_nnue_add_rows_2way.S" "$ROOT/src/a64fx_nnue_add_rows_4way.S" \
-            "$ROOT/src/a64fx_nnue_add_one.S")
+            "$ROOT/src/a64fx_nnue_add_one.S" "$ROOT/src/a64fx_nnue_sdot.S" \
+            "$ROOT/src/a64fx_sdot_gemm.S" "$ROOT/src/a64fx_sdot_6x4.S" \
+            "$ROOT/src/a64fx_sdot_64x6.S" \
+            "$ROOT/src/a64fx_sdot_6x4_i16.S" \
+            "$ROOT/src/a64fx_sdot_i16_dot.S" "$ROOT/src/a64fx_sdot_i16_4.S" \
+            "$ROOT/src/a64fx_sdot_i16_batch8.S" \
+            "$ROOT/src/a64fx_sdot_i16_8.S" "$ROOT/src/a64fx_sdot_i8_8.S")
 fi
 
 "${CC_CMD[@]}" $CFLAGS "$ROOT/tests/test_simd.c" "$ROOT/src/simd.c" "${NNUE_ASM[@]}" -o "$OUT/test-simd"
@@ -50,6 +56,9 @@ if [[ "$ARCH" == "sve" ]]; then
   "${CC_CMD[@]}" $CFLAGS "${NO_VECTOR_FLAGS[@]}" \
     "$ROOT/bench/a64fx_nnue_dot_check.c" "$ROOT/src/simd.c" \
     "${NNUE_ASM[@]}" -o "$OUT/a64fx-nnue-dot-check"
+  "${CC_CMD[@]}" $CFLAGS "${NO_VECTOR_FLAGS[@]}" \
+    "$ROOT/bench/nnue_batch_bench.c" "${COMMON[@]}" \
+    "${NNUE_ASM[@]}" -lm -o "$OUT/a64fx-nnue-batch"
   "${CC_CMD[@]}" $CFLAGS "${NO_VECTOR_FLAGS[@]}" \
     "$ROOT/bench/a64fx_nnue_add_rows_4way_bench.c" \
     "$ROOT/src/a64fx_nnue_add_rows_4way.S" \

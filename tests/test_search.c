@@ -27,6 +27,9 @@ int main(void) {
     ShogiPosition position;
     shogi_position_start(&position);
     SearchOptions options = test_options();
+    SearchContext *context = search_context_create();
+    if (context == NULL) return fail("persistent context creation");
+    options.context = context;
     SearchLimits limits;
     memset(&limits, 0, sizeof(limits));
     limits.nodes = 16;
@@ -140,5 +143,6 @@ int main(void) {
         return fail("ponder search result");
     }
     search_destroy(job);
+    search_context_destroy(context);
     return 0;
 }

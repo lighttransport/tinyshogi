@@ -3,6 +3,7 @@
 #include "search.h"
 #include "shogi.h"
 #include "nnue.h"
+#include "thread.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -20,16 +21,255 @@ typedef struct {
     ShogiPosition position;
     SearchOptions options;
     ShogiEvaluator evaluator;
-    ShogiNnueModel nnue;
+    ShogiEvaluator nnue_evaluators[4];
+    ShogiNnueModel nnue_replicas[4];
+    unsigned nnue_replica_count;
+    SearchContext *search_context;
     SearchJob *job;
     uint64_t last_info_ns;
     bool quit;
 } Application;
 
+typedef struct {
+    ShogiNnueState nnue;
+    ShogiNnueDelta *deltas;
+    int32_t *rebuild_sums;
+    int32_t *root_sum;
+    uint64_t king_cache_hash[32];
+    uint8_t king_cache_valid[32];
+    int32_t *king_cache_sums;
+    size_t depth;
+    size_t capacity;
+} NnueEvaluatorState;
+
 static int nnue_evaluator_callback(void *userdata, const ShogiPosition *position,
                                    ShogiColor perspective) {
     return shogi_nnue_evaluate_position((const ShogiNnueModel *)userdata,
                                          position, perspective);
+}
+
+static void *nnue_state_create_callback(void *userdata,
+                                        const ShogiPosition *position,
+                                        ShogiColor perspective) {
+    NnueEvaluatorState *state = calloc(1, sizeof(*state));
+    if (state == NULL) return NULL;
+    const ShogiNnueModel *model = userdata;
+    state->capacity = 256;
+    state->deltas = malloc(state->capacity * sizeof(*state->deltas));
+    state->rebuild_sums = malloc(state->capacity * model->hidden_dim *
+                                 sizeof(*state->rebuild_sums));
+    state->root_sum = malloc(model->hidden_dim * sizeof(*state->root_sum));
+    state->king_cache_sums = malloc(32U * model->hidden_dim *
+                                    sizeof(*state->king_cache_sums));
+    if (state->deltas == NULL || state->rebuild_sums == NULL || state->root_sum == NULL ||
+        state->king_cache_sums == NULL ||
+        !shogi_nnue_state_init(&state->nnue, userdata, perspective) ||
+        !shogi_nnue_state_reset(&state->nnue, position)) {
+        shogi_nnue_state_destroy(&state->nnue);
+        free(state->deltas);
+        free(state->rebuild_sums);
+        free(state->root_sum);
+        free(state->king_cache_sums);
+        free(state);
+        return NULL;
+    }
+    memcpy(state->root_sum, state->nnue.sum,
+           model->hidden_dim * sizeof(*state->root_sum));
+    return state;
+}
+
+static void nnue_state_destroy_callback(void *opaque) {
+    NnueEvaluatorState *state = opaque;
+    if (state == NULL) return;
+    shogi_nnue_state_destroy(&state->nnue);
+    free(state->deltas);
+    free(state->rebuild_sums);
+    free(state->root_sum);
+    free(state->king_cache_sums);
+    free(state);
+}
+
+static bool nnue_state_make_callback(void *opaque, const ShogiPosition *after,
+                                     const ShogiUndo *undo) {
+    NnueEvaluatorState *state = opaque;
+    if (state->depth == state->capacity) {
+        size_t capacity = state->capacity * 2U;
+        ShogiNnueDelta *deltas = realloc(state->deltas,
+                                         capacity * sizeof(*deltas));
+        int32_t *rebuild_sums = realloc(
+            state->rebuild_sums, capacity * state->nnue.hidden_dim * sizeof(*rebuild_sums));
+        if (deltas == NULL || rebuild_sums == NULL) {
+            if (deltas != NULL) state->deltas = deltas;
+            if (rebuild_sums != NULL) state->rebuild_sums = rebuild_sums;
+            return false;
+        }
+        state->deltas = deltas;
+        state->rebuild_sums = rebuild_sums;
+        state->capacity = capacity;
+    }
+    bool rebuild = undo->moving_piece != SHOGI_EMPTY &&
+        (undo->moving_piece & 0x0fU) == SHOGI_KING &&
+        (ShogiColor)undo->color == state->nnue.perspective;
+    if (rebuild) {
+        memcpy(state->rebuild_sums + state->depth * state->nnue.hidden_dim,
+               state->nnue.sum, state->nnue.hidden_dim * sizeof(*state->nnue.sum));
+        size_t slot = (size_t)after->hash & 31U;
+        if (state->king_cache_valid[slot] &&
+            state->king_cache_hash[slot] == after->hash) {
+            memset(&state->deltas[state->depth], 0,
+                   sizeof(state->deltas[state->depth]));
+            state->deltas[state->depth].rebuild = 1;
+            memcpy(state->nnue.sum,
+                   state->king_cache_sums + slot * state->nnue.hidden_dim,
+                   state->nnue.hidden_dim * sizeof(*state->nnue.sum));
+            ++state->depth;
+            return true;
+        }
+    }
+    if (!shogi_nnue_state_apply_move(&state->nnue, after, undo,
+                                     &state->deltas[state->depth])) return false;
+    if (rebuild) {
+        size_t slot = (size_t)after->hash & 31U;
+        memcpy(state->king_cache_sums + slot * state->nnue.hidden_dim,
+               state->nnue.sum, state->nnue.hidden_dim * sizeof(*state->nnue.sum));
+        state->king_cache_hash[slot] = after->hash;
+        state->king_cache_valid[slot] = 1;
+    }
+    ++state->depth;
+    return true;
+}
+
+static bool nnue_state_unmake_callback(void *opaque, const ShogiPosition *before,
+                                       const ShogiUndo *undo) {
+    NnueEvaluatorState *state = opaque;
+    (void)undo;
+    if (state->depth == 0) return false;
+    --state->depth;
+    if (state->deltas[state->depth].rebuild) {
+        memcpy(state->nnue.sum,
+               state->rebuild_sums + state->depth * state->nnue.hidden_dim,
+               state->nnue.hidden_dim * sizeof(*state->nnue.sum));
+        state->nnue.valid = true;
+        return true;
+    }
+    return shogi_nnue_state_unapply_move(&state->nnue, before,
+                                         &state->deltas[state->depth]);
+}
+
+static int nnue_state_score_callback(const void *opaque) {
+    const NnueEvaluatorState *state = opaque;
+    return shogi_nnue_state_evaluate(&state->nnue);
+}
+
+static bool nnue_state_rewind_callback(void *opaque,
+                                       const ShogiPosition *root) {
+    NnueEvaluatorState *state = opaque;
+    (void)root;
+    if (state == NULL || state->root_sum == NULL || state->nnue.sum == NULL)
+        return false;
+    memcpy(state->nnue.sum, state->root_sum,
+           state->nnue.hidden_dim * sizeof(*state->nnue.sum));
+    state->depth = 0;
+    state->nnue.valid = true;
+    return true;
+}
+
+static bool nnue_state_score_batch_callback(const void *const *opaque_states,
+                                            size_t count, int *scores) {
+    const ShogiNnueState *states[6];
+    if (opaque_states == NULL || scores == NULL || count == 0 || count > 12U)
+        return false;
+    for (size_t base = 0; base < count; base += 6U) {
+        size_t tile = count - base;
+        if (tile > 6U) tile = 6U;
+        for (size_t index = 0; index < tile; ++index) {
+            const NnueEvaluatorState *state = opaque_states[base + index];
+            if (state == NULL) return false;
+            states[index] = &state->nnue;
+        }
+        if (!shogi_nnue_state_evaluate_batch(states, tile, scores + base))
+            return false;
+    }
+    return true;
+}
+
+static bool set_nnue_evaluator(ShogiEvaluator *evaluator,
+                               ShogiNnueModel *model) {
+    return shogi_evaluator_set(evaluator, model, nnue_evaluator_callback,
+                               NULL, "tinyshogi-nnue") &&
+           shogi_evaluator_set_state_callbacks(
+               evaluator, nnue_state_create_callback, nnue_state_destroy_callback,
+               nnue_state_make_callback, nnue_state_unmake_callback,
+               nnue_state_score_callback) &&
+           shogi_evaluator_set_state_batch_callback(
+               evaluator, nnue_state_score_batch_callback, 6U) &&
+           shogi_evaluator_set_state_rewind_callback(
+               evaluator, nnue_state_rewind_callback);
+}
+
+typedef struct {
+    ShogiNnueModel *model;
+    const char *path;
+    unsigned pin_index;
+    bool loaded;
+} NnueLoadTask;
+
+static void *load_nnue_replica(void *opaque) {
+    NnueLoadTask *task = opaque;
+    (void)ts_thread_pin_allowed(task->pin_index);
+    task->loaded = shogi_nnue_model_load(task->model, task->path);
+    return NULL;
+}
+
+static void destroy_nnue_replicas(Application *application) {
+    for (unsigned index = 0; index < 4U; ++index) {
+        shogi_evaluator_destroy(&application->nnue_evaluators[index]);
+        shogi_nnue_model_destroy(&application->nnue_replicas[index]);
+    }
+    application->nnue_replica_count = 0;
+    application->options.evaluator_replicas = NULL;
+    application->options.evaluator_replica_count = 0;
+}
+
+static bool load_nnue_replicas(Application *application, const char *path) {
+    unsigned count = 1U;
+#if defined(TINYSHOGI_A64FX_NUMA)
+    if (application->options.a64fx_uct && application->options.threads >= 32U &&
+        ts_thread_allowed_count() >= 32U) count = 4U;
+#endif
+    ShogiNnueModel models[4];
+    NnueLoadTask tasks[4];
+    TsThread threads[4] = {0};
+    for (unsigned index = 0; index < count; ++index) {
+        shogi_nnue_model_init(&models[index]);
+        tasks[index] = (NnueLoadTask){&models[index], path, index, false};
+        if (ts_thread_create(&threads[index], load_nnue_replica, &tasks[index]) != 0) {
+            for (unsigned joined = 0; joined < index; ++joined) (void)ts_thread_join(&threads[joined]);
+            for (unsigned clean = 0; clean <= index; ++clean) shogi_nnue_model_destroy(&models[clean]);
+            return false;
+        }
+    }
+    bool loaded = true;
+    for (unsigned index = 0; index < count; ++index) {
+        (void)ts_thread_join(&threads[index]);
+        if (!tasks[index].loaded) loaded = false;
+    }
+    if (!loaded) {
+        for (unsigned index = 0; index < count; ++index) shogi_nnue_model_destroy(&models[index]);
+        return false;
+    }
+    destroy_nnue_replicas(application);
+    shogi_evaluator_destroy(&application->evaluator);
+    for (unsigned index = 0; index < count; ++index) {
+        application->nnue_replicas[index] = models[index];
+        if (!set_nnue_evaluator(&application->nnue_evaluators[index],
+                                &application->nnue_replicas[index])) return false;
+    }
+    application->nnue_replica_count = count;
+    application->options.evaluator = &application->nnue_evaluators[0];
+    application->options.evaluator_replicas = application->nnue_evaluators;
+    application->options.evaluator_replica_count = count;
+    return true;
 }
 
 static uint64_t monotonic_ns_main(void) {
@@ -39,10 +279,9 @@ static uint64_t monotonic_ns_main(void) {
 }
 
 static unsigned detected_threads(void) {
-    long count = sysconf(_SC_NPROCESSORS_ONLN);
-    if (count < 1) count = 1;
+    unsigned count = ts_thread_allowed_count();
     if (count > 8) count = 8;
-    return (unsigned)count;
+    return count;
 }
 
 static void print_bestmove(const SearchResult *result) {
@@ -247,6 +486,9 @@ static void print_usi(void) {
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
     puts("option name SearchMode type combo default mcts var mcts var alphabeta");
+    puts("option name MCTSMode type combo default auto var auto var neural var rollout");
+    puts("option name LeafBatch type spin default 5 min 1 max 12");
+    puts("option name A64FXMode type combo default auto var auto var off");
     puts("option name EvalPlugin type string default none");
     puts("option name EvalModel type string default none");
     puts("usiok");
@@ -288,14 +530,35 @@ static void set_option(Application *application, char *line) {
             application->options.mode = SEARCH_MODE_ALPHABETA;
         else if (strcmp(tokens[value_index], "mcts") == 0)
             application->options.mode = SEARCH_MODE_MCTS;
+    } else if (strcmp(tokens[2], "MCTSMode") == 0) {
+        if (strcmp(tokens[value_index], "auto") == 0)
+            application->options.mcts_policy = SEARCH_MCTS_AUTO;
+        else if (strcmp(tokens[value_index], "neural") == 0)
+            application->options.mcts_policy = SEARCH_MCTS_NEURAL;
+        else if (strcmp(tokens[value_index], "rollout") == 0)
+            application->options.mcts_policy = SEARCH_MCTS_ROLLOUT;
+    } else if (strcmp(tokens[2], "LeafBatch") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        if (value >= 1 && value <= 12) application->options.leaf_batch_size = (unsigned)value;
+    } else if (strcmp(tokens[2], "A64FXMode") == 0) {
+        bool enabled = strcmp(tokens[value_index], "auto") == 0;
+        if (enabled || strcmp(tokens[value_index], "off") == 0) {
+            application->options.a64fx_uct = enabled;
+            if (application->nnue_replica_count != 0) {
+                application->options.evaluator_replicas = application->nnue_evaluators;
+                application->options.evaluator_replica_count = enabled ?
+                    application->nnue_replica_count : 1U;
+            }
+        }
     } else if (strcmp(tokens[2], "EvalPlugin") == 0) {
         if (strcmp(tokens[value_index], "none") == 0) {
+            destroy_nnue_replicas(application);
             shogi_evaluator_destroy(&application->evaluator);
             application->options.evaluator = &application->evaluator;
         } else {
             ShogiEvaluator next;
             shogi_evaluator_init(&next);
             if (shogi_evaluator_load(&next, tokens[value_index], NULL)) {
+                destroy_nnue_replicas(application);
                 shogi_evaluator_destroy(&application->evaluator);
                 application->evaluator = next;
                 application->options.evaluator = &application->evaluator;
@@ -308,22 +571,14 @@ static void set_option(Application *application, char *line) {
         fflush(stdout);
     } else if (strcmp(tokens[2], "EvalModel") == 0) {
         if (strcmp(tokens[value_index], "none") == 0) {
+            destroy_nnue_replicas(application);
             shogi_evaluator_destroy(&application->evaluator);
             application->options.evaluator = &application->evaluator;
         } else {
-            ShogiNnueModel next;
-            shogi_nnue_model_init(&next);
-            if (shogi_nnue_model_load(&next, tokens[value_index])) {
-                ShogiNnueModel old = application->nnue;
-                application->nnue = next;
-                shogi_nnue_model_destroy(&old);
-                shogi_evaluator_destroy(&application->evaluator);
-                shogi_evaluator_set(&application->evaluator, &application->nnue,
-                                    nnue_evaluator_callback, NULL, "tinyshogi-nnue");
-                application->options.evaluator = &application->evaluator;
-                printf("info string NNUE model loaded %s\n", tokens[value_index]);
+            if (load_nnue_replicas(application, tokens[value_index])) {
+                printf("info string NNUE model loaded %s replicas %u\n",
+                       tokens[value_index], application->nnue_replica_count);
             } else {
-                shogi_nnue_model_destroy(&next);
                 puts("info string NNUE model load failed");
             }
         }
@@ -407,7 +662,7 @@ static int selfplay_result_value(ShogiResult result, ShogiColor side) {
 
 static bool run_selfplay(int argc, char **argv) {
     unsigned games = 1, simulations = 256, max_plies = 512;
-    unsigned threads = 1, temperature_milli = 1000, cutoff = 30;
+    unsigned threads = 1, temperature_milli = 1000, cutoff = 30, leaf_batch = 5;
     uint64_t seed = 1;
     const char *output_path = "selfplay.jsonl";
     const char *eval_model_path = NULL;
@@ -431,18 +686,19 @@ static bool run_selfplay(int argc, char **argv) {
         else if (strcmp(key, "--temperature") == 0) temperature_milli = (unsigned)value;
         else if (strcmp(key, "--temperature-cutoff") == 0) cutoff = (unsigned)value;
         else if (strcmp(key, "--max-plies") == 0) max_plies = (unsigned)value;
+        else if (strcmp(key, "--leaf-batch") == 0) leaf_batch = (unsigned)value;
         else return false;
         ++index;
     }
-    if (games == 0 || simulations == 0 || max_plies == 0 || threads == 0) return false;
+    if (games == 0 || simulations == 0 || max_plies == 0 || threads == 0 ||
+        leaf_batch == 0 || leaf_batch > 12U) return false;
     ShogiNnueModel eval_model;
     ShogiEvaluator evaluator;
     shogi_nnue_model_init(&eval_model);
     shogi_evaluator_init(&evaluator);
     if (eval_model_path != NULL) {
         if (!shogi_nnue_model_load(&eval_model, eval_model_path) ||
-            !shogi_evaluator_set(&evaluator, &eval_model, nnue_evaluator_callback,
-                                 NULL, "tinyshogi-nnue")) {
+            !set_nnue_evaluator(&evaluator, &eval_model)) {
             shogi_nnue_model_destroy(&eval_model);
             shogi_evaluator_destroy(&evaluator);
             return false;
@@ -466,9 +722,23 @@ static bool run_selfplay(int argc, char **argv) {
             if (!shogi_position_to_sfen(&position, samples[sample_count].sfen,
                                         sizeof(samples[sample_count].sfen))) goto selfplay_fail;
             samples[sample_count].side = position.side;
-            SearchOptions options = {SEARCH_MODE_MCTS, threads, seed + ply + (uint64_t)game * 1000003U, false,
-                                     200000, 64, SEARCH_DEFAULT_QUIESCENCE_DEPTH,
-                                     SEARCH_DEFAULT_EXPLORATION_MILLI, 1, &evaluator};
+            SearchOptions options = {
+                .mode = SEARCH_MODE_MCTS,
+                .threads = threads,
+                .seed = seed + ply + (uint64_t)game * 1000003U,
+                .seed_auto = false,
+                .max_tree_nodes = 200000,
+                .rollout_depth = 64,
+                .quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH,
+                .exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI,
+                .multi_pv = 1,
+                .evaluator = &evaluator,
+                .mcts_policy = SEARCH_MCTS_AUTO,
+                .leaf_batch_size = leaf_batch,
+#if defined(TINYSHOGI_A64FX_NUMA)
+                .a64fx_uct = true,
+#endif
+            };
             SearchLimits limits = {0};
             limits.nodes = simulations;
             SearchJob *job = search_start(&position, &limits, &options);
@@ -579,7 +849,10 @@ int main(int argc, char **argv) {
     Application application;
     memset(&application, 0, sizeof(application));
     shogi_evaluator_init(&application.evaluator);
-    shogi_nnue_model_init(&application.nnue);
+    for (unsigned index = 0; index < 4U; ++index) {
+        shogi_evaluator_init(&application.nnue_evaluators[index]);
+        shogi_nnue_model_init(&application.nnue_replicas[index]);
+    }
     shogi_position_start(&application.position);
     application.options.threads = detected_threads();
     application.options.mode = SEARCH_MODE_MCTS;
@@ -590,6 +863,11 @@ int main(int argc, char **argv) {
     application.options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     application.options.multi_pv = SEARCH_DEFAULT_MULTIPV;
     application.options.evaluator = &application.evaluator;
+#if defined(TINYSHOGI_A64FX_NUMA)
+    application.options.a64fx_uct = true;
+#endif
+    application.search_context = search_context_create();
+    application.options.context = application.search_context;
 
     char line[4096];
     bool input_eof = false;
@@ -628,7 +906,8 @@ int main(int argc, char **argv) {
         }
     }
     finish_job(&application, false);
+    search_context_destroy(application.search_context);
+    destroy_nnue_replicas(&application);
     shogi_evaluator_destroy(&application.evaluator);
-    shogi_nnue_model_destroy(&application.nnue);
     return 0;
 }

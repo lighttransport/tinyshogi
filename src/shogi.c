@@ -13,7 +13,91 @@
 static uint64_t zobrist_board[SHOGI_SQUARES][32];
 static uint64_t zobrist_hand[2][7][19];
 static uint64_t zobrist_side;
+typedef struct {
+    uint8_t square;
+    uint16_t piece_mask;
+} StepAttackProbe;
+
+static StepAttackProbe step_attack_probes[2][SHOGI_SQUARES][10];
+static uint8_t step_attack_probe_count[2][SHOGI_SQUARES];
+static uint8_t attack_rays[SHOGI_SQUARES][8][8];
+static uint8_t attack_ray_length[SHOGI_SQUARES][8];
+static uint16_t attack_ray_masks[2][SHOGI_SQUARES][8];
 static bool zobrist_ready;
+
+static bool step_piece_attacks(ShogiPieceType type, int dr, int dc, int forward) {
+    if (type == SHOGI_PAWN && dr == forward && dc == 0) return true;
+    if (type == SHOGI_KNIGHT && dr == 2 * forward && (dc == -1 || dc == 1)) return true;
+    if (type == SHOGI_SILVER &&
+        ((dr == forward && dc >= -1 && dc <= 1) ||
+         (dr == -forward && (dc == -1 || dc == 1)))) return true;
+    if ((type == SHOGI_GOLD || type == SHOGI_PRO_PAWN ||
+         type == SHOGI_PRO_LANCE || type == SHOGI_PRO_KNIGHT ||
+         type == SHOGI_PRO_SILVER) &&
+        ((dr == forward && dc >= -1 && dc <= 1) ||
+         (dr == 0 && (dc == -1 || dc == 1)) ||
+         (dr == -forward && dc == 0))) return true;
+    if (type == SHOGI_KING && dr >= -1 && dr <= 1 &&
+        dc >= -1 && dc <= 1 && (dr != 0 || dc != 0)) return true;
+    if (type == SHOGI_HORSE && abs(dr) + abs(dc) == 1) return true;
+    if (type == SHOGI_DRAGON && abs(dr) == 1 && abs(dc) == 1) return true;
+    return false;
+}
+
+static void init_attack_tables(void) {
+    static const int ray_row[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
+    static const int ray_col[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    for (unsigned target = 0; target < SHOGI_SQUARES; ++target) {
+        int target_row = (int)target / SHOGI_BOARD_SIZE;
+        int target_col = (int)target % SHOGI_BOARD_SIZE;
+        for (unsigned attacker = 0; attacker < 2; ++attacker) {
+            int forward = attacker == SHOGI_BLACK ? -1 : 1;
+            uint8_t probe_count = 0;
+            for (int row = target_row - 2; row <= target_row + 2; ++row) {
+                if (row < 0 || row >= SHOGI_BOARD_SIZE) continue;
+                for (int col = target_col - 2; col <= target_col + 2; ++col) {
+                    if (col < 0 || col >= SHOGI_BOARD_SIZE ||
+                        (row == target_row && col == target_col)) continue;
+                    int dr = target_row - row;
+                    int dc = target_col - col;
+                    uint16_t mask = 0;
+                    for (ShogiPieceType type = SHOGI_PAWN;
+                         type <= SHOGI_DRAGON; ++type) {
+                        if (step_piece_attacks(type, dr, dc, forward))
+                            mask |= (uint16_t)1U << type;
+                    }
+                    if (mask != 0 && probe_count < 10U) {
+                        step_attack_probes[attacker][target][probe_count++] =
+                            (StepAttackProbe){(uint8_t)(row * SHOGI_BOARD_SIZE + col), mask};
+                    }
+                }
+            }
+            step_attack_probe_count[attacker][target] = probe_count;
+        }
+        for (unsigned ray = 0; ray < 8; ++ray) {
+            uint8_t length = 0;
+            int dr = ray_row[ray], dc = ray_col[ray];
+            for (int row = target_row + dr, col = target_col + dc;
+                 row >= 0 && row < SHOGI_BOARD_SIZE &&
+                 col >= 0 && col < SHOGI_BOARD_SIZE;
+                 row += dr, col += dc) {
+                attack_rays[target][ray][length++] =
+                    (uint8_t)(row * SHOGI_BOARD_SIZE + col);
+            }
+            attack_ray_length[target][ray] = length;
+            bool diagonal = dr != 0 && dc != 0;
+            uint16_t mask = diagonal ?
+                ((uint16_t)1U << SHOGI_BISHOP) | ((uint16_t)1U << SHOGI_HORSE) :
+                ((uint16_t)1U << SHOGI_ROOK) | ((uint16_t)1U << SHOGI_DRAGON);
+            for (unsigned attacker = 0; attacker < 2; ++attacker) {
+                int forward = attacker == SHOGI_BLACK ? -1 : 1;
+                if (!diagonal && dc == 0 && dr == -forward)
+                    mask |= (uint16_t)1U << SHOGI_LANCE;
+                attack_ray_masks[attacker][target][ray] = mask;
+            }
+        }
+    }
+}
 
 static uint64_t splitmix64(uint64_t *state) {
     uint64_t value = (*state += UINT64_C(0x9e3779b97f4a7c15));
@@ -27,6 +111,7 @@ void shogi_init(void) {
         return;
     }
 
+    init_attack_tables();
     uint64_t state = UINT64_C(0x7a6f676963686f6c);
     for (size_t square = 0; square < SHOGI_SQUARES; ++square) {
         for (size_t piece = 0; piece < 32; ++piece) {
@@ -115,17 +200,6 @@ static bool forced_promotion(ShogiColor color, ShogiPieceType type, int to_row) 
     }
     return ((type == SHOGI_PAWN || type == SHOGI_LANCE) && to_row == 8) ||
            (type == SHOGI_KNIGHT && to_row >= 7);
-}
-
-static bool valid_drop_rank(ShogiColor color, ShogiPieceType type, int row) {
-    if (color == SHOGI_BLACK) {
-        if ((type == SHOGI_PAWN || type == SHOGI_LANCE) && row == 0) return false;
-        if (type == SHOGI_KNIGHT && row <= 1) return false;
-    } else {
-        if ((type == SHOGI_PAWN || type == SHOGI_LANCE) && row == 8) return false;
-        if (type == SHOGI_KNIGHT && row >= 7) return false;
-    }
-    return true;
 }
 
 static int hand_index(ShogiPieceType type) {
@@ -428,53 +502,77 @@ bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out
 }
 
 static bool square_attacked(const ShogiPosition *position, uint8_t target, ShogiColor attacker) {
-    int target_row = row_of(target);
-    int target_col = col_of(target);
-    for (uint8_t square = 0; square < SHOGI_SQUARES; ++square) {
-        uint8_t piece = position->board[square];
-        if (piece == SHOGI_EMPTY || shogi_piece_color(piece) != attacker) continue;
-        ShogiPieceType type = shogi_piece_type(piece);
-        int row = row_of(square);
-        int col = col_of(square);
-        int forward = attacker == SHOGI_BLACK ? -1 : 1;
-        int dr = target_row - row;
-        int dc = target_col - col;
-
-        if (type == SHOGI_PAWN && dr == forward && dc == 0) return true;
-        if (type == SHOGI_KNIGHT && dr == 2 * forward && (dc == -1 || dc == 1)) return true;
-        if (type == SHOGI_SILVER &&
-            ((dr == forward && (dc >= -1 && dc <= 1)) || (dr == -forward && (dc == -1 || dc == 1)))) return true;
-        if ((type == SHOGI_GOLD || type == SHOGI_PRO_PAWN || type == SHOGI_PRO_LANCE ||
-             type == SHOGI_PRO_KNIGHT || type == SHOGI_PRO_SILVER) &&
-            ((dr == forward && (dc >= -1 && dc <= 1)) || (dr == 0 && (dc == -1 || dc == 1)) ||
-             (dr == -forward && dc == 0))) return true;
-        if (type == SHOGI_KING && dr >= -1 && dr <= 1 && dc >= -1 && dc <= 1 && (dr != 0 || dc != 0)) return true;
-
-        bool bishop_like = type == SHOGI_BISHOP || type == SHOGI_HORSE;
-        bool rook_like = type == SHOGI_ROOK || type == SHOGI_DRAGON;
-        if (bishop_like && abs(dr) == abs(dc) && dr != 0) {
-            int step_row = dr > 0 ? 1 : -1;
-            int step_col = dc > 0 ? 1 : -1;
-            bool clear = true;
-            for (int r = row + step_row, c = col + step_col; r != target_row; r += step_row, c += step_col) {
-                if (position->board[r * 9 + c] != SHOGI_EMPTY) clear = false;
+    uint8_t attacker_bit = (uint8_t)((unsigned)attacker << 4);
+    for (uint8_t index = 0; index < step_attack_probe_count[attacker][target]; ++index) {
+        StepAttackProbe probe = step_attack_probes[attacker][target][index];
+        uint8_t piece = position->board[probe.square];
+        if (piece != SHOGI_EMPTY && (piece & 0x10U) == attacker_bit &&
+            (probe.piece_mask & ((uint16_t)1U << (piece & 0x0fU))) != 0)
+            return true;
+    }
+    for (unsigned ray = 0; ray < 8; ++ray) {
+        for (uint8_t index = 0; index < attack_ray_length[target][ray]; ++index) {
+            uint8_t piece = position->board[attack_rays[target][ray][index]];
+            if (piece == SHOGI_EMPTY) continue;
+            if ((piece & 0x10U) == attacker_bit) {
+                if ((attack_ray_masks[attacker][target][ray] &
+                     ((uint16_t)1U << (piece & 0x0fU))) != 0)
+                    return true;
             }
-            if (clear) return true;
+            break;
         }
-        if (rook_like && ((dr == 0) != (dc == 0)) && (dr == 0 || dc == 0)) {
-            int step_row = dr == 0 ? 0 : (dr > 0 ? 1 : -1);
-            int step_col = dc == 0 ? 0 : (dc > 0 ? 1 : -1);
-            bool clear = true;
-            for (int r = row + step_row, c = col + step_col; r != target_row || c != target_col;
-                 r += step_row, c += step_col) {
-                if (position->board[r * 9 + c] != SHOGI_EMPTY) clear = false;
-            }
-            if (clear) return true;
-        }
-        if (type == SHOGI_HORSE && abs(dr) + abs(dc) == 1) return true;
-        if (type == SHOGI_DRAGON && abs(dr) == 1 && abs(dc) == 1) return true;
     }
     return false;
+}
+
+typedef struct {
+    uint8_t king;
+    bool valid;
+    bool in_check;
+    bool pinned[SHOGI_SQUARES];
+} KingSafety;
+
+static bool find_king(const ShogiPosition *position, ShogiColor color,
+                      uint8_t *square);
+
+static bool same_king_ray(uint8_t king, uint8_t from, uint8_t to) {
+    int kr = row_of(king), kc = col_of(king);
+    int fr = row_of(from), fc = col_of(from);
+    int tr = row_of(to), tc = col_of(to);
+    int dr = fr - kr, dc = fc - kc;
+    if (dr == 0) return tr == kr;
+    if (dc == 0) return tc == kc;
+    if (abs(dr) != abs(dc)) return false;
+    return abs(tr - kr) == abs(tc - kc);
+}
+
+static KingSafety king_safety_prepare(const ShogiPosition *position,
+                                      ShogiColor mover) {
+    KingSafety safety;
+    memset(&safety, 0, sizeof(safety));
+    if (!find_king(position, mover, &safety.king)) return safety;
+    safety.valid = true;
+    safety.in_check = square_attacked(position, safety.king,
+                                      (ShogiColor)(mover ^ 1));
+    for (unsigned ray = 0; ray < 8; ++ray) {
+        uint8_t own = SHOGI_SQ_NONE;
+        for (uint8_t index = 0; index < attack_ray_length[safety.king][ray]; ++index) {
+            uint8_t square = attack_rays[safety.king][ray][index];
+            uint8_t piece = position->board[square];
+            if (piece == SHOGI_EMPTY) continue;
+            if (shogi_piece_color(piece) == mover) {
+                if (own != SHOGI_SQ_NONE) break;
+                own = square;
+                continue;
+            }
+            if (own != SHOGI_SQ_NONE &&
+                (attack_ray_masks[(unsigned)(mover ^ 1)][safety.king][ray] &
+                 ((uint16_t)1U << shogi_piece_type(piece))) != 0)
+                safety.pinned[own] = true;
+            break;
+        }
+    }
+    return safety;
 }
 
 static bool find_king(const ShogiPosition *position, ShogiColor color, uint8_t *square) {
@@ -548,35 +646,42 @@ static void add_slide(const ShogiPosition *position, int row, int col, int dr, i
     }
 }
 
-static bool has_unpromoted_pawn_on_file(const ShogiPosition *position, ShogiColor color, int col) {
+static void add_pseudo_drops(const ShogiPosition *position, ShogiColor color,
+                             ShogiMove *moves, size_t *count, size_t capacity) {
+    unsigned pawn_files = 0;
+    unsigned active_hands = 0;
     uint8_t pawn = shogi_piece(color, SHOGI_PAWN);
-    for (int row = 0; row < 9; ++row) {
-        if (position->board[row * 9 + col] == pawn) return true;
-    }
-    return false;
-}
-
-static void add_pseudo_drops(const ShogiPosition *position, ShogiMove *moves,
-                             size_t *count, size_t capacity) {
-    ShogiColor color = position->side;
+    for (unsigned hand = 0; hand < 7U; ++hand)
+        if (position->hand[color][hand] != 0) active_hands |= 1U << hand;
+    if (active_hands == 0) return;
+    for (int square = 0; square < SHOGI_SQUARES; ++square)
+        if (position->board[square] == pawn)
+            pawn_files |= 1U << col_of((uint8_t)square);
     for (int row = 0; row < 9; ++row) {
         for (int col = 0; col < 9; ++col) {
             uint8_t to = square_at(row, col);
             if (position->board[to] != SHOGI_EMPTY) continue;
-            for (int hand = 0; hand < 7; ++hand) {
-                if (position->hand[color][hand] == 0) continue;
-                ShogiPieceType type = (ShogiPieceType)(hand + 1);
-                if (!valid_drop_rank(color, type, row)) continue;
-                if (type == SHOGI_PAWN && has_unpromoted_pawn_on_file(position, color, col)) continue;
-                add_move(moves, count, capacity, (ShogiMove){SHOGI_SQ_NONE, to, 0, 0, (uint8_t)type});
+            unsigned allowed = active_hands;
+            if ((pawn_files & (1U << col)) != 0U) allowed &= ~1U;
+            if ((color == SHOGI_BLACK && row == 0) ||
+                (color == SHOGI_WHITE && row == 8))
+                allowed &= ~7U;
+            else if ((color == SHOGI_BLACK && row == 1) ||
+                     (color == SHOGI_WHITE && row == 7))
+                allowed &= ~(1U << 2);
+            while (allowed != 0U) {
+                unsigned hand = (unsigned)__builtin_ctz(allowed);
+                allowed &= allowed - 1U;
+                add_move(moves, count, capacity,
+                         (ShogiMove){SHOGI_SQ_NONE, to, 0, 0,
+                                     (uint8_t)(hand + 1U)});
             }
         }
     }
 }
 
-static void generate_pseudo(const ShogiPosition *position, ShogiMove *moves,
-                            size_t *count, size_t capacity) {
-    ShogiColor color = position->side;
+static void generate_pseudo_for_color(const ShogiPosition *position, ShogiColor color,
+                                      ShogiMove *moves, size_t *count, size_t capacity) {
     int forward = color == SHOGI_BLACK ? -1 : 1;
     for (uint8_t from = 0; from < SHOGI_SQUARES; ++from) {
         uint8_t piece = position->board[from];
@@ -657,10 +762,16 @@ static void generate_pseudo(const ShogiPosition *position, ShogiMove *moves,
             break;
         }
     }
-    add_pseudo_drops(position, moves, count, capacity);
+    add_pseudo_drops(position, color, moves, count, capacity);
 }
 
-bool shogi_make_move(ShogiPosition *position, ShogiMove move) {
+static void generate_pseudo(const ShogiPosition *position, ShogiMove *moves,
+                            size_t *count, size_t capacity) {
+    generate_pseudo_for_color(position, position->side, moves, count, capacity);
+}
+
+static bool shogi_make_move_internal(ShogiPosition *position, ShogiMove move,
+                                     bool record_history_check, bool append_history) {
     if (position == NULL || move.to >= SHOGI_SQUARES) return false;
     ShogiColor color = position->side;
     bool is_drop = move.from == SHOGI_SQ_NONE;
@@ -709,18 +820,28 @@ bool shogi_make_move(ShogiPosition *position, ShogiMove move) {
     position->side = (ShogiColor)(position->side ^ 1);
     ++position->move_number;
     position->hash = next_hash;
-    if (position->history_length < SHOGI_MAX_HISTORY) {
+    if (append_history && position->history_length < SHOGI_MAX_HISTORY) {
         size_t index = position->history_length++;
         position->history[index] = position->hash;
         position->history_mover[index] = (uint8_t)color;
-        position->history_check[index] = shogi_is_in_check(position, position->side) ? 1 : 0;
+        position->history_check[index] = record_history_check &&
+            shogi_is_in_check(position, position->side) ? 1 : 0;
     }
     return true;
 }
 
-bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *undo) {
+bool shogi_make_move(ShogiPosition *position, ShogiMove move) {
+    return shogi_make_move_internal(position, move, true, true);
+}
+
+static bool shogi_make_move_undo_internal(ShogiPosition *position, ShogiMove move,
+                                          ShogiUndo *undo, bool record_history_check,
+                                          bool append_history) {
     if (position == NULL || undo == NULL || move.to >= SHOGI_SQUARES) return false;
-    memset(undo, 0, sizeof(*undo));
+    undo->valid = 0;
+    undo->hand_before = 0;
+    undo->previous_history_mover = HISTORY_MOVER_NONE;
+    undo->previous_history_check = 0;
     undo->move = move;
     undo->color = (uint8_t)position->side;
     undo->previous_side = position->side;
@@ -743,7 +864,89 @@ bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *un
     undo->hand_index = hand >= 0 ? (uint8_t)hand : 0;
     undo->hand_touched = move.from == SHOGI_SQ_NONE || undo->captured_piece != SHOGI_EMPTY;
     if (hand >= 0 && undo->hand_touched) undo->hand_before = position->hand[position->side][hand];
-    if (!shogi_make_move(position, move)) return false;
+    if (!shogi_make_move_internal(position, move, record_history_check, append_history)) return false;
+    undo->valid = 1;
+    return true;
+}
+
+bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *undo) {
+    return shogi_make_move_undo_internal(position, move, undo, true, true);
+}
+
+bool shogi_make_move_undo_fast(ShogiPosition *position, ShogiMove move, ShogiUndo *undo) {
+    if (position == NULL || undo == NULL || move.to >= SHOGI_SQUARES) return false;
+    ShogiColor color = position->side;
+    bool is_drop = move.from == SHOGI_SQ_NONE;
+    if (!is_drop && move.from >= SHOGI_SQUARES) return false;
+
+    undo->valid = 0;
+    undo->move = move;
+    undo->color = (uint8_t)color;
+    undo->previous_side = color;
+    undo->previous_move_number = position->move_number;
+    undo->previous_hash = position->hash;
+    undo->previous_history_length = position->history_length;
+    undo->previous_history_mover = HISTORY_MOVER_NONE;
+    undo->previous_history_check = 0;
+    if (position->history_length > 0) {
+        size_t previous = position->history_length - 1U;
+        undo->previous_history_mover = position->history_mover[previous];
+        undo->previous_history_check = position->history_check[previous];
+    }
+    undo->previous_king_square[SHOGI_BLACK] = position->king_square[SHOGI_BLACK];
+    undo->previous_king_square[SHOGI_WHITE] = position->king_square[SHOGI_WHITE];
+
+    uint64_t hash = position->hash ^ zobrist_side;
+    uint8_t moving_piece;
+    if (is_drop) {
+        int hand = (int)move.drop - 1;
+        if (hand < 0 || hand >= 7) return false;
+        undo->moving_piece = shogi_piece(color, (ShogiPieceType)move.drop);
+        undo->captured_piece = SHOGI_EMPTY;
+        undo->hand_index = (uint8_t)hand;
+        undo->hand_touched = 1;
+        undo->hand_before = position->hand[color][hand];
+        moving_piece = undo->moving_piece;
+        hash ^= zobrist_hand[color][hand][undo->hand_before] ^
+                zobrist_hand[color][hand][undo->hand_before - 1U];
+        --position->hand[color][hand];
+    } else {
+        moving_piece = position->board[move.from];
+        uint8_t captured = position->board[move.to];
+        undo->moving_piece = moving_piece;
+        undo->captured_piece = captured;
+        undo->hand_touched = captured != SHOGI_EMPTY;
+        int hand = captured == SHOGI_EMPTY ? -1 :
+            hand_index(shogi_unpromoted_type((ShogiPieceType)(captured & 0x0fU)));
+        undo->hand_index = hand >= 0 ? (uint8_t)hand : 0;
+        undo->hand_before = hand >= 0 ? position->hand[color][hand] : 0;
+        hash ^= zobrist_board[move.from][moving_piece];
+        if (captured != SHOGI_EMPTY) {
+            hash ^= zobrist_board[move.to][captured];
+            if (hand >= 0) {
+                unsigned before = position->hand[color][hand];
+                hash ^= zobrist_hand[color][hand][before] ^
+                        zobrist_hand[color][hand][before + 1U];
+                ++position->hand[color][hand];
+            }
+        }
+        position->board[move.from] = SHOGI_EMPTY;
+        if (move.promote)
+            moving_piece = shogi_piece(color,
+                promoted_type((ShogiPieceType)(moving_piece & 0x0fU)));
+    }
+    hash ^= zobrist_board[move.to][moving_piece];
+    position->board[move.to] = moving_piece;
+    if ((moving_piece & 0x0fU) == SHOGI_KING) position->king_square[color] = move.to;
+    position->side = (ShogiColor)(color ^ 1);
+    ++position->move_number;
+    position->hash = hash;
+    if (position->history_length < SHOGI_MAX_HISTORY) {
+        size_t index = position->history_length++;
+        position->history[index] = hash;
+        position->history_mover[index] = (uint8_t)color;
+        position->history_check[index] = 0;
+    }
     undo->valid = 1;
     return true;
 }
@@ -780,25 +983,36 @@ static bool same_move(ShogiMove a, ShogiMove b) {
     return a.from == b.from && a.to == b.to && a.promote == b.promote && a.drop == b.drop;
 }
 
-static size_t generate_legal_internal(const ShogiPosition *position, ShogiMove *moves,
-                                      size_t capacity, bool enforce_uchifuzume) {
+static size_t generate_legal_mut_internal(ShogiPosition *position, ShogiMove *moves,
+                                          size_t capacity, bool enforce_uchifuzume) {
     ShogiMove pseudo[SHOGI_MAX_MOVES];
     size_t pseudo_count = 0;
     generate_pseudo(position, pseudo, &pseudo_count, SHOGI_MAX_MOVES);
     size_t count = 0;
-    ShogiPosition work = *position;
+    ShogiColor mover = position->side;
+    KingSafety safety = king_safety_prepare(position, mover);
     for (size_t index = 0; index < pseudo_count; ++index) {
         ShogiMove move = pseudo[index];
+        bool needs_probe = !safety.valid || safety.in_check ||
+            move.from == SHOGI_SQ_NONE ||
+            shogi_piece_type(position->board[move.from]) == SHOGI_KING ||
+            (safety.pinned[move.from] && !same_king_ray(
+                safety.king, move.from, move.to));
+        bool pawn_drop = move.from == SHOGI_SQ_NONE && move.drop == SHOGI_PAWN;
+        if (!needs_probe && !pawn_drop) {
+            add_move(moves, &count, capacity, move);
+            continue;
+        }
         ShogiUndo undo;
-        if (!shogi_make_move_undo(&work, move, &undo)) continue;
-        bool legal = !shogi_is_in_check(&work, position->side);
+        if (!shogi_make_move_undo_internal(position, move, &undo, false, false)) continue;
+        bool legal = !shogi_is_in_check(position, mover);
         if (legal && enforce_uchifuzume && move.from == SHOGI_SQ_NONE && move.drop == SHOGI_PAWN &&
-            shogi_is_in_check(&work, work.side)) {
+            shogi_is_in_check(position, position->side)) {
             ShogiMove replies[SHOGI_MAX_MOVES];
-            size_t reply_count = generate_legal_internal(&work, replies, SHOGI_MAX_MOVES, true);
+            size_t reply_count = generate_legal_mut_internal(position, replies, SHOGI_MAX_MOVES, true);
             legal = reply_count != 0;
         }
-        (void)shogi_unmake_move(&work, &undo);
+        (void)shogi_unmake_move(position, &undo);
         if (legal) add_move(moves, &count, capacity, move);
     }
     return count;
@@ -806,13 +1020,28 @@ static size_t generate_legal_internal(const ShogiPosition *position, ShogiMove *
 
 size_t shogi_generate_legal(const ShogiPosition *position, ShogiMove *moves, size_t capacity) {
     if (position == NULL || moves == NULL) return 0;
-    return generate_legal_internal(position, moves, capacity, true);
+    ShogiPosition work = *position;
+    return generate_legal_mut_internal(&work, moves, capacity, true);
+}
+
+size_t shogi_generate_legal_mut(ShogiPosition *position, ShogiMove *moves, size_t capacity) {
+    if (position == NULL || moves == NULL) return 0;
+    return generate_legal_mut_internal(position, moves, capacity, true);
 }
 
 size_t shogi_generate_pseudo(const ShogiPosition *position, ShogiMove *moves, size_t capacity) {
     if (position == NULL || moves == NULL) return 0;
     size_t count = 0;
     generate_pseudo(position, moves, &count, capacity);
+    return count;
+}
+
+size_t shogi_generate_pseudo_for_color(const ShogiPosition *position,
+                                       ShogiColor color, ShogiMove *moves,
+                                       size_t capacity) {
+    if (position == NULL || moves == NULL || color > SHOGI_WHITE) return 0;
+    size_t count = 0;
+    generate_pseudo_for_color(position, color, moves, &count, capacity);
     return count;
 }
 
@@ -845,7 +1074,7 @@ static bool repeated_position(const ShogiPosition *position, ShogiResult *result
         }
     }
     *result = SHOGI_RESULT_DRAW;
-    return false;
+    return true;
 }
 
 static int declaration_points(const ShogiPosition *position, ShogiColor color, int *camp_count) {
@@ -873,10 +1102,11 @@ static int declaration_points(const ShogiPosition *position, ShogiColor color, i
 
 bool shogi_is_declaration_win(const ShogiPosition *position, ShogiColor color) {
     uint8_t king;
-    if (!find_king(position, color, &king) || shogi_is_in_check(position, color)) return false;
+    if (!find_king(position, color, &king)) return false;
     int row = row_of(king);
     bool in_camp = color == SHOGI_BLACK ? row <= 2 : row >= 6;
     if (!in_camp) return false;
+    if (shogi_is_in_check(position, color)) return false;
     int camp_count = 0;
     int points = declaration_points(position, color, &camp_count);
     int required = color == SHOGI_BLACK ? 28 : 27;
@@ -891,11 +1121,6 @@ ShogiResult shogi_game_result_with_moves(const ShogiPosition *position,
     if (position == NULL || moves == NULL || capacity == 0) return SHOGI_RESULT_ONGOING;
     ShogiResult repetition;
     if (repeated_position(position, &repetition)) return repetition;
-    size_t repetition_count = 0;
-    for (size_t index = 0; index < position->history_length; ++index) {
-        if (position->history[index] == position->hash) ++repetition_count;
-    }
-    if (repetition_count >= 4) return SHOGI_RESULT_DRAW;
     if (shogi_is_declaration_win(position, position->side)) {
         return position->side == SHOGI_BLACK ? SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN;
     }
@@ -904,6 +1129,24 @@ ShogiResult shogi_game_result_with_moves(const ShogiPosition *position,
     if (count == 0) {
         return position->side == SHOGI_BLACK ? SHOGI_RESULT_WHITE_WIN : SHOGI_RESULT_BLACK_WIN;
     }
+    return SHOGI_RESULT_ONGOING;
+}
+
+ShogiResult shogi_game_result_with_moves_mut(ShogiPosition *position,
+                                             ShogiMove *moves,
+                                             size_t capacity,
+                                             size_t *move_count) {
+    if (move_count != NULL) *move_count = 0;
+    if (position == NULL || moves == NULL || capacity == 0) return SHOGI_RESULT_ONGOING;
+    ShogiResult repetition;
+    if (repeated_position(position, &repetition)) return repetition;
+    if (shogi_is_declaration_win(position, position->side)) {
+        return position->side == SHOGI_BLACK ? SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN;
+    }
+    size_t count = shogi_generate_legal_mut(position, moves, capacity);
+    if (move_count != NULL) *move_count = count;
+    if (count == 0)
+        return position->side == SHOGI_BLACK ? SHOGI_RESULT_WHITE_WIN : SHOGI_RESULT_BLACK_WIN;
     return SHOGI_RESULT_ONGOING;
 }
 

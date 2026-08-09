@@ -22,12 +22,14 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=root / "nnue-runs/gen-001")
     parser.add_argument("--games", type=int, default=100)
     parser.add_argument("--simulations", type=int, default=256)
+    parser.add_argument("--generation-leaf-batch", type=int, default=12)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--match-games", type=int, default=100)
     parser.add_argument("--match-nodes", type=int, default=256)
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
-    if args.games < 1 or args.simulations < 1 or args.epochs < 1 or args.match_games < 2:
+    if (args.games < 1 or args.simulations < 1 or args.epochs < 1 or
+            args.match_games < 2 or not 1 <= args.generation_leaf_batch <= 12):
         parser.error("games, simulations, epochs, and match-games must be positive")
     if not args.engine.is_file():
         parser.error(f"engine not found: {args.engine}")
@@ -38,7 +40,8 @@ def main():
     data = args.output_dir / "selfplay.ndf1"
     candidate = args.output_dir / "candidate.nnue"
     run([args.engine, "--selfplay", "--games", args.games, "--simulations", args.simulations,
-         "--threads", 1, "--seed", args.seed, "--output", raw] +
+         "--threads", 1, "--leaf-batch", args.generation_leaf_batch,
+         "--seed", args.seed, "--output", raw] +
         (["--eval-model", args.current] if args.current else []))
     run([sys.executable, root / "tools/prepare_nnue.py", raw, "-o", data, "--shuffle", "--seed", args.seed])
     run(["make", "-C", root / "cpu", "train-nnue"])

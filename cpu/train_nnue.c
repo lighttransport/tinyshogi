@@ -61,7 +61,7 @@ static int16_t quantize(float value, float scale) {
 }
 
 static int write_model(const char *path, const float *features, const float *output,
-                       uint32_t hidden, float bias) {
+                       uint32_t hidden, float bias, int32_t activation_clip) {
     ShogiNnueModel model;
     shogi_nnue_model_init(&model);
     if (!shogi_nnue_model_init_default(&model, hidden)) return 1;
@@ -71,19 +71,67 @@ static int write_model(const char *path, const float *features, const float *out
     for (size_t index = 0; index < (size_t)hidden * 2U; ++index)
         model.output_weights[index] = quantize(output[index], 1024.0f);
     model.output_bias = (int32_t)lroundf(bias * 1024.0f);
+    if (activation_clip > 0) {
+        model.format_version = SHOGI_NNUE2_FORMAT_VERSION;
+        model.activation_clip = activation_clip;
+    }
+    int result = shogi_nnue_model_save(&model, path) ? 0 : 1;
+    shogi_nnue_model_destroy(&model);
+    return result;
+}
+
+static int write_model_v3(const char *path, const float *features,
+                          const float *head, const float *head_bias,
+                          const float *final, const float *final_bias,
+                          uint32_t hidden, uint32_t head_dim,
+                          int32_t activation_clip) {
+    ShogiNnueModel model;
+    shogi_nnue_model_init(&model);
+    model.feature_count = SHOGI_NNUE_FEATURE_COUNT;
+    model.hidden_dim = hidden;
+    model.head_dim = head_dim;
+    model.format_version = SHOGI_NNUE3_FORMAT_VERSION;
+    model.feature_scale = 256;
+    model.output_scale = 1024;
+    model.activation_clip = activation_clip > 0 ? activation_clip : INT16_MAX;
+    model.head_clip = INT16_MAX;
+    model.head_shift = 8;
+    model.feature_weights = malloc((size_t)model.feature_count * hidden * sizeof(int16_t));
+    model.head_weights = malloc((size_t)2U * head_dim * hidden * sizeof(int16_t));
+    model.head_bias = malloc((size_t)2U * head_dim * sizeof(int64_t));
+    model.final_weights = malloc((size_t)2U * head_dim * sizeof(int16_t));
+    model.final_bias = malloc(2U * sizeof(int64_t));
+    if (model.feature_weights == NULL || model.head_weights == NULL ||
+        model.head_bias == NULL || model.final_weights == NULL || model.final_bias == NULL) {
+        shogi_nnue_model_destroy(&model); return 1;
+    }
+    for (size_t i = 0; i < (size_t)model.feature_count * hidden; ++i)
+        model.feature_weights[i] = quantize(features[i], 256.0f);
+    for (size_t i = 0; i < (size_t)2U * head_dim * hidden; ++i)
+        model.head_weights[i] = quantize(head[i], 256.0f);
+    for (size_t i = 0; i < (size_t)2U * head_dim; ++i)
+        model.head_bias[i] = (int64_t)llround((double)head_bias[i] * 65536.0);
+    for (size_t i = 0; i < (size_t)2U * head_dim; ++i)
+        model.final_weights[i] = quantize(final[i], 1024.0f);
+    for (size_t i = 0; i < 2U; ++i)
+        model.final_bias[i] = (int64_t)llround((double)final_bias[i] * 262144.0);
     int result = shogi_nnue_model_save(&model, path) ? 0 : 1;
     shogi_nnue_model_destroy(&model);
     return result;
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3 || argc > 5) {
-        fprintf(stderr, "usage: %s data.ndf1 output.nnue [epochs] [learning-rate]\n", argv[0]);
+    if (argc < 3 || argc > 7) {
+        fprintf(stderr, "usage: %s data.ndf1 output.nnue [epochs] [learning-rate] [activation-clip] [head-dim]\n", argv[0]);
         return 2;
     }
     uint32_t epochs = argc >= 4 ? (uint32_t)strtoul(argv[3], NULL, 10) : DEFAULT_EPOCHS;
     float learning_rate = argc >= 5 ? strtof(argv[4], NULL) : 0.01f;
-    if (epochs == 0 || learning_rate <= 0.0f) return 2;
+    int32_t activation_clip = argc >= 6 ? (int32_t)strtol(argv[5], NULL, 10) : 0;
+    uint32_t head_dim = argc >= 7 ? (uint32_t)strtoul(argv[6], NULL, 10) : 0U;
+    if (epochs == 0 || learning_rate <= 0.0f || activation_clip < 0 ||
+        activation_clip > INT16_MAX) return 2;
+    if (head_dim != 0U && head_dim != 32U) return 2;
     Record *records = NULL; uint32_t count = 0;
     if (read_data(argv[1], &records, &count) != 0 || count == 0) {
         fprintf(stderr, "cannot read NDF1 data\n"); return 1;
@@ -92,11 +140,24 @@ int main(int argc, char **argv) {
     size_t feature_weights = (size_t)SHOGI_NNUE_FEATURE_COUNT * hidden;
     float *weights = calloc(feature_weights, sizeof(*weights));
     float *output = calloc((size_t)hidden * 2U, sizeof(*output));
+    float *head = head_dim ? calloc((size_t)2U * head_dim * hidden, sizeof(*head)) : NULL;
+    float *head_bias = head_dim ? calloc((size_t)2U * head_dim, sizeof(*head_bias)) : NULL;
+    float *final = head_dim ? calloc((size_t)2U * head_dim, sizeof(*final)) : NULL;
+    float *final_bias = head_dim ? calloc(2U, sizeof(*final_bias)) : NULL;
     uint32_t *ids = malloc((SHOGI_SQUARES + 14U) * sizeof(*ids));
-    if (!weights || !output || !ids) { free(records); free(weights); free(output); free(ids); return 1; }
+    if (!weights || !output || !ids || (head_dim && (!head || !head_bias || !final || !final_bias))) {
+        free(records); free(weights); free(output); free(head); free(head_bias);
+        free(final); free(final_bias); free(ids); return 1;
+    }
     unsigned random_state = 7U;
     for (size_t index = 0; index < feature_weights; ++index) weights[index] = frand(&random_state) * 0.01f;
     for (size_t index = 0; index < (size_t)hidden * 2U; ++index) output[index] = frand(&random_state) * 0.01f;
+    for (size_t index = 0; index < (size_t)2U * head_dim * hidden; ++index)
+        if (head != NULL) head[index] = frand(&random_state) * 0.01f;
+    for (size_t index = 0; index < (size_t)2U * head_dim; ++index) {
+        if (head_bias != NULL) head_bias[index] = 0.0f;
+        if (final != NULL) final[index] = frand(&random_state) * 0.01f;
+    }
     shogi_init();
     for (uint32_t epoch = 0; epoch < epochs; ++epoch) {
         double loss = 0.0;
@@ -109,25 +170,71 @@ int main(int argc, char **argv) {
                 tinyshogi_add_f32(hidden_values, weights + (size_t)ids[item] * hidden, hidden);
             for (uint32_t unit = 0; unit < hidden; ++unit) {
                 if (hidden_values[unit] < 0.0f) hidden_values[unit] = 0.0f;
+                if (activation_clip > 0 &&
+                    hidden_values[unit] > (float)activation_clip / 256.0f)
+                    hidden_values[unit] = (float)activation_clip / 256.0f;
             }
             float prediction = 0.0f;
-            for (uint32_t unit = 0; unit < hidden; ++unit) prediction += hidden_values[unit] * output[position.side * hidden + unit];
+            if (head_dim == 0U) {
+                for (uint32_t unit = 0; unit < hidden; ++unit)
+                    prediction += hidden_values[unit] * output[position.side * hidden + unit];
+            } else {
+                float head_values[32];
+                for (uint32_t h = 0; h < head_dim; ++h) {
+                    float value = head_bias[position.side * head_dim + h];
+                    for (uint32_t unit = 0; unit < hidden; ++unit)
+                        value += hidden_values[unit] * head[(position.side * head_dim + h) * hidden + unit];
+                    head_values[h] = value > 0.0f ? value : 0.0f;
+                    prediction += head_values[h] * final[position.side * head_dim + h];
+                }
+                prediction += final_bias[position.side];
+            }
             prediction = tanhf(prediction);
             float target = (float)records[sample].value / 1000.0f;
             float error = target - prediction;
             loss += (double)error * error;
             float gradient = error * (1.0f - prediction * prediction);
-            for (uint32_t unit = 0; unit < hidden; ++unit) {
-                float old_output = output[position.side * hidden + unit];
-                output[position.side * hidden + unit] += learning_rate * gradient * hidden_values[unit];
-                if (hidden_values[unit] > 0.0f)
-                    for (size_t item = 0; item < active; ++item)
-                        weights[(size_t)ids[item] * hidden + unit] += learning_rate * gradient * old_output;
+            if (head_dim == 0U) {
+                for (uint32_t unit = 0; unit < hidden; ++unit) {
+                    float old_output = output[position.side * hidden + unit];
+                    output[position.side * hidden + unit] += learning_rate * gradient * hidden_values[unit];
+                    if (hidden_values[unit] > 0.0f &&
+                        (activation_clip == 0 || hidden_values[unit] < (float)activation_clip / 256.0f))
+                        for (size_t item = 0; item < active; ++item)
+                            weights[(size_t)ids[item] * hidden + unit] += learning_rate * gradient * old_output;
+                }
+            } else {
+                float head_values[32];
+                for (uint32_t h = 0; h < head_dim; ++h) {
+                    float value = head_bias[position.side * head_dim + h];
+                    for (uint32_t unit = 0; unit < hidden; ++unit)
+                        value += hidden_values[unit] * head[(position.side * head_dim + h) * hidden + unit];
+                    head_values[h] = value > 0.0f ? value : 0.0f;
+                    float old_final = final[position.side * head_dim + h];
+                    final[position.side * head_dim + h] += learning_rate * gradient * head_values[h];
+                    final_bias[position.side] += learning_rate * gradient;
+                    float head_gradient = gradient * old_final;
+                    if (value > 0.0f)
+                        for (uint32_t unit = 0; unit < hidden; ++unit) {
+                            float old_head = head[(position.side * head_dim + h) * hidden + unit];
+                            head[(position.side * head_dim + h) * hidden + unit] +=
+                                learning_rate * head_gradient * hidden_values[unit];
+                            if (hidden_values[unit] > 0.0f &&
+                                (activation_clip == 0 || hidden_values[unit] < (float)activation_clip / 256.0f))
+                                for (size_t item = 0; item < active; ++item)
+                                    weights[(size_t)ids[item] * hidden + unit] +=
+                                        learning_rate * head_gradient * old_head;
+                        }
+                }
             }
         }
         fprintf(stderr, "nnue epoch=%u samples=%u mse=%.8f\n", epoch + 1, count, loss / count);
     }
-    int result = write_model(argv[2], weights, output, hidden, 0.0f);
-    free(records); free(weights); free(output); free(ids);
+    int result = head_dim ? write_model_v3(argv[2], weights, head, head_bias, final,
+                                           final_bias, hidden, head_dim, activation_clip) :
+                           write_model(argv[2], weights, output, hidden, 0.0f,
+                                       activation_clip);
+    free(records); free(weights); free(output); free(head); free(head_bias);
+    free(final); free(final_bias); free(ids);
     return result;
 }

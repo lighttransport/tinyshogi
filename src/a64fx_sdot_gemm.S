@@ -10,8 +10,12 @@
     .type tinyshogi_a64fx_sdot_gemm_4x5, %function
 
 tinyshogi_a64fx_sdot_gemm_4x5:
-    stp     x19, x20, [sp, #-32]!
+    stp     x19, x20, [sp, #-96]!
     stp     x21, x22, [sp, #16]
+    stp     d8, d9, [sp, #32]
+    stp     d10, d11, [sp, #48]
+    stp     d12, d13, [sp, #64]
+    stp     d14, d15, [sp, #80]
     ptrue   p0.b
 
     /* x0=K, x1=A, x2=B, x3=C, x4=ldc */
@@ -40,7 +44,7 @@ tinyshogi_a64fx_sdot_gemm_4x5:
     eor     z20.d, z20.d, z20.d
     eor     z21.d, z21.d, z21.d
 
-    .align 5
+    .align 6
     /* Stage two K/4 steps. A is reused while B is double-buffered, matching
      * the Fujitsu 4x5 schedule: loads are hidden under independent SDOTs. */
     cmp     x19, #2
@@ -118,7 +122,6 @@ tinyshogi_a64fx_sdot_gemm_4x5:
     sdot    z21.s, z1.b, z31.b
     add     x2, x2, #40
     sub     x19, x19, #2
-    nop
     b.ge    .Lsdot45_loop
 
 .Lsdot45_tail:
@@ -177,8 +180,12 @@ tinyshogi_a64fx_sdot_gemm_4x5:
     st1w    {z21.s}, p0, [x21, #3, mul vl]
 
 .Lsdot45_done:
+    ldp     d14, d15, [sp, #80]
+    ldp     d12, d13, [sp, #64]
+    ldp     d10, d11, [sp, #48]
+    ldp     d8, d9, [sp, #32]
     ldp     x21, x22, [sp, #16]
-    ldp     x19, x20, [sp], #32
+    ldp     x19, x20, [sp], #96
     ret
     .size tinyshogi_a64fx_sdot_gemm_4x5, .-tinyshogi_a64fx_sdot_gemm_4x5
 
@@ -188,8 +195,12 @@ tinyshogi_a64fx_sdot_gemm_4x5:
     .global tinyshogi_a64fx_sdot_gemm_4x5_i16
     .type tinyshogi_a64fx_sdot_gemm_4x5_i16, %function
 tinyshogi_a64fx_sdot_gemm_4x5_i16:
-    stp     x19, x20, [sp, #-32]!
+    stp     x19, x20, [sp, #-96]!
     stp     x21, x22, [sp, #16]
+    stp     d8, d9, [sp, #32]
+    stp     d10, d11, [sp, #48]
+    stp     d12, d13, [sp, #64]
+    stp     d14, d15, [sp, #80]
     ptrue   p0.b
     lsr     x19, x0, #2
     cbz     x19, .Lsdot16_done
@@ -214,67 +225,143 @@ tinyshogi_a64fx_sdot_gemm_4x5_i16:
     eor     z19.d, z19.d, z19.d
     eor     z20.d, z20.d, z20.d
     eor     z21.d, z21.d, z21.d
+    cmp     x19, #2
+    b.lt    .Lsdot16_tail
+    ld1rd   {z22.d}, p0/z, [x2]
+    ld1rd   {z23.d}, p0/z, [x2, #8]
+    ld1rd   {z24.d}, p0/z, [x2, #16]
+    ld1rd   {z25.d}, p0/z, [x2, #24]
+    ld1rd   {z26.d}, p0/z, [x2, #32]
+    ld1rd   {z27.d}, p0/z, [x2, #40]
+    ld1rd   {z28.d}, p0/z, [x2, #48]
+    ld1h    {z0.h}, p0/z, [x1]
+
+    .align 6
 .Lsdot16_loop:
-    ld1h    {z0.h}, p0/z, [x1, #0, mul vl]
     ld1h    {z1.h}, p0/z, [x1, #1, mul vl]
-    ld1h    {z22.h}, p0/z, [x1, #2, mul vl]
-    ld1h    {z23.h}, p0/z, [x1, #3, mul vl]
-    ld1rd   {z24.d}, p0/z, [x2, #0]
-    ld1rd   {z25.d}, p0/z, [x2, #8]
-    ld1rd   {z26.d}, p0/z, [x2, #16]
-    ld1rd   {z27.d}, p0/z, [x2, #24]
-    ld1rd   {z28.d}, p0/z, [x2, #32]
-    sdot    z2.d, z0.h, z24.h
-    sdot    z3.d, z1.h, z24.h
-    sdot    z4.d, z22.h, z24.h
-    sdot    z5.d, z23.h, z24.h
-    sdot    z6.d, z0.h, z25.h
-    sdot    z7.d, z1.h, z25.h
-    sdot    z8.d, z22.h, z25.h
-    sdot    z9.d, z23.h, z25.h
-    sdot    z10.d, z0.h, z26.h
-    sdot    z11.d, z1.h, z26.h
-    sdot    z12.d, z22.h, z26.h
-    sdot    z13.d, z23.h, z26.h
-    sdot    z14.d, z0.h, z27.h
-    sdot    z15.d, z1.h, z27.h
-    sdot    z16.d, z22.h, z27.h
-    sdot    z17.d, z23.h, z27.h
-    sdot    z18.d, z0.h, z28.h
-    sdot    z19.d, z1.h, z28.h
-    sdot    z20.d, z22.h, z28.h
-    sdot    z21.d, z23.h, z28.h
-    add     x1, x1, #256
-    add     x2, x2, #40
-    subs    x19, x19, #1
-    b.ne    .Lsdot16_loop
+    sdot z2.d,z0.h,z22.h
+    sdot z3.d,z0.h,z23.h
+    ld1rd {z29.d},p0/z,[x2,#56]
+    ld1rd {z30.d},p0/z,[x2,#64]
+    sdot z4.d,z0.h,z24.h
+    sdot z5.d,z0.h,z25.h
+    sdot z6.d,z0.h,z26.h
+    sdot z7.d,z1.h,z22.h
+    ld1h {z0.h},p0/z,[x1,#2,mul vl]
+    ld1rd {z31.d},p0/z,[x2,#72]
+    sdot z8.d,z1.h,z23.h
+    sdot z9.d,z1.h,z24.h
+    sdot z10.d,z1.h,z25.h
+    sdot z11.d,z1.h,z26.h
+    ld1h {z1.h},p0/z,[x1,#3,mul vl]
+    sdot z12.d,z0.h,z22.h
+    sdot z13.d,z0.h,z23.h
+    sdot z14.d,z0.h,z24.h
+    sdot z15.d,z0.h,z25.h
+    sdot z16.d,z0.h,z26.h
+    sdot z17.d,z1.h,z22.h
+    ld1h {z0.h},p0/z,[x1,#4,mul vl]
+    sdot z18.d,z1.h,z23.h
+    sdot z19.d,z1.h,z24.h
+    ld1rd {z22.d},p0/z,[x2,#80]
+    ld1rd {z23.d},p0/z,[x2,#88]
+    sdot z20.d,z1.h,z25.h
+    sdot z21.d,z1.h,z26.h
+
+    ld1h {z1.h},p0/z,[x1,#5,mul vl]
+    sdot z2.d,z0.h,z27.h
+    sdot z3.d,z0.h,z28.h
+    ld1rd {z24.d},p0/z,[x2,#96]
+    ld1rd {z25.d},p0/z,[x2,#104]
+    sdot z4.d,z0.h,z29.h
+    sdot z5.d,z0.h,z30.h
+    sdot z6.d,z0.h,z31.h
+    sdot z7.d,z1.h,z27.h
+    ld1h {z0.h},p0/z,[x1,#6,mul vl]
+    ld1rd {z26.d},p0/z,[x2,#112]
+    sdot z8.d,z1.h,z28.h
+    sdot z9.d,z1.h,z29.h
+    sdot z10.d,z1.h,z30.h
+    sdot z11.d,z1.h,z31.h
+    ld1h {z1.h},p0/z,[x1,#7,mul vl]
+    add x1,x1,#512
+    sdot z12.d,z0.h,z27.h
+    sdot z13.d,z0.h,z28.h
+    sdot z14.d,z0.h,z29.h
+    sdot z15.d,z0.h,z30.h
+    sdot z16.d,z0.h,z31.h
+    sdot z17.d,z1.h,z27.h
+    ld1h {z0.h},p0/z,[x1]
+    cmp x19,#4
+    sdot z18.d,z1.h,z28.h
+    sdot z19.d,z1.h,z29.h
+    ld1rd {z27.d},p0/z,[x2,#120]
+    ld1rd {z28.d},p0/z,[x2,#128]
+    sdot z20.d,z1.h,z30.h
+    sdot z21.d,z1.h,z31.h
+    add x2,x2,#80
+    sub x19,x19,#2
+    b.ge .Lsdot16_loop
+
+.Lsdot16_tail:
+    cmp x19,#1
+    b.lt .Lsdot16_store
+    ld1h {z1.h},p0/z,[x1,#1,mul vl]
+    sdot z2.d,z0.h,z22.h
+    sdot z3.d,z0.h,z23.h
+    sdot z4.d,z0.h,z24.h
+    sdot z5.d,z0.h,z25.h
+    sdot z6.d,z0.h,z26.h
+    sdot z7.d,z1.h,z22.h
+    ld1h {z0.h},p0/z,[x1,#2,mul vl]
+    sdot z8.d,z1.h,z23.h
+    sdot z9.d,z1.h,z24.h
+    sdot z10.d,z1.h,z25.h
+    sdot z11.d,z1.h,z26.h
+    ld1h {z1.h},p0/z,[x1,#3,mul vl]
+    sdot z12.d,z0.h,z22.h
+    sdot z13.d,z0.h,z23.h
+    sdot z14.d,z0.h,z24.h
+    sdot z15.d,z0.h,z25.h
+    sdot z16.d,z0.h,z26.h
+    sdot z17.d,z1.h,z22.h
+    sdot z18.d,z1.h,z23.h
+    sdot z19.d,z1.h,z24.h
+    sdot z20.d,z1.h,z25.h
+    sdot z21.d,z1.h,z26.h
+
+.Lsdot16_store:
     mov     x21, x3
     st1d    {z2.d}, p0, [x21]
-    st1d    {z3.d}, p0, [x21, #1, mul vl]
-    st1d    {z4.d}, p0, [x21, #2, mul vl]
-    st1d    {z5.d}, p0, [x21, #3, mul vl]
-    add     x21, x21, x20
-    st1d    {z6.d}, p0, [x21]
     st1d    {z7.d}, p0, [x21, #1, mul vl]
-    st1d    {z8.d}, p0, [x21, #2, mul vl]
-    st1d    {z9.d}, p0, [x21, #3, mul vl]
-    add     x21, x21, x20
-    st1d    {z10.d}, p0, [x21]
-    st1d    {z11.d}, p0, [x21, #1, mul vl]
     st1d    {z12.d}, p0, [x21, #2, mul vl]
-    st1d    {z13.d}, p0, [x21, #3, mul vl]
-    add     x21, x21, x20
-    st1d    {z14.d}, p0, [x21]
-    st1d    {z15.d}, p0, [x21, #1, mul vl]
-    st1d    {z16.d}, p0, [x21, #2, mul vl]
     st1d    {z17.d}, p0, [x21, #3, mul vl]
     add     x21, x21, x20
-    st1d    {z18.d}, p0, [x21]
-    st1d    {z19.d}, p0, [x21, #1, mul vl]
-    st1d    {z20.d}, p0, [x21, #2, mul vl]
+    st1d    {z3.d}, p0, [x21]
+    st1d    {z8.d}, p0, [x21, #1, mul vl]
+    st1d    {z13.d}, p0, [x21, #2, mul vl]
+    st1d    {z18.d}, p0, [x21, #3, mul vl]
+    add     x21, x21, x20
+    st1d    {z4.d}, p0, [x21]
+    st1d    {z9.d}, p0, [x21, #1, mul vl]
+    st1d    {z14.d}, p0, [x21, #2, mul vl]
+    st1d    {z19.d}, p0, [x21, #3, mul vl]
+    add     x21, x21, x20
+    st1d    {z5.d}, p0, [x21]
+    st1d    {z10.d}, p0, [x21, #1, mul vl]
+    st1d    {z15.d}, p0, [x21, #2, mul vl]
+    st1d    {z20.d}, p0, [x21, #3, mul vl]
+    add     x21, x21, x20
+    st1d    {z6.d}, p0, [x21]
+    st1d    {z11.d}, p0, [x21, #1, mul vl]
+    st1d    {z16.d}, p0, [x21, #2, mul vl]
     st1d    {z21.d}, p0, [x21, #3, mul vl]
 .Lsdot16_done:
+    ldp     d14, d15, [sp, #80]
+    ldp     d12, d13, [sp, #64]
+    ldp     d10, d11, [sp, #48]
+    ldp     d8, d9, [sp, #32]
     ldp     x21, x22, [sp, #16]
-    ldp     x19, x20, [sp], #32
+    ldp     x19, x20, [sp], #96
     ret
     .size tinyshogi_a64fx_sdot_gemm_4x5_i16, .-tinyshogi_a64fx_sdot_gemm_4x5_i16
