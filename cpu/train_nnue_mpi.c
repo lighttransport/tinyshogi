@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #define KING_BUCKETS 81U
 #define BOARD_CLASSES (28U * 81U)
@@ -38,6 +39,9 @@ typedef struct {
     float momentum;
     float muon_learning_rate;
     enum { OPT_MOMENTUM, OPT_NESTEROV, OPT_MUON } optimizer;
+    const char *checkpoint_path;
+    const char *resume_path;
+    unsigned checkpoint_epochs;
     int32_t activation_clip;
     unsigned head_dim;
     uint64_t seed;
@@ -58,12 +62,17 @@ static bool parse_unsigned(const char *text, unsigned *value) {
 
 static bool parse_options(int argc, char **argv, Options *options) {
     *options = (Options){NULL, NULL, 5U, 2304U, 0.03f, 0.9f, 0.02f,
-                         OPT_MOMENTUM, INT16_MAX, 32U, 7U};
+                         OPT_MOMENTUM, NULL, NULL, 0U, INT16_MAX, 32U, 7U};
     for (int index = 1; index < argc; ++index) {
         if (index + 1 >= argc) return false;
         const char *key = argv[index], *value = argv[++index];
         if (strcmp(key, "--data") == 0) options->data_path = value;
         else if (strcmp(key, "--output") == 0) options->output_path = value;
+        else if (strcmp(key, "--checkpoint") == 0) options->checkpoint_path = value;
+        else if (strcmp(key, "--resume") == 0) options->resume_path = value;
+        else if (strcmp(key, "--checkpoint-epochs") == 0) {
+            if (!parse_unsigned(value, &options->checkpoint_epochs)) return false;
+        }
         else if (strcmp(key, "--epochs") == 0) {
             if (!parse_unsigned(value, &options->epochs)) return false;
         } else if (strcmp(key, "--global-batch") == 0) {
@@ -97,7 +106,8 @@ static bool parse_options(int argc, char **argv, Options *options) {
            options->epochs > 0 && options->global_batch > 0 &&
            options->learning_rate > 0.0f && options->momentum >= 0.0f &&
            options->momentum < 1.0f && options->muon_learning_rate > 0.0f &&
-           options->head_dim == 32U;
+           options->head_dim == 32U &&
+           (options->checkpoint_path == NULL || options->checkpoint_epochs > 0);
 }
 
 static unsigned record_bucket(const ShogiNdfRecord *record) {
@@ -331,6 +341,93 @@ static bool save_model(const char *path, const float *features, const float *hea
     return ok;
 }
 
+static bool write_block(FILE *file, const void *data, size_t size, size_t count) {
+    return fwrite(data, size, count, file) == count;
+}
+
+static bool read_block(FILE *file, void *data, size_t size, size_t count) {
+    return fread(data, size, count, file) == count;
+}
+
+static bool checkpoint_name(const char *base, int rank, bool partial,
+                            char *path, size_t capacity) {
+    int written = snprintf(path, capacity, "%s.rank%05d%s", base, rank,
+                           partial ? ".partial" : "");
+    return written > 0 && (size_t)written < capacity;
+}
+
+static bool save_checkpoint(const char *base, int rank, uint64_t epoch,
+                            uint64_t step, size_t feature_values,
+                            const float *weights, const float *velocity,
+                            const uint64_t *last_step, size_t feature_count,
+                            size_t head_values, const float *head,
+                            const float *head_velocity, const float *head_bias,
+                            const float *head_bias_velocity, const float *final,
+                            const float *final_velocity, const float *final_bias,
+                            const float *final_bias_velocity) {
+    char partial[PATH_MAX], complete[PATH_MAX];
+    if (!checkpoint_name(base, rank, true, partial, sizeof(partial)) ||
+        !checkpoint_name(base, rank, false, complete, sizeof(complete))) return false;
+    FILE *file = fopen(partial, "wb");
+    if (file == NULL) return false;
+    uint32_t header[4] = {1U, SHOGI_NNUE_FEATURE_COUNT, SHOGI_NNUE_DEFAULT_HIDDEN, 32U};
+    bool ok = write_block(file, "TNSC", 1, 4) &&
+        write_block(file, header, sizeof(*header), 4) &&
+        write_block(file, &epoch, sizeof(epoch), 1) &&
+        write_block(file, &step, sizeof(step), 1) &&
+        write_block(file, weights, sizeof(*weights), feature_values) &&
+        write_block(file, velocity, sizeof(*velocity), feature_values) &&
+        write_block(file, last_step, sizeof(*last_step), feature_count) &&
+        write_block(file, head, sizeof(*head), head_values) &&
+        write_block(file, head_velocity, sizeof(*head_velocity), head_values) &&
+        write_block(file, head_bias, sizeof(*head_bias), 64U) &&
+        write_block(file, head_bias_velocity, sizeof(*head_bias_velocity), 64U) &&
+        write_block(file, final, sizeof(*final), 64U) &&
+        write_block(file, final_velocity, sizeof(*final_velocity), 64U) &&
+        write_block(file, final_bias, sizeof(*final_bias), 2U) &&
+        write_block(file, final_bias_velocity, sizeof(*final_bias_velocity), 2U) &&
+        fflush(file) == 0 && fsync(fileno(file)) == 0;
+    if (fclose(file) != 0) ok = false;
+    if (ok && rename(partial, complete) != 0) ok = false;
+    return ok;
+}
+
+static bool load_checkpoint(const char *base, int rank, uint64_t *epoch,
+                            uint64_t *step, size_t feature_values,
+                            float *weights, float *velocity,
+                            uint64_t *last_step, size_t feature_count,
+                            size_t head_values, float *head,
+                            float *head_velocity, float *head_bias,
+                            float *head_bias_velocity, float *final,
+                            float *final_velocity, float *final_bias,
+                            float *final_bias_velocity) {
+    char path[PATH_MAX];
+    if (!checkpoint_name(base, rank, false, path, sizeof(path))) return false;
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) return false;
+    char magic[4];
+    uint32_t header[4];
+    bool ok = read_block(file, magic, 1, 4) && memcmp(magic, "TNSC", 4) == 0 &&
+        read_block(file, header, sizeof(*header), 4) && header[0] == 1U &&
+        header[1] == SHOGI_NNUE_FEATURE_COUNT &&
+        header[2] == SHOGI_NNUE_DEFAULT_HIDDEN && header[3] == 32U &&
+        read_block(file, epoch, sizeof(*epoch), 1) &&
+        read_block(file, step, sizeof(*step), 1) &&
+        read_block(file, weights, sizeof(*weights), feature_values) &&
+        read_block(file, velocity, sizeof(*velocity), feature_values) &&
+        read_block(file, last_step, sizeof(*last_step), feature_count) &&
+        read_block(file, head, sizeof(*head), head_values) &&
+        read_block(file, head_velocity, sizeof(*head_velocity), head_values) &&
+        read_block(file, head_bias, sizeof(*head_bias), 64U) &&
+        read_block(file, head_bias_velocity, sizeof(*head_bias_velocity), 64U) &&
+        read_block(file, final, sizeof(*final), 64U) &&
+        read_block(file, final_velocity, sizeof(*final_velocity), 64U) &&
+        read_block(file, final_bias, sizeof(*final_bias), 2U) &&
+        read_block(file, final_bias_velocity, sizeof(*final_bias_velocity), 2U);
+    fclose(file);
+    return ok;
+}
+
 static void lazy_momentum(float *weight, float *velocity, uint64_t *last_step,
                           const float *gradient, uint64_t step, float rate,
                           float momentum, size_t count, bool nesterov) {
@@ -441,7 +538,7 @@ int main(int argc, char **argv) {
     if (provided < MPI_THREAD_FUNNELED) abort_mpi(rank, "MPI thread support is insufficient");
     Options options;
     if (!parse_options(argc, argv, &options))
-        abort_mpi(rank, "usage: --data PATH --output PATH [--epochs N --global-batch N --optimizer momentum|nesterov|muon --learning-rate F --muon-learning-rate F --momentum F --activation-clip N --head-dim 32 --seed N]");
+        abort_mpi(rank, "usage: --data PATH --output PATH [--epochs N --global-batch N --optimizer momentum|nesterov|muon --learning-rate F --muon-learning-rate F --momentum F --checkpoint PATH --checkpoint-epochs N --resume PATH --activation-clip N --head-dim 32 --seed N]");
 
     uint32_t local_count;
     FILE *input = open_ndf(options.data_path, &local_count);
@@ -569,12 +666,29 @@ int main(int argc, char **argv) {
     uint64_t steps_per_epoch = (global_count + options.global_batch - 1U) /
                                options.global_batch;
     uint64_t step_number = 0;
-    for (unsigned epoch = 0; epoch < options.epochs; ++epoch) {
+    uint64_t start_epoch = 0;
+    if (options.resume_path != NULL) {
+        bool loaded = load_checkpoint(options.resume_path, rank, &start_epoch,
+                                      &step_number, feature_values, weights,
+                                      velocity, last_step, SHOGI_NNUE_FEATURE_COUNT,
+                                      head_values, head, head_velocity, head_bias,
+                                      head_bias_velocity, final, final_velocity,
+                                      final_bias, final_bias_velocity);
+        int loaded_all = loaded ? 1 : 0;
+        MPI_Allreduce(MPI_IN_PLACE, &loaded_all, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+        if (!loaded_all || start_epoch > options.epochs)
+            abort_mpi(rank, "cannot resume checkpoint");
+        if (rank == 0)
+            fprintf(stderr, "nnue-mpi resumed epoch=%llu step=%llu\n",
+                    (unsigned long long)start_epoch,
+                    (unsigned long long)step_number);
+    }
+    for (uint64_t epoch = start_epoch; epoch < options.epochs; ++epoch) {
         size_t offsets[KING_BUCKETS] = {0};
         for (unsigned bucket = 0; bucket < KING_BUCKETS; ++bucket)
             if (owners[bucket] == rank)
                 shuffle_bucket(&buckets[bucket], options.seed ^
-                    ((uint64_t)epoch << 32) ^ bucket);
+                    (epoch << 32) ^ bucket);
         double epoch_loss = 0.0;
         uint64_t epoch_samples = 0;
         double epoch_start = MPI_Wtime(), communication = 0.0;
@@ -822,10 +936,25 @@ int main(int argc, char **argv) {
         MPI_Reduce(&elapsed, &max_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
         MPI_Reduce(&communication, &max_comm, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
         if (rank == 0)
-            fprintf(stderr, "nnue-mpi epoch=%u samples=%llu mse=%.8f seconds=%.3f samples/s=%.0f communication=%.3f\n",
-                    epoch + 1U, (unsigned long long)epoch_samples,
+            fprintf(stderr, "nnue-mpi epoch=%llu samples=%llu mse=%.8f seconds=%.3f samples/s=%.0f communication=%.3f\n",
+                    (unsigned long long)(epoch + 1U), (unsigned long long)epoch_samples,
                     epoch_samples == 0 ? 0.0 : epoch_loss / epoch_samples,
                     max_elapsed, epoch_samples / max_elapsed, max_comm);
+        if (options.checkpoint_path != NULL &&
+            (epoch + 1U) % options.checkpoint_epochs == 0) {
+            int checkpoint_ok = save_checkpoint(
+                options.checkpoint_path, rank, epoch + 1U, step_number,
+                feature_values, weights, velocity, last_step,
+                SHOGI_NNUE_FEATURE_COUNT, head_values, head, head_velocity,
+                head_bias, head_bias_velocity, final, final_velocity,
+                final_bias, final_bias_velocity) ? 1 : 0;
+            MPI_Allreduce(MPI_IN_PLACE, &checkpoint_ok, 1, MPI_INT, MPI_MIN,
+                          MPI_COMM_WORLD);
+            if (!checkpoint_ok) abort_mpi(rank, "cannot write checkpoint");
+            if (rank == 0)
+                fprintf(stderr, "nnue-mpi checkpoint epoch=%llu path=%s\n",
+                        (unsigned long long)(epoch + 1U), options.checkpoint_path);
+        }
     }
 
     /* Materialize momentum updates deferred after a sparse row's last use. */
