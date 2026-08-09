@@ -27,5 +27,8 @@ void tinyshogi_a64fx_sdot_gemm_6x4(int64_t K, const int8_t *A,
 void tinyshogi_a64fx_sdot_gemm_6x4_i16(int64_t K, const int16_t *A,
                                        const int16_t *B, int64_t *C,
                                        int64_t ldc);
+void tinyshogi_a64fx_sdot_gemm_5x4_i16(int64_t K, const int16_t *A,
+                                       const int16_t *B, int64_t *C,
+                                       int64_t ldc);
 
 #endif

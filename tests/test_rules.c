@@ -42,6 +42,43 @@ static int check_hash_roundtrip(const ShogiPosition *position, const char *label
     return 0;
 }
 
+static bool same_active_position(const ShogiPosition *left,
+                                 const ShogiPosition *right) {
+    return memcmp(left->board, right->board, sizeof(left->board)) == 0 &&
+        memcmp(left->hand, right->hand, sizeof(left->hand)) == 0 &&
+        left->side == right->side && left->move_number == right->move_number &&
+        left->hash == right->hash && left->history_length == right->history_length &&
+        memcmp(left->king_square, right->king_square, sizeof(left->king_square)) == 0 &&
+        memcmp(left->history, right->history,
+               left->history_length * sizeof(left->history[0])) == 0 &&
+        memcmp(left->history_mover, right->history_mover,
+               left->history_length * sizeof(left->history_mover[0])) == 0 &&
+        memcmp(left->history_check, right->history_check,
+               left->history_length * sizeof(left->history_check[0])) == 0;
+}
+
+static int check_fast_generated_moves(const ShogiPosition *position,
+                                      const char *label) {
+    ShogiMove moves[SHOGI_MAX_MOVES];
+    size_t count = shogi_generate_legal(position, moves, SHOGI_MAX_MOVES);
+    for (size_t index = 0; index < count; ++index) {
+        ShogiPosition checked = *position, fast = *position;
+        ShogiUndo checked_undo, fast_undo;
+        if (!shogi_make_move_undo(&checked, moves[index], &checked_undo) ||
+            !shogi_make_move_undo_fast(&fast, moves[index], &fast_undo))
+            return fail(label);
+        /* Search defers perpetual-check bookkeeping; compare the otherwise
+         * identical active state produced by the trusted path. */
+        checked.history_check[checked.history_length - 1U] = 0;
+        if (!same_active_position(&checked, &fast)) return fail(label);
+        if (!shogi_unmake_move(&checked, &checked_undo) ||
+            !shogi_unmake_move(&fast, &fast_undo) ||
+            !same_active_position(&checked, position) ||
+            !same_active_position(&fast, position)) return fail(label);
+    }
+    return 0;
+}
+
 static uint64_t perft(const ShogiPosition *position, int depth) {
     if (depth == 0) return 1;
     ShogiMove moves[SHOGI_MAX_MOVES];
@@ -61,6 +98,7 @@ int main(void) {
     ShogiMove moves[SHOGI_MAX_MOVES];
     size_t count = shogi_generate_legal(&position, moves, SHOGI_MAX_MOVES);
     if (count != 30) return fail("initial position move count");
+    if (check_fast_generated_moves(&position, "fast initial moves") != 0) return 1;
     if (perft(&position, 2) != 900) return fail("initial perft depth 2");
     if (perft(&position, 3) != 25470) return fail("initial perft depth 3");
     if (!shogi_parse_and_make_move(&position, "7g7f")) return fail("initial pawn move");
@@ -99,6 +137,7 @@ int main(void) {
         check_undo_roundtrip(&undo_position, undo_move, "promotion move") != 0) return 1;
 
     if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 b P 1")) return fail("drop SFEN");
+    if (check_fast_generated_moves(&parsed, "fast drop moves") != 0) return 1;
     if (!shogi_parse_and_make_move(&parsed, "P*5e")) return fail("pawn drop");
     if (check_hash_roundtrip(&parsed, "drop move") != 0) return 1;
     if (!shogi_position_from_sfen(&undo_position, "4k4/9/9/9/9/9/9/9/4K4 b P 1") ||
@@ -111,6 +150,7 @@ int main(void) {
     if (shogi_parse_and_make_move(&parsed, "N*5a")) return fail("dead-rank drop rejection");
 
     if (!shogi_position_from_sfen(&parsed, "4r3k/9/9/9/9/9/9/4R4/4K4 b - 1")) return fail("pin SFEN");
+    if (check_fast_generated_moves(&parsed, "fast pinned moves") != 0) return 1;
     if (shogi_parse_and_make_move(&parsed, "5h4h")) return fail("self-check rejection");
 
     if (!shogi_position_from_sfen(&parsed, "4k4/9/2NG1GN2/9/9/9/9/9/4K4 b P 1")) return fail("uchifuzume SFEN");

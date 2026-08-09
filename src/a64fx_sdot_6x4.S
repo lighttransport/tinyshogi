@@ -8,9 +8,13 @@
     .global tinyshogi_a64fx_sdot_gemm_6x4
     .type tinyshogi_a64fx_sdot_gemm_6x4, %function
 tinyshogi_a64fx_sdot_gemm_6x4:
-    stp     x19, x20, [sp, #-48]!
+    stp     x19, x20, [sp, #-112]!
     stp     x21, x22, [sp, #16]
     stp     x23, x24, [sp, #32]
+    stp     d8, d9, [sp, #48]
+    stp     d10, d11, [sp, #64]
+    stp     d12, d13, [sp, #80]
+    stp     d14, d15, [sp, #96]
     ptrue   p0.b
     lsr     x19, x0, #2
     cbz     x19, .Lsdot64_done
@@ -155,8 +159,12 @@ tinyshogi_a64fx_sdot_gemm_6x4:
     st1w    {z22.s}, p0, [x22, #2, mul vl]
     st1w    {z23.s}, p0, [x22, #3, mul vl]
 .Lsdot64_done:
+    ldp     d14, d15, [sp, #96]
+    ldp     d12, d13, [sp, #80]
+    ldp     d10, d11, [sp, #64]
+    ldp     d8, d9, [sp, #48]
     ldp     x23, x24, [sp, #32]
     ldp     x21, x22, [sp, #16]
-    ldp     x19, x20, [sp], #48
+    ldp     x19, x20, [sp], #112
     ret
     .size tinyshogi_a64fx_sdot_gemm_6x4, .-tinyshogi_a64fx_sdot_gemm_6x4

@@ -287,6 +287,109 @@ The SIMD microbenchmark is available through Meson as `tinyshogi-simd-bench`;
 its kernel operation rates can be combined with Clair's cycle report for the
 A64FX kernel-efficiency target.
 
+For a native A64FX build with Fujitsu Compiler, use:
+
+```sh
+OUT_DIR=build-fcc-a64fx ./scripts/build_fcc_a64fx.sh
+taskset -c 12 build-fcc-a64fx/sdot-i8-gemm-bench 256 100000
+taskset -c 12 build-fcc-a64fx/sdot-i16-gemm-bench 256 100000
+taskset -c 12 build-fcc-a64fx/nnue-dot-bench 256 1000000
+taskset -c 12 build-fcc-a64fx/nnue-batch-bench 256 1000000
+taskset -c 12 build-fcc-a64fx/nnue-state-bench 500000
+taskset -c 12 build-fcc-a64fx/int-model-batch-bench
+```
+
+The script uses FCC's Clang frontend for the C11-atomic search object and the
+classic `-KSVE` frontend plus hand-written assembly for A64FX kernels. It also
+runs the engine, exact-rules, persistent-search, SIMD, NNUE, integer-batch,
+SVE UCT, and SDOT correctness tests.
+
+On an A64FX core held at 2.0 GHz, the packed 4×5 kernels measured as follows.
+One multiply and one add count as two integer operations. A 512-bit INT8 SDOT
+therefore gives a 512 GOPS/core peak, while the requested INT16 SDOT with INT64
+accumulation gives a 256 GOPS/core peak. At 2.2 GHz those peaks are 563.2 and
+281.6 GOPS/core, respectively.
+
+| Kernel | Measured | 2.0 GHz peak | Efficiency |
+|---|---:|---:|---:|
+| INT8 SDOT, 64 outputs × 5 positions, K=256 | 472.8 GOPS | 512 GOPS | 92.4% |
+| INT16 SDOT→INT64, 32 outputs × 5 positions, K=256 | 237.4 GOPS | 256 GOPS | 92.8% |
+| NNUE3 row-major INT16 SDOT→INT64, 5 positions × 32 heads, K=256 | 230.4 GOPS | 256 GOPS | 90.0% |
+| NNUE3 row-major INT16 SDOT→INT64, 6 positions × 32 heads, K=256 | 238.0 GOPS | 256 GOPS | 93.0% |
+| NNUE2 clipped output dot, one position, hidden=256 | 9.66 GOPS (53.0 ns) | 256 GOPS | 3.77% |
+| NNUE2 INT16 output tile, 8 positions, hidden=256 | 33.38 GOPS (15.3 ns/position) | 256 GOPS | 13.04% |
+
+The last row is intentionally reported separately: a single-output NNUE dot
+has only eight SDOT instructions, must load and clip/pack INT32 accumulators,
+and must horizontally reduce the result. It is latency and data-movement
+limited, so quoting the dense-GEMM 92% figure for it would be misleading.
+The move-synchronous NNUE2 path, including make, sparse accumulator update,
+evaluation, unmake, and a second evaluation, measured 1.236 million complete
+round trips/s (2.472 million evaluations/s, 809 ns/round trip). The batched
+TSM3 path measured 277,237 positions/s at batch 48. The eight-position NNUE
+output tile reuses one weight vector across eight pre-clipped activation rows
+and measured 65.2 million output positions/s. Neural MCTS now uses
+move-synchronous accumulators and batches five leaves into the row-major
+5×32 NNUE3 head tile. `LeafBatch 6` selects the 6×32 tile for experiments,
+but five is the play-throughput default on the representative corpus.
+For throughput-oriented data generation, `LeafBatch 12` amortizes lane setup,
+tree publication, and root restoration across twelve simulations and evaluates
+the leaves as two full 6×32 A64FX tiles. It intentionally trades latency and
+search diversity for position throughput. The built-in generator accepts
+`--leaf-batch 12`, and `scripts/nnue_iteration.py` uses 12 by default for its
+generation phase while leaving strength matches at five.
+
+The real-play A64FX gate uses one persistent USI process, 48 pinned workers,
+one-second moves, exact rules, and 32 opening, 32 middlegame, and 32 late-game
+positions. The fixture below is a native NNUE3 checkpoint trained from the
+checked-in match records (it is a performance fixture, not a strength model):
+
+```sh
+python3 tools/prepare_nnue.py selfplay-tiny-aobannue.jsonl \
+  selfplay-tiny-yaneuraou.jsonl -o build/perf/play.ndf1 --shuffle --seed 7
+cpu/train_nnue build/perf/play.ndf1 build/perf/play-v3.nnue \
+  5 0.01 32767 32
+python3 scripts/bench_a64fx_play.py --engine build-fcc-a64fx/tinyshogi \
+  --model build/perf/play-v3.nnue --positions-per-phase 32 \
+  --movetime-ms 1000 --threads 48 --a64fx-mode auto --leaf-batch 5
+```
+
+The checkpoint SHA-256 is
+`2b187ca84662d8f7001d8cf8a510012606737cd982d6665b4e7ad7715d5eacca`.
+On the frozen 96-position corpus, the pre-optimization binary measured 2.583M
+median nodes/s. The current five-leaf candidate measured 4.782M median nodes/s
+(opening 5.345M, middlegame 5.112M, late 4.142M), a 7.4% gain over the prior
+4.454M candidate. Neural lanes now restore their root NNUE accumulator with one
+1 KiB copy after each simulation instead of applying every sparse delta in
+reverse. Cloning only the active repetition-history prefix and persistent
+worker tree storage remain important supporting gains. These measurements do
+not replace an SPRT strength gate for a production checkpoint. Candidate and
+baseline matches can be gated with:
+
+The throughput-only 12-leaf configuration, including a per-lane exact cache
+for repeated HalfKP perspective-king accumulator rebuilds, measured 5.261M
+median nodes/s on the same corpus (opening 6.093M, middlegame 5.317M, late
+3.652M). This is 10.0% above the five-leaf candidate overall. Its late-game
+regression is why it is not the playing default.
+
+```sh
+python3 scripts/selfplay_match.py --tinyshogi build-fcc-a64fx/tinyshogi \
+  --yaneuraou /path/to/baseline/tinyshogi --tinyshogi-eval-model model.nnue \
+  --yaneuraou-eval-model model.nnue --games 1000 --movetime-ms 1000 \
+  --tinyshogi-threads 48 --opponent-threads 48 --output match.jsonl
+python3 scripts/sprt_result.py match.jsonl --elo0 -5 --elo1 0
+```
+
+Worker-local MCTS trees and evaluator accumulators remove shared-tree and
+evaluator-cache locks. With a synthetic, fully populated 90 MB hidden-256
+NNUE2 artifact (used to exercise the actual model path, not to measure playing
+strength), a ten-second start-position search at rollout depth 64 measured
+141 NPS on one core, 1,694 NPS on 12 cores, and 6,790 NPS on 48 cores. That is
+approximately 100% strong-scaling efficiency (minor superlinearity is timer
+noise). The rules benchmark is now 420.8 million cycles and 286.6 million
+instructions (down from 540.0 million cycles and 393.7 million instructions)
+after mutable make/unmake generation and target-centered attack detection.
+
 An integer-only CPU SGD baseline is available for reproducible calibration and
 small datasets:
 
@@ -302,9 +405,12 @@ useful for cross-machine reproducibility checks.
 
 ## Native NNUE training
 
-TinyShogi includes a native value-only NNUE path using a versioned `NNUE1`
-artifact, HalfKP-style sparse features, two perspective accumulators, and a
-default 256-unit hidden layer:
+TinyShogi includes a native value-only NNUE path using versioned `NNUE1` and
+`NNUE2` artifacts, HalfKP-style sparse features, and a default 256-unit hidden
+layer. `NNUE1` remains byte-compatible. `NNUE2` adds a clipped activation that
+can use A64FX INT16 SDOT with INT64 accumulation. Search workers maintain one
+move-synchronous perspective accumulator and apply exact normal, promotion,
+capture, hand, drop, and king-move deltas:
 
 ```sh
 python3 tools/prepare_nnue.py selfplay.jsonl -o selfplay.ndf1 --shuffle
@@ -312,6 +418,20 @@ make -C cpu train-nnue
 cpu/train_nnue selfplay.ndf1 model.nnue 5 0.01
 printf 'setoption name EvalModel value %s\n' "$PWD/model.nnue" | build/tinyshogi
 ```
+
+Pass an activation clip as the fifth training argument to emit `NNUE2`. For
+example, clip 127 is represented in quantized accumulator units:
+
+```sh
+cpu/train_nnue selfplay.ndf1 model-nnue2.nnue 5 0.01 127
+make -C cpu compare-nnue
+cpu/compare_nnue model.nnue model-nnue2.nnue selfplay.ndf1
+```
+
+`compare_nnue` reports centipawn MAE, p99 error, and best-legal-child agreement,
+and succeeds only for MAE ≤ 1 cp, p99 ≤ 4 cp, and top-move agreement ≥ 99.5%.
+Use held-out NDF1 data for this gate; performance results alone do not establish
+that a newly trained clipped model preserves playing strength.
 
 The converter accepts TinyShogi self-play records, older USI-match records with
 `result`, and records containing `teacher_value`. Bounded USI search can add

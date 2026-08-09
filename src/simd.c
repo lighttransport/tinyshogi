@@ -2,6 +2,12 @@
 
 #include <string.h>
 
+#if defined(__GNUC__) || defined(__FUJITSU)
+#define TS_MAYBE_UNUSED __attribute__((unused))
+#else
+#define TS_MAYBE_UNUSED
+#endif
+
 static int32_t dot_i8_scalar(const int8_t *left, const int8_t *right, size_t count) {
     int32_t result = 0;
     for (size_t i = 0; i < count; ++i) result += (int32_t)left[i] * right[i];
@@ -26,14 +32,15 @@ static void add_i16_i32_scalar(int32_t *accumulator, const int16_t *weights,
     for (size_t i = 0; i < count; ++i) accumulator[i] += sign * (int32_t)weights[i];
 }
 
-static void add_i16_i32_rows_scalar(int32_t *accumulator,
-                                    const int16_t *const *rows,
-                                    size_t row_count, size_t count, int sign) {
+static TS_MAYBE_UNUSED void add_i16_i32_rows_scalar(
+    int32_t *accumulator, const int16_t *const *rows,
+    size_t row_count, size_t count, int sign) {
     for (size_t row = 0; row < row_count; ++row)
         add_i16_i32_scalar(accumulator, rows[row], count, sign);
 }
 
-static void add_f32_scalar(float *accumulator, const float *values, size_t count) {
+static TS_MAYBE_UNUSED void add_f32_scalar(float *accumulator,
+                                           const float *values, size_t count) {
     for (size_t i = 0; i < count; ++i) accumulator[i] += values[i];
 }
 
@@ -91,12 +98,39 @@ static void add_f32_neon(float *accumulator, const float *values, size_t count) 
 #include <arm_sve.h>
 extern int64_t tinyshogi_nnue_dot_relu_i32_i16_sve_4way(const int32_t *,
                                                          const int16_t *, size_t);
+extern int64_t tinyshogi_nnue_dot_relu_i32_i16_sve_sdot(const int32_t *,
+                                                         const int16_t *, size_t);
+extern int64_t tinyshogi_nnue_dot_clip_i32_i16_sve_sdot(const int32_t *,
+                                                         const int16_t *, size_t,
+                                                         int32_t);
+extern int64_t tinyshogi_dot_i16_i16_sve_sdot(const int16_t *, const int16_t *, size_t);
+extern void tinyshogi_dot_i16_i16_4_sve_sdot(const int16_t *, const int16_t *,
+                                             size_t, size_t, int64_t *);
+extern void tinyshogi_dot_i16_i16_8_sve_sdot(const int16_t *, const int16_t *,
+                                             size_t, size_t, int64_t *);
+extern void tinyshogi_dot_i16_i16_batch8_sve_sdot(const int16_t *, size_t,
+                                                  const int16_t *, size_t,
+                                                  int64_t *);
+extern void tinyshogi_dot_i8_i8_8_sve_sdot(const int8_t *, const int8_t *,
+                                           size_t, size_t, int32_t *);
+extern void tinyshogi_a64fx_sdot_gemm_6x4(size_t, const int8_t *, const int8_t *,
+                                         int32_t *, size_t);
+extern void tinyshogi_a64fx_sdot_gemm_64x6(size_t, const int8_t *, const int8_t *,
+                                           int32_t *, size_t);
+extern void tinyshogi_a64fx_sdot_gemm_4x5(size_t, const int8_t *, const int8_t *,
+                                          int32_t *, size_t);
+extern void tinyshogi_a64fx_sdot_gemm_6x4_i16(size_t, const int16_t *, const int16_t *,
+                                             int64_t *, size_t);
+extern void tinyshogi_a64fx_sdot_gemm_5x4_i16(size_t, const int16_t *, const int16_t *,
+                                             int64_t *, size_t);
+extern void tinyshogi_a64fx_sdot_gemm_4x5_i16(size_t, const int16_t *, const int16_t *,
+                                             int64_t *, size_t);
 extern void tinyshogi_nnue_add_i16_i32_rows_sve(int32_t *, const int16_t *const *,
                                                 size_t, size_t, int);
 extern void tinyshogi_nnue_add_i16_i32_rows_sve_2way(int32_t *, const int16_t *const *,
                                                       size_t, size_t, int);
 extern void tinyshogi_nnue_add_i16_i32_rows_sve_4way(int32_t *, const int16_t *const *,
-                                                      size_t, size_t, int);
+                                                     size_t, size_t, int);
 extern void tinyshogi_nnue_add_i16_i32_rows_sve_4row(int32_t *, const int16_t *const *,
                                                       size_t, size_t, int);
 extern void tinyshogi_nnue_add_i16_i32_rows_sve_4exact(int32_t *, const int16_t *const *,
@@ -104,6 +138,12 @@ extern void tinyshogi_nnue_add_i16_i32_rows_sve_4exact(int32_t *, const int16_t 
 extern void tinyshogi_nnue_add_i16_i32_one_sve(int32_t *, const int16_t *, size_t, int);
 
 static int32_t dot_i8_sve(const int8_t *left, const int8_t *right, size_t count) {
+#if defined(__FUJITSU)
+    /* FCC 4.x exposes A64FX's SDOT instruction to assembly but its bundled
+     * SVE ACLE does not declare svdot_s32.  The throughput-sensitive 8-output
+     * and GEMM paths below already dispatch to hand-written SDOT kernels. */
+    return dot_i8_scalar(left, right, count);
+#else
     svint32_t sum0 = svdup_s32(0), sum1 = svdup_s32(0);
     svint32_t sum2 = svdup_s32(0), sum3 = svdup_s32(0);
     svint32_t sum4 = svdup_s32(0), sum5 = svdup_s32(0);
@@ -144,6 +184,7 @@ static int32_t dot_i8_sve(const int8_t *left, const int8_t *right, size_t count)
     total = svadd_s32_x(svptrue_b32(), total, sum6);
     total = svadd_s32_x(svptrue_b32(), total, sum7);
     return svaddv_s32(svptrue_b32(), total);
+#endif
 }
 
 /* A64FX has SVE1, so use widening loads and 32-bit multiplies rather than
@@ -304,6 +345,151 @@ int32_t tinyshogi_dot_i8_i8(const int8_t *left, const int8_t *right, size_t coun
 #endif
 }
 
+void tinyshogi_dot_i8_i8_8(const int8_t *left, const int8_t *weights,
+                           size_t stride, size_t count, int32_t out[8]) {
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 256U && (count & 255U) == 0U) {
+        tinyshogi_dot_i8_i8_8_sve_sdot(left, weights, stride, count, out);
+        return;
+    }
+#endif
+    for (unsigned lane = 0; lane < 8; ++lane)
+        out[lane] = dot_i8_scalar(left, weights + (size_t)lane * stride, count);
+}
+
+void tinyshogi_gemm_i8_6x64(size_t count, const int8_t *a, const int8_t *b,
+                            int32_t *c, size_t ldc) {
+    if (a == NULL || b == NULL || c == NULL || count == 0 || (count & 3U) != 0 || ldc < 64) return;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16U) {
+        tinyshogi_a64fx_sdot_gemm_6x4(count, a, b, c, ldc);
+        return;
+    }
+#endif
+    for (size_t row = 0; row < 6; ++row) {
+        for (size_t col = 0; col < 64; ++col) {
+            int32_t sum = 0;
+            for (size_t k = 0; k < count; ++k) {
+                size_t block = k >> 2, lane = k & 3U;
+                sum += (int32_t)a[block * 24U + row * 4U + lane] *
+                       (int32_t)b[block * 256U + col * 4U + lane];
+            }
+            c[row * ldc + col] = sum;
+        }
+    }
+}
+
+void tinyshogi_gemm_i8_64x6(size_t count, const int8_t *weights,
+                            const int8_t *positions, int32_t *output,
+                            size_t output_stride) {
+    if (weights == NULL || positions == NULL || output == NULL || count == 0 ||
+        (count & 3U) != 0U || output_stride < 64U) return;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16U) {
+        tinyshogi_a64fx_sdot_gemm_64x6(count, weights, positions, output,
+                                       output_stride);
+        return;
+    }
+#endif
+    for (size_t position = 0; position < 6U; ++position)
+        for (size_t unit = 0; unit < 64U; ++unit) {
+            int32_t sum = 0;
+            for (size_t k = 0; k < count; ++k) {
+                size_t block = k >> 2, lane = k & 3U;
+                sum += (int32_t)weights[block * 256U + unit * 4U + lane] *
+                       (int32_t)positions[block * 24U + position * 4U + lane];
+            }
+            output[position * output_stride + unit] = sum;
+        }
+}
+
+void tinyshogi_gemm_i8_64x5(size_t count, const int8_t *weights,
+                            const int8_t *positions, int32_t *output,
+                            size_t output_stride) {
+    if (weights == NULL || positions == NULL || output == NULL || count == 0 ||
+        (count & 3U) != 0U || output_stride < 64U) return;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16U) {
+        tinyshogi_a64fx_sdot_gemm_4x5(count, weights, positions, output,
+                                      output_stride);
+        return;
+    }
+#endif
+    for (size_t position = 0; position < 5U; ++position)
+        for (size_t unit = 0; unit < 64U; ++unit) {
+            int32_t sum = 0;
+            for (size_t k = 0; k < count; ++k) {
+                size_t block = k >> 2, lane = k & 3U;
+                sum += (int32_t)weights[block * 256U + unit * 4U + lane] *
+                       (int32_t)positions[block * 20U + position * 4U + lane];
+            }
+            output[position * output_stride + unit] = sum;
+        }
+}
+
+void tinyshogi_gemm_i16_6x32(size_t count, const int16_t *a, const int16_t *b,
+                             int64_t *c, size_t ldc) {
+    if (a == NULL || b == NULL || c == NULL || count == 0 || (count & 3U) != 0 || ldc < 32) return;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16U) {
+        tinyshogi_a64fx_sdot_gemm_6x4_i16(count, a, b, c, ldc);
+        return;
+    }
+#endif
+    for (size_t row = 0; row < 6; ++row) {
+        for (size_t col = 0; col < 32; ++col) {
+            int64_t sum = 0;
+            for (size_t k = 0; k < count; ++k) {
+                size_t block = k >> 2, lane = k & 3U;
+                sum += (int64_t)a[block * 24U + row * 4U + lane] *
+                       (int64_t)b[block * 128U + col * 4U + lane];
+            }
+            c[row * ldc + col] = sum;
+        }
+    }
+}
+
+void tinyshogi_nnue_head_gemm_i16_32x5(size_t count, const int16_t *weights,
+                                       const int16_t *positions, int64_t *output) {
+    if (weights == NULL || positions == NULL || output == NULL || count != 256U) return;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+#if defined(__FUJITSU)
+    /* FCC's A64FX target is fixed at VL=512; avoid an ACLE VL query in the
+     * hottest NNUE path (some FCC runtime environments report it late). */
+    tinyshogi_a64fx_sdot_gemm_5x4_i16(count, positions, weights, output, 32U);
+    return;
+#else
+    if (svcntw() == 16U) {
+        tinyshogi_a64fx_sdot_gemm_5x4_i16(count, positions, weights, output, 32U);
+        return;
+    }
+#endif
+#endif
+#if !defined(__aarch64__) || !defined(__ARM_FEATURE_SVE) || !defined(__FUJITSU)
+    for (size_t position = 0; position < 5U; ++position)
+        for (size_t head = 0; head < 32U; ++head) {
+            int64_t sum = 0;
+            for (size_t unit = 0; unit < count; ++unit) {
+                size_t block = unit >> 2U, lane = unit & 3U;
+                size_t vector = head >> 3U, vector_lane = head & 7U;
+                sum += (int64_t)weights[block * 128U + vector * 32U + vector_lane * 4U + lane] *
+                       positions[block * 20U + position * 4U + lane];
+            }
+            output[position * 32U + head] = sum;
+        }
+#endif
+}
+
+void tinyshogi_nnue_head_gemm_i16_6x32(size_t count, const int16_t *weights,
+                                       const int16_t *positions, int64_t *output) {
+    if (count != 256U || weights == NULL || positions == NULL || output == NULL)
+        return;
+    /* The NNUE3 packed weight layout is the 6x32 kernel's B layout; positions
+     * are packed as six groups of four values for each K step. */
+    tinyshogi_gemm_i16_6x32(count, positions, weights, output, 32U);
+}
+
+
 int32_t tinyshogi_dot_i16_i8(const int16_t *left, const int8_t *right, size_t count) {
 #if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
     return dot_i16_i8_sve(left, right, count);
@@ -314,14 +500,97 @@ int32_t tinyshogi_dot_i16_i8(const int16_t *left, const int8_t *right, size_t co
 #endif
 }
 
+int64_t tinyshogi_dot_i16_i16(const int16_t *left, const int16_t *right, size_t count) {
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 256U && (count & 255U) == 0U)
+        return tinyshogi_dot_i16_i16_sve_sdot(left, right, count);
+#endif
+    int64_t result = 0;
+    for (size_t i = 0; i < count; ++i)
+        result += (int64_t)left[i] * (int64_t)right[i];
+    return result;
+}
+
+void tinyshogi_dot_i16_i16_4(const int16_t *left, const int16_t *weights,
+                             size_t stride, size_t count, int64_t out[4]) {
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 256U && (count & 255U) == 0U) {
+        tinyshogi_dot_i16_i16_4_sve_sdot(left, weights, stride, count, out);
+        return;
+    }
+#endif
+    for (unsigned action = 0; action < 4; ++action) {
+        int64_t sum = 0;
+        const int16_t *row = weights + action * stride;
+        for (size_t i = 0; i < count; ++i) sum += (int64_t)left[i] * row[i];
+        out[action] = sum;
+    }
+}
+
+void tinyshogi_dot_i16_i16_8(const int16_t *left, const int16_t *weights,
+                             size_t stride, size_t count, int64_t out[8]) {
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 256U && (count & 255U) == 0U) {
+        tinyshogi_dot_i16_i16_8_sve_sdot(left, weights, stride, count, out);
+        return;
+    }
+#endif
+    for (unsigned action = 0; action < 8; ++action) {
+        int64_t sum = 0;
+        const int16_t *row = weights + action * stride;
+        for (size_t i = 0; i < count; ++i) sum += (int64_t)left[i] * row[i];
+        out[action] = sum;
+    }
+}
+
+void tinyshogi_dot_i16_i16_batch8(const int16_t *positions, size_t stride,
+                                  const int16_t *weights, size_t count,
+                                  int64_t out[8]) {
+    if (positions == NULL || weights == NULL || out == NULL || stride < count ||
+        count == 0) return;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 256U && (count & 31U) == 0U) {
+        tinyshogi_dot_i16_i16_batch8_sve_sdot(positions, stride, weights, count, out);
+        return;
+    }
+#endif
+    for (unsigned position = 0; position < 8; ++position)
+        out[position] = tinyshogi_dot_i16_i16(positions + (size_t)position * stride,
+                                              weights, count);
+}
+
 int64_t tinyshogi_dot_relu_i32_i16(const int32_t *left, const int16_t *right, size_t count) {
 #if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 1024U && (count & 255U) == 0U) {
+        int sdot_safe = 1;
+        for (size_t i = 0; i < count; ++i)
+            if (left[i] > INT16_MAX) { sdot_safe = 0; break; }
+        if (sdot_safe)
+            return tinyshogi_nnue_dot_relu_i32_i16_sve_sdot(left, right, count);
+    }
     if (svcntw() == 16 && (count & 63U) == 0U)
         return tinyshogi_nnue_dot_relu_i32_i16_sve_4way(left, right, count);
     return dot_relu_i32_i16_sve(left, right, count);
 #else
     return dot_relu_i32_i16_scalar(left, right, count);
 #endif
+}
+
+int64_t tinyshogi_dot_clip_i32_i16(const int32_t *left, const int16_t *right,
+                                   size_t count, int32_t clip) {
+    if (left == NULL || right == NULL || clip <= 0) return 0;
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+    if (svcntw() == 16 && count >= 256U && (count & 255U) == 0U && clip <= INT16_MAX)
+        return tinyshogi_nnue_dot_clip_i32_i16_sve_sdot(left, right, count, clip);
+#endif
+    int64_t result = 0;
+    for (size_t i = 0; i < count; ++i) {
+        int32_t activation = left[i];
+        if (activation < 0) activation = 0;
+        if (activation > clip) activation = clip;
+        result += (int64_t)activation * right[i];
+    }
+    return result;
 }
 
 void tinyshogi_add_i16_i32(int32_t *accumulator, const int16_t *weights,
@@ -380,6 +649,7 @@ void tinyshogi_add_i16_i32_rows(int32_t *accumulator,
     add_i16_i32_rows_scalar(accumulator, rows, row_count, count, sign);
 #endif
 }
+
 
 void tinyshogi_add_f32(float *accumulator, const float *values, size_t count) {
 #if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)

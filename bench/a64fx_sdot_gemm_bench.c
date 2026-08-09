@@ -1,11 +1,24 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "../src/a64fx_sdot_gemm.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 enum { MR = 64, NR = 5 };
+
+static double seconds(void) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (double)now.tv_sec + (double)now.tv_nsec * 1.0e-9;
+}
+
+static void *allocate(size_t bytes) {
+    return aligned_alloc(256U, (bytes + 255U) & ~(size_t)255U);
+}
 
 static void pack_a(int8_t *dst, const int8_t *src, int K) {
     for (int step = 0; step < K / 4; ++step)
@@ -33,10 +46,11 @@ int main(int argc, char **argv) {
     int K = argc > 1 ? atoi(argv[1]) : 256;
     unsigned rounds = argc > 2 ? (unsigned)atoi(argv[2]) : 1000;
     if (K <= 0 || (K & 3)) return 2;
-    int8_t *a = malloc((size_t)MR * K), *b = malloc((size_t)NR * K);
-    int8_t *ap = malloc((size_t)K * MR), *bp = malloc((size_t)K * NR);
-    int32_t *c = calloc((size_t)MR * NR, sizeof(*c));
+    int8_t *a = allocate((size_t)MR * K), *b = allocate((size_t)NR * K);
+    int8_t *ap = allocate((size_t)K * MR), *bp = allocate((size_t)K * NR);
+    int32_t *c = allocate((size_t)MR * NR * sizeof(*c));
     if (!a || !b || !ap || !bp || !c) return 1;
+    memset(c, 0, (size_t)MR * NR * sizeof(*c));
     for (int i = 0; i < MR * K; ++i) a[i] = (int8_t)(i % 127 - 63);
     for (int i = 0; i < NR * K; ++i) b[i] = (int8_t)(i % 61 - 30);
     pack_a(ap, a, K); pack_b(bp, b, K);
@@ -52,9 +66,15 @@ int main(int argc, char **argv) {
         return 1;
     }
     memset(c, 0, (size_t)MR * NR * sizeof(*c));
+    for (unsigned i = 0; i < 100; ++i)
+        tinyshogi_a64fx_sdot_gemm_4x5(K, ap, bp, c, MR);
+    double begin = seconds();
     for (unsigned i = 0; i < rounds; ++i)
         tinyshogi_a64fx_sdot_gemm_4x5(K, ap, bp, c, MR);
-    printf("PASS checksum=%d rounds=%u\n", c[0], rounds);
+    double elapsed = seconds() - begin;
+    double giops = 2.0 * MR * NR * K * rounds / elapsed / 1.0e9;
+    printf("PASS checksum=%d rounds=%u GOPS=%.1f efficiency_2GHz=%.1f%%\n",
+           c[0], rounds, giops, giops / 512.0 * 100.0);
     free(a); free(b); free(ap); free(bp); free(c);
     return 0;
 }

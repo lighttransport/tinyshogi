@@ -19,6 +19,14 @@ typedef enum {
     SEARCH_MODE_ALPHABETA = 1
 } SearchMode;
 
+typedef enum {
+    SEARCH_MCTS_AUTO = 0,
+    SEARCH_MCTS_ROLLOUT = 1,
+    SEARCH_MCTS_NEURAL = 2
+} SearchMctsPolicy;
+
+typedef struct SearchContext SearchContext;
+
 typedef struct {
     uint64_t nodes;
     int depth;
@@ -46,6 +54,12 @@ typedef struct {
     unsigned exploration_milli;
     unsigned multi_pv;
     const ShogiEvaluator *evaluator;
+    const ShogiEvaluator *evaluator_replicas;
+    unsigned evaluator_replica_count;
+    SearchMctsPolicy mcts_policy;
+    unsigned leaf_batch_size;
+    bool a64fx_uct;
+    SearchContext *context;
 } SearchOptions;
 
 typedef struct {
@@ -79,6 +93,11 @@ typedef struct {
 } SearchPolicyEntry;
 
 typedef struct SearchJob SearchJob;
+
+/* Retains per-worker tree storage between sequential searches.  A context may
+ * have only one active SearchJob at a time. */
+SearchContext *search_context_create(void);
+void search_context_destroy(SearchContext *context);
 
 SearchJob *search_start(const ShogiPosition *position,
                         const SearchLimits *limits,

@@ -87,6 +87,7 @@ bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out
 
 bool shogi_make_move(ShogiPosition *position, ShogiMove move);
 bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *undo);
+bool shogi_make_move_undo_fast(ShogiPosition *position, ShogiMove move, ShogiUndo *undo);
 bool shogi_unmake_move(ShogiPosition *position, const ShogiUndo *undo);
 bool shogi_parse_usi_move(const char *text, ShogiMove *move);
 bool shogi_move_to_usi(ShogiMove move, char *out, size_t out_size);
@@ -95,13 +96,27 @@ bool shogi_parse_and_make_move(ShogiPosition *position, const char *text);
 size_t shogi_generate_legal(const ShogiPosition *position,
                             ShogiMove *moves,
                             size_t capacity);
+/* Generate legal moves by applying and undoing candidates directly.  The
+ * position is restored before return; search uses this to avoid copying the
+ * large repetition-history arrays at every node. */
+size_t shogi_generate_legal_mut(ShogiPosition *position,
+                                ShogiMove *moves,
+                                size_t capacity);
 size_t shogi_generate_pseudo(const ShogiPosition *position,
                               ShogiMove *moves,
                               size_t capacity);
+size_t shogi_generate_pseudo_for_color(const ShogiPosition *position,
+                                       ShogiColor color,
+                                       ShogiMove *moves,
+                                       size_t capacity);
 ShogiResult shogi_game_result_with_moves(const ShogiPosition *position,
                                          ShogiMove *moves,
                                          size_t capacity,
                                          size_t *move_count);
+ShogiResult shogi_game_result_with_moves_mut(ShogiPosition *position,
+                                             ShogiMove *moves,
+                                             size_t capacity,
+                                             size_t *move_count);
 bool shogi_is_in_check(const ShogiPosition *position, ShogiColor color);
 ShogiResult shogi_game_result(const ShogiPosition *position);
 bool shogi_is_declaration_win(const ShogiPosition *position, ShogiColor color);

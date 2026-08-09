@@ -100,6 +100,10 @@ def parse_args():
     parser.add_argument("--yaneuraou-eval-model", type=Path,
                         help="EvalModel checkpoint when the opponent is TinyShogi")
     parser.add_argument("--games", type=int, default=2)
+    parser.add_argument("--tinyshogi-threads", type=int, default=1)
+    parser.add_argument("--opponent-threads", type=int, default=1)
+    parser.add_argument("--tinyshogi-leaf-batch", type=int, default=5)
+    parser.add_argument("--opponent-leaf-batch", type=int, default=5)
     parser.add_argument("--nodes", type=int, default=256)
     parser.add_argument("--movetime-ms", type=int)
     parser.add_argument("--max-plies", type=int, default=512)
@@ -111,8 +115,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.games < 1 or args.max_plies < 1 or args.nodes < 1:
-        raise SystemExit("games, max-plies, and nodes must be positive")
+    if (args.games < 1 or args.max_plies < 1 or args.nodes < 1 or
+            args.tinyshogi_threads < 1 or args.opponent_threads < 1 or
+            not 1 <= args.tinyshogi_leaf_batch <= 12 or
+            not 1 <= args.opponent_leaf_batch <= 12):
+        raise SystemExit("games, max-plies, nodes, and thread counts must be positive")
     if args.movetime_ms is not None and args.movetime_ms < 1:
         raise SystemExit("movetime-ms must be positive")
     for path in (args.tinyshogi, args.yaneuraou):
@@ -120,18 +127,24 @@ def main():
             raise SystemExit(f"executable not found or not executable: {path}")
 
     limit = f"movetime {args.movetime_ms}" if args.movetime_ms else f"nodes {args.nodes}"
-    tiny_options = {"Threads": 1, "Seed": args.seed, "MaxTreeNodes": 100000}
+    tiny_options = {"Threads": args.tinyshogi_threads, "Seed": args.seed,
+                    "MaxTreeNodes": 100000}
     if args.tinyshogi_eval_plugin is not None:
         tiny_options["EvalPlugin"] = args.tinyshogi_eval_plugin
     if args.tinyshogi_eval_model is not None:
         tiny_options["EvalModel"] = args.tinyshogi_eval_model
+        tiny_options["MCTSMode"] = "neural"
+        tiny_options["LeafBatch"] = args.tinyshogi_leaf_batch
     yaneura_options = {
-        "Threads": 1, "USI_Hash": 64, "USI_OwnBook": "false", "BookFile": "no_book"
+        "Threads": args.opponent_threads, "USI_Hash": 64,
+        "USI_OwnBook": "false", "BookFile": "no_book"
     }
     if args.yaneuraou_eval_dir is not None:
         yaneura_options["EvalDir"] = args.yaneuraou_eval_dir
     if args.yaneuraou_eval_model is not None:
         yaneura_options["EvalModel"] = args.yaneuraou_eval_model
+        yaneura_options["MCTSMode"] = "neural"
+        yaneura_options["LeafBatch"] = args.opponent_leaf_batch
     tiny = yaneura = None
     records = []
     results = []
