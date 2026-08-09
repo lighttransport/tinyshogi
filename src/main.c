@@ -3,6 +3,7 @@
 #include "search.h"
 #include "shogi.h"
 #include "nnue.h"
+#include "nnue_data.h"
 #include "thread.h"
 
 #include <errno.h>
@@ -602,6 +603,7 @@ static bool selftest(void) {
 
 typedef struct {
     char sfen[512];
+    ShogiNdfRecord record;
     ShogiColor side;
     ShogiMove selected;
     SearchPolicyEntry policy[SHOGI_MAX_MOVES];
@@ -663,8 +665,9 @@ static int selfplay_result_value(ShogiResult result, ShogiColor side) {
 static bool run_selfplay(int argc, char **argv) {
     unsigned games = 1, simulations = 256, max_plies = 512;
     unsigned threads = 1, temperature_milli = 1000, cutoff = 30, leaf_batch = 5;
-    uint64_t seed = 1;
+    uint64_t seed = 1, game_offset = 0;
     const char *output_path = "selfplay.jsonl";
+    const char *output_format = "jsonl";
     const char *eval_model_path = NULL;
     for (int index = 2; index < argc; ++index) {
         uint64_t value;
@@ -678,6 +681,10 @@ static bool run_selfplay(int argc, char **argv) {
             eval_model_path = argv[++index];
             continue;
         }
+        if (strcmp(key, "--output-format") == 0) {
+            output_format = argv[++index];
+            continue;
+        }
         if (!selfplay_option(key, argv[index + 1], &value)) return false;
         if (strcmp(key, "--games") == 0) games = (unsigned)value;
         else if (strcmp(key, "--simulations") == 0) simulations = (unsigned)value;
@@ -687,11 +694,14 @@ static bool run_selfplay(int argc, char **argv) {
         else if (strcmp(key, "--temperature-cutoff") == 0) cutoff = (unsigned)value;
         else if (strcmp(key, "--max-plies") == 0) max_plies = (unsigned)value;
         else if (strcmp(key, "--leaf-batch") == 0) leaf_batch = (unsigned)value;
+        else if (strcmp(key, "--game-offset") == 0) game_offset = value;
         else return false;
         ++index;
     }
     if (games == 0 || simulations == 0 || max_plies == 0 || threads == 0 ||
         leaf_batch == 0 || leaf_batch > 12U) return false;
+    bool ndf_output = strcmp(output_format, "ndf1") == 0;
+    if (!ndf_output && strcmp(output_format, "jsonl") != 0) return false;
     ShogiNnueModel eval_model;
     ShogiEvaluator evaluator;
     shogi_nnue_model_init(&eval_model);
@@ -704,28 +714,44 @@ static bool run_selfplay(int argc, char **argv) {
             return false;
         }
     }
-    FILE *output = fopen(output_path, "w");
+    char *partial_path = NULL;
+    const char *open_path = output_path;
+    if (ndf_output) {
+        size_t length = strlen(output_path);
+        partial_path = malloc(length + 9U);
+        if (partial_path == NULL) {
+            shogi_evaluator_destroy(&evaluator); shogi_nnue_model_destroy(&eval_model);
+            return false;
+        }
+        snprintf(partial_path, length + 9U, "%s.partial", output_path);
+        open_path = partial_path;
+    }
+    FILE *output = fopen(open_path, ndf_output ? "wb+" : "w");
     if (output == NULL) {
+        free(partial_path);
         shogi_evaluator_destroy(&evaluator); shogi_nnue_model_destroy(&eval_model); return false;
     }
-    SelfplaySample *samples = calloc(max_plies, sizeof(*samples));
-    if (samples == NULL) {
-        fclose(output); shogi_evaluator_destroy(&evaluator); shogi_nnue_model_destroy(&eval_model); return false;
-    }
+    SelfplaySample *samples = NULL;
+    if (ndf_output && !shogi_ndf_write_header(output, 0)) goto selfplay_fail;
+    samples = calloc(max_plies, sizeof(*samples));
+    if (samples == NULL) goto selfplay_fail;
     for (unsigned game = 0; game < games; ++game) {
         ShogiPosition position;
         shogi_position_start(&position);
         size_t sample_count = 0;
         ShogiResult result = SHOGI_RESULT_ONGOING;
-        uint64_t rng = seed + (uint64_t)game * UINT64_C(0x9e3779b97f4a7c15);
+        uint64_t game_id = game_offset + game;
+        uint64_t rng = seed + game_id * UINT64_C(0x9e3779b97f4a7c15);
         for (unsigned ply = 0; ply < max_plies && result == SHOGI_RESULT_ONGOING; ++ply) {
             if (!shogi_position_to_sfen(&position, samples[sample_count].sfen,
                                         sizeof(samples[sample_count].sfen))) goto selfplay_fail;
             samples[sample_count].side = position.side;
+            shogi_ndf_record_from_position(&samples[sample_count].record,
+                                           &position, 0, 0);
             SearchOptions options = {
                 .mode = SEARCH_MODE_MCTS,
                 .threads = threads,
-                .seed = seed + ply + (uint64_t)game * 1000003U,
+                .seed = seed + ply + game_id * 1000003U,
                 .seed_auto = false,
                 .max_tree_nodes = 200000,
                 .rollout_depth = 64,
@@ -759,10 +785,17 @@ static bool run_selfplay(int argc, char **argv) {
         if (result == SHOGI_RESULT_ONGOING) result = SHOGI_RESULT_DRAW;
         for (size_t sample = 0; sample < sample_count; ++sample) {
             int value = selfplay_result_value(result, samples[sample].side);
+            if (ndf_output) {
+                samples[sample].record.value = (int16_t)(value * 1000);
+                if (fwrite(&samples[sample].record, sizeof(samples[sample].record),
+                           1, output) != 1) goto selfplay_fail;
+                continue;
+            }
             char selected[16];
             if (!shogi_move_to_usi(samples[sample].selected, selected, sizeof(selected))) continue;
-            fprintf(output, "{\"version\":1,\"game\":%u,\"ply\":%zu,\"sfen\":\"%s\",\"move\":\"%s\",\"value\":%d,\"policy\":[",
-                    game, sample, samples[sample].sfen, selected, value);
+            fprintf(output, "{\"version\":1,\"game\":%llu,\"ply\":%zu,\"sfen\":\"%s\",\"move\":\"%s\",\"value\":%d,\"policy\":[",
+                    (unsigned long long)game_id, sample, samples[sample].sfen,
+                    selected, value);
             for (size_t entry = 0; entry < samples[sample].policy_count; ++entry) {
                 char move[16];
                 if (entry != 0) fputc(',', output);
@@ -775,15 +808,30 @@ static bool run_selfplay(int argc, char **argv) {
         fprintf(stderr, "selfplay game %u/%u result %d plies %zu\n", game + 1, games,
                 result, sample_count);
     }
+    if (ndf_output) {
+        long end = ftell(output);
+        uint64_t count = end < 16 ? 0U : ((uint64_t)end - 16U) / sizeof(ShogiNdfRecord);
+        bool finalized = count <= UINT32_MAX && fseek(output, 0, SEEK_SET) == 0 &&
+            shogi_ndf_write_header(output, (uint32_t)count) && fflush(output) == 0 &&
+            fsync(fileno(output)) == 0;
+        if (fclose(output) != 0) finalized = false;
+        output = NULL;
+        if (!finalized || rename(partial_path, output_path) != 0) goto selfplay_fail;
+    } else if (fclose(output) != 0) {
+        output = NULL;
+        goto selfplay_fail;
+    } else output = NULL;
     free(samples);
-    fclose(output);
+    free(partial_path);
     shogi_evaluator_destroy(&evaluator);
     shogi_nnue_model_destroy(&eval_model);
     return true;
 
 selfplay_fail:
     free(samples);
-    fclose(output);
+    if (output != NULL) fclose(output);
+    if (partial_path != NULL) remove(partial_path);
+    free(partial_path);
     shogi_evaluator_destroy(&evaluator);
     shogi_nnue_model_destroy(&eval_model);
     return false;

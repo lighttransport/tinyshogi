@@ -409,8 +409,8 @@ useful for cross-machine reproducibility checks.
 ## Native NNUE training
 
 TinyShogi includes a native value-only NNUE path using versioned `NNUE1` and
-`NNUE2` artifacts, HalfKP-style sparse features, and a default 256-unit hidden
-layer. `NNUE1` remains byte-compatible. `NNUE2` adds a clipped activation that
+`NNUE2`/`NNUE3` artifacts, HalfKP-style sparse features, and a default 256-unit
+hidden layer. `NNUE1` remains byte-compatible. `NNUE2` adds a clipped activation that
 can use A64FX INT16 SDOT with INT64 accumulation. Search workers maintain one
 move-synchronous perspective accumulator and apply exact normal, promotion,
 capture, hand, drop, and king-move deltas:
@@ -420,6 +420,27 @@ python3 tools/prepare_nnue.py selfplay.jsonl -o selfplay.ndf1 --shuffle
 make -C cpu train-nnue
 cpu/train_nnue selfplay.ndf1 model.nnue 5 0.01
 printf 'setoption name EvalModel value %s\n' "$PWD/model.nnue" | build/tinyshogi
+```
+
+On an A64FX PJM allocation, the distributed trainer uses one MPI rank and 48
+OpenMP workers per node. Self-play writes fixed-size NDF1 records directly to
+each node's `/local` filesystem; training routes king buckets once, synchronizes
+the replicated hand and dense gradients every global batch, and keeps sparse
+board-feature updates on their owner rank. The update is rank-count independent:
+
+```sh
+./scripts/build_fcc_a64fx.sh
+scripts/train_a64fx.py --nodes 12 --games 12000 --simulations 100000 \
+  --model current.nnue --output-dir runs/generation-001 --archive-data
+```
+
+Use `--global-batch`, `--learning-rate`, `--momentum`, and `--epochs` to tune
+the exact synchronous momentum-SGD run. `--archive-data` is optional because
+copying large shards back to the shared filesystem can dominate an iteration.
+Shards can be consolidated without decoding records:
+
+```sh
+tools/merge_ndf.py --output generation.ndf1 runs/generation-001/data/rank-*.ndf1
 ```
 
 Pass an activation clip as the fifth training argument to emit `NNUE2`. For

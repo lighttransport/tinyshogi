@@ -67,6 +67,7 @@ eval/
 cpu/train_int
 cpu/eval_int
 cpu/train_nnue
+cpu/train_nnue_mpi
 cpu/eval_nnue
 cpu/compare_nnue
 cpu/brute_server
