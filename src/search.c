@@ -51,6 +51,14 @@ typedef struct {
 } EvalCacheEntry;
 
 typedef struct {
+    uint64_t key;
+    int16_t score;
+    int8_t depth;
+    uint8_t bound;
+    ShogiMove move;
+} AlphaBetaHashEntry;
+
+typedef struct {
     ShogiMove move;
     TreeNode *node;
     uint64_t visits;
@@ -108,6 +116,11 @@ struct SearchJob {
     uint64_t start_ns;
     ShogiColor root_side;
     bool neural_mcts;
+    AlphaBetaHashEntry *ab_hash;
+    size_t ab_hash_capacity;
+    ShogiMove ab_best_move;
+    int ab_best_score;
+    int ab_completed_depth;
     float exploration_constant;
     SearchResult result;
     bool joined;
@@ -770,11 +783,40 @@ static double run_simulation(WorkerContext *worker, ShogiPosition *position,
     return value;
 }
 
+enum { AB_EXACT = 1, AB_LOWER = 2, AB_UPPER = 3 };
+
+static AlphaBetaHashEntry *ab_entry(SearchJob *job, uint64_t key) {
+    if (job->ab_hash == NULL || job->ab_hash_capacity == 0) return NULL;
+    return &job->ab_hash[key & (job->ab_hash_capacity - 1U)];
+}
+
+static int ab_move_order(const ShogiPosition *position, ShogiMove move,
+                         ShogiMove tt_move) {
+    int score = same_search_move(move, tt_move) ? 10000000 : 0;
+    if (move.from != SHOGI_SQ_NONE && position->board[move.to] != SHOGI_EMPTY)
+        score += 10000 + piece_value(shogi_piece_type(position->board[move.to]));
+    if (move.promote) score += 500;
+    if (move.from == SHOGI_SQ_NONE) score += 100;
+    return score;
+}
+
 static int alpha_beta(WorkerContext *worker, ShogiPosition *position, int depth,
                       int alpha, int beta) {
     SearchJob *job = worker->job;
+    int alpha_original = alpha;
     if (should_stop(job)) return static_evaluation(worker, position, job->root_side);
     atomic_fetch_add_explicit(&job->simulations, 1, memory_order_relaxed);
+    AlphaBetaHashEntry *entry = ab_entry(job, position->hash);
+    ShogiMove tt_move = {SHOGI_SQ_NONE, SHOGI_SQ_NONE, 0, 0, 0};
+    if (entry != NULL && entry->key == position->hash) {
+        tt_move = entry->move;
+        if (entry->depth >= depth) {
+            if (entry->bound == AB_EXACT) return entry->score;
+            if (entry->bound == AB_LOWER && entry->score > alpha) alpha = entry->score;
+            if (entry->bound == AB_UPPER && entry->score < beta) beta = entry->score;
+            if (alpha >= beta) return entry->score;
+        }
+    }
     ShogiMove moves[SHOGI_MAX_MOVES];
     size_t count = 0;
     ShogiResult result = shogi_game_result_with_moves_mut(position, moves,
@@ -785,9 +827,26 @@ static int alpha_beta(WorkerContext *worker, ShogiPosition *position, int depth,
             SHOGI_RESULT_BLACK_WIN : SHOGI_RESULT_WHITE_WIN;
         return result == win ? 3000 : -3000;
     }
-    if (depth <= 0 || count == 0) return static_evaluation(worker, position, job->root_side);
     bool maximizing = position->side == job->root_side;
+    if (depth <= 0 || count == 0) {
+        int score = depth <= 0 ? quiescence_search(worker, position, job->root_side,
+                                                    job->options.quiescence_depth,
+                                                    alpha, beta) : static_evaluation(worker, position, job->root_side);
+        if (entry != NULL) *entry = (AlphaBetaHashEntry){position->hash, (int16_t)score,
+            (int8_t)depth, AB_EXACT, {SHOGI_SQ_NONE, SHOGI_SQ_NONE, 0, 0, 0}};
+        return score;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        size_t best = i;
+        int best_order = ab_move_order(position, moves[i], tt_move);
+        for (size_t j = i + 1; j < count; ++j) {
+            int order = ab_move_order(position, moves[j], tt_move);
+            if (order > best_order) { best = j; best_order = order; }
+        }
+        if (best != i) { ShogiMove swap = moves[i]; moves[i] = moves[best]; moves[best] = swap; }
+    }
     int best = maximizing ? -30000 : 30000;
+    ShogiMove best_move = moves[0];
     for (size_t i = 0; i < count; ++i) {
         if (should_stop(job)) break;
         ShogiUndo undo;
@@ -796,31 +855,43 @@ static int alpha_beta(WorkerContext *worker, ShogiPosition *position, int depth,
         (void)worker_unmake_move(worker, position, &undo);
         if (maximizing) {
             if (score > best) best = score;
+            if (score == best) best_move = moves[i];
             if (best > alpha) alpha = best;
         } else {
             if (score < best) best = score;
+            if (score == best) best_move = moves[i];
             if (best < beta) beta = best;
         }
         if (alpha >= beta) break;
     }
-    return best == (maximizing ? -30000 : 30000) ?
-        static_evaluation(worker, position, job->root_side) : best;
+    if (best == (maximizing ? -30000 : 30000)) best = static_evaluation(worker, position, job->root_side);
+    if (entry != NULL) {
+        uint8_t bound = best <= alpha_original ? AB_UPPER : best >= beta ? AB_LOWER : AB_EXACT;
+        *entry = (AlphaBetaHashEntry){position->hash, (int16_t)best, (int8_t)depth, bound, best_move};
+    }
+    return best;
 }
 
 static void run_alpha_beta(WorkerContext *worker) {
     SearchJob *job = worker->job;
-    int depth = job->limits.depth > 0 ? job->limits.depth : 4;
-    for (unsigned i = 0; i < job->root->move_count; ++i) {
-        if (should_stop(job)) break;
-        ShogiPosition next = job->root_position;
-        ShogiUndo undo;
-        if (!worker_make_move(worker, &next, job->root->children[i].move, &undo)) continue;
-        int score = alpha_beta(worker, &next, depth - 1, -30000, 30000);
-        (void)worker_unmake_move(worker, &next, &undo);
-        if (score > 1000) score = 1000;
-        if (score < -1000) score = -1000;
-        job->root->children[i].visits = 1;
-        job->root->children[i].value = (uint64_t)(score + 1000) * VALUE_SCALE / 2000U;
+    int max_depth = job->limits.depth > 0 ? job->limits.depth : 64;
+    for (int depth = 1; depth <= max_depth && !should_stop(job); ++depth) {
+        int alpha = -30000, best_score = -30000; ShogiMove best_move = job->root->children[0].move;
+        bool completed = true;
+        for (unsigned i = 0; i < job->root->move_count; ++i) {
+            if (should_stop(job)) { completed = false; break; }
+            ShogiPosition next = job->root_position; ShogiUndo undo;
+            if (!worker_make_move(worker, &next, job->root->children[i].move, &undo)) continue;
+            int score = alpha_beta(worker, &next, depth - 1, alpha, 30000);
+            (void)worker_unmake_move(worker, &next, &undo);
+            if (score > best_score) { best_score = score; best_move = job->root->children[i].move; }
+            if (score > alpha) alpha = score;
+            job->root->children[i].visits = 1;
+            int bounded = score > 1000 ? 1000 : score < -1000 ? -1000 : score;
+            job->root->children[i].value = (uint64_t)(bounded + 1000) * VALUE_SCALE / 2000U;
+        }
+        if (!completed) break;
+        job->ab_best_move = best_move; job->ab_best_score = best_score; job->ab_completed_depth = depth;
     }
 }
 
@@ -1382,6 +1453,15 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
         free(job);
         return NULL;
     }
+    if (job->options.mode == SEARCH_MODE_ALPHABETA) {
+        job->ab_hash_capacity = 1U << 18;
+        job->ab_hash = calloc(job->ab_hash_capacity, sizeof(*job->ab_hash));
+        if (job->ab_hash == NULL) {
+            tree_destroy(&job->tree);
+            free(job);
+            return NULL;
+        }
+    }
     job->root = tree_new_node(&job->tree, position->hash);
     ShogiMove moves[SHOGI_MAX_MOVES];
     size_t move_count = shogi_generate_legal(position, moves, SHOGI_MAX_MOVES);
@@ -1534,6 +1614,7 @@ void search_destroy(SearchJob *job) {
         search_join(job, NULL);
     }
     free(job->workers);
+    free(job->ab_hash);
     tree_destroy(&job->tree);
     free(job);
 }
