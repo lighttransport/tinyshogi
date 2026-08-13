@@ -304,7 +304,8 @@ static void print_search_info(const Application *application) {
     SearchLine lines[SEARCH_MAX_MULTIPV];
     size_t line_count = search_get_root_lines(application->job, lines, application->options.multi_pv);
     if (line_count == 0) {
-        printf("info nodes %llu nps %llu time %llu multipv 1 score cp %d",
+        printf("info depth %d nodes %llu nps %llu time %llu multipv 1 score cp %d",
+               progress.depth,
                (unsigned long long)progress.nodes,
                (unsigned long long)progress.nps,
                (unsigned long long)progress.time_ms,
@@ -319,7 +320,8 @@ static void print_search_info(const Application *application) {
     }
     for (size_t index = 0; index < line_count; ++index) {
         int score = lines[index].score_cp;
-        printf("info nodes %llu nps %llu time %llu multipv %zu score cp %d",
+        printf("info depth %d nodes %llu nps %llu time %llu multipv %zu score cp %d",
+               progress.depth,
                (unsigned long long)progress.nodes,
                (unsigned long long)progress.nps,
                (unsigned long long)progress.time_ms,
@@ -344,7 +346,10 @@ static void finish_job(Application *application, bool emit_bestmove) {
     if (!search_is_done(application->job)) search_request_stop(application->job);
     SearchResult result;
     search_join(application->job, &result);
-    if (emit_bestmove) print_bestmove(&result);
+    if (emit_bestmove) {
+        print_search_info(application);
+        print_bestmove(&result);
+    }
     search_destroy(application->job);
     application->job = NULL;
 }
@@ -885,6 +890,29 @@ static void process_line(Application *application, char *line) {
         char sfen[512];
         finish_job(application, false);
         if (shogi_position_to_sfen(&application->position, sfen, sizeof(sfen))) puts(sfen);
+        fflush(stdout);
+    } else if (strcmp(command, "eval") == 0) {
+        finish_job(application, false);
+        int score = shogi_evaluator_score(application->options.evaluator,
+                                          &application->position,
+                                          application->position.side);
+        printf("info string eval cp %d\n", score);
+        fflush(stdout);
+    } else if (strcmp(command, "evalmoves") == 0) {
+        finish_job(application, false);
+        ShogiMove moves[SHOGI_MAX_MOVES];
+        size_t count = shogi_generate_legal(&application->position, moves,
+                                            SHOGI_MAX_MOVES);
+        for (size_t index = 0; index < count; ++index) {
+            ShogiPosition next = application->position;
+            if (!shogi_make_move(&next, moves[index])) continue;
+            int score = -shogi_evaluator_score(application->options.evaluator,
+                                               &next, next.side);
+            char move[16];
+            if (shogi_move_to_usi(moves[index], move, sizeof(move)))
+                printf("info string evalmove %s cp %d\n", move, score);
+        }
+        puts("info string evalmoves done");
         fflush(stdout);
     }
 }

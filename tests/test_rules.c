@@ -153,6 +153,12 @@ int main(void) {
     if (check_fast_generated_moves(&parsed, "fast pinned moves") != 0) return 1;
     if (shogi_parse_and_make_move(&parsed, "5h4h")) return fail("self-check rejection");
 
+    if (!shogi_position_from_sfen(&parsed,
+            "4k4/9/9/9/9/5+b3/4R4/3K5/9 b - 1"))
+        return fail("diagonal pin SFEN");
+    if (shogi_parse_and_make_move(&parsed, "5g5i"))
+        return fail("opposite-ray pinned move rejection");
+
     if (!shogi_position_from_sfen(&parsed, "4k4/9/2NG1GN2/9/9/9/9/9/4K4 b P 1")) return fail("uchifuzume SFEN");
     if (shogi_parse_and_make_move(&parsed, "P*5b")) return fail("uchifuzume rejection");
 

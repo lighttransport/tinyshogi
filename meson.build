@@ -17,7 +17,8 @@ engine_sources = files(
   'src/thread_posix.c'
 )
 
-tinyshogi = executable('tinyshogi', engine_sources, dependencies : [threads_dep, math_dep, dl_dep], install : false)
+tinyshogi = executable('tinyshogi', engine_sources, dependencies : [threads_dep, math_dep, dl_dep],
+  link_args : ['-rdynamic'], install : false)
 test('selftest', tinyshogi, args : ['--selftest'])
 
 rules_test = executable('tinyshogi-rules-test', 'tests/test_rules.c',

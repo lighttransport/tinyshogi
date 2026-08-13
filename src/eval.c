@@ -122,7 +122,8 @@ bool shogi_evaluator_load(ShogiEvaluator *evaluator, const char *path,
     }
     const TinyShogiEvalPlugin *plugin = getter();
     if (plugin == NULL || plugin->abi_version != TINYSHOGI_EVAL_ABI_VERSION ||
-        plugin->struct_size < sizeof(*plugin) || plugin->evaluate == NULL) {
+        plugin->struct_size < TINYSHOGI_EVAL_PLUGIN_V1_SIZE ||
+        plugin->evaluate == NULL) {
         set_error("evaluator plugin ABI or callback is invalid");
         dlclose(module);
         return false;
@@ -139,6 +140,15 @@ bool shogi_evaluator_load(ShogiEvaluator *evaluator, const char *path,
     evaluator->destroy = plugin->destroy;
     evaluator->name = plugin->name == NULL ? path : plugin->name;
     evaluator->module_handle = module;
+    if (plugin->struct_size >= sizeof(*plugin) && plugin->state_create != NULL &&
+        plugin->state_destroy != NULL && plugin->state_make != NULL &&
+        plugin->state_unmake != NULL && plugin->state_score != NULL) {
+        evaluator->state_create = plugin->state_create;
+        evaluator->state_destroy = plugin->state_destroy;
+        evaluator->state_make = plugin->state_make;
+        evaluator->state_unmake = plugin->state_unmake;
+        evaluator->state_score = plugin->state_score;
+    }
     evaluator_error[0] = '\0';
     return true;
 }

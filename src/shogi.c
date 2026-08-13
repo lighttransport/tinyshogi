@@ -540,10 +540,16 @@ static bool same_king_ray(uint8_t king, uint8_t from, uint8_t to) {
     int fr = row_of(from), fc = col_of(from);
     int tr = row_of(to), tc = col_of(to);
     int dr = fr - kr, dc = fc - kc;
-    if (dr == 0) return tr == kr;
-    if (dc == 0) return tc == kc;
-    if (abs(dr) != abs(dc)) return false;
-    return abs(tr - kr) == abs(tc - kc);
+    int to_dr = tr - kr, to_dc = tc - kc;
+    bool collinear;
+    if (dr == 0) collinear = to_dr == 0;
+    else if (dc == 0) collinear = to_dc == 0;
+    else collinear = abs(dr) == abs(dc) && abs(to_dr) == abs(to_dc) &&
+                     dr * to_dc == dc * to_dr;
+    /* A pinned piece must remain on the attacker's side of its king.  Merely
+     * remaining on the same infinite line can move it across the king and
+     * uncover the sliding attack. */
+    return collinear && dr * to_dr + dc * to_dc > 0;
 }
 
 static KingSafety king_safety_prepare(const ShogiPosition *position,
