@@ -51,7 +51,17 @@ typedef struct {
     void *(*create)(const char *config);
     void (*destroy)(void *userdata);
     TinyShogiEvalFunction evaluate;
+    /* Optional tail.  struct_size keeps ABI-v1 plugins built against the
+     * original scalar-only prefix loadable. */
+    TinyShogiEvalStateCreate state_create;
+    TinyShogiEvalStateDestroy state_destroy;
+    TinyShogiEvalStateMove state_make;
+    TinyShogiEvalStateMove state_unmake;
+    TinyShogiEvalStateScore state_score;
 } TinyShogiEvalPlugin;
+
+#define TINYSHOGI_EVAL_PLUGIN_V1_SIZE \
+    offsetof(TinyShogiEvalPlugin, state_create)
 
 typedef const TinyShogiEvalPlugin *(*TinyShogiEvalPluginGetter)(void);
 

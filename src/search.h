@@ -74,6 +74,7 @@ typedef struct {
     uint64_t nodes;
     uint64_t time_ms;
     uint64_t nps;
+    int depth;
     int score_cp;
     bool has_move;
     ShogiMove move;

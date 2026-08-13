@@ -21,6 +21,28 @@ meson compile -C build
 meson test -C build
 ```
 
+CMake:
+
+```sh
+cmake -S . -B build-cmake
+cmake --build build-cmake
+ctest --test-dir build-cmake --output-on-failure
+```
+
+Make:
+
+```sh
+make
+make check
+```
+
+The Makefile writes its artifacts to `build/make/`. CMake also provides
+`TINYSHOGI_BUILD_BENCHMARKS=OFF` and `TINYSHOGI_BUILD_EXAMPLES=OFF` options.
+
+The alpha-beta search uses a transposition table, iterative deepening, killer
+moves, depth-weighted move history for shallow-budget move ordering, and a
+bounded check extension for tactical stability.
+
 xmake:
 
 ```sh
@@ -85,16 +107,23 @@ go ponder [other go limits]
 ponderhit
 stop
 d
+sfen
+eval
+evalmoves
 quit
 ```
+
+`eval` prints the active evaluator's side-to-move score; `evalmoves` prints a
+static score for every legal root move. Both are model compatibility
+diagnostics.
 
 Without an explicit search limit, `go` searches for five seconds. The default
 thread count is `min(available CPUs, 8)`. Set `Threads` to `1` and provide a
 nonzero `Seed` for reproducible searches.
 `RolloutDepth` controls the heuristic rollout horizon (default 256 plies), and
 `UCTExploration` is the UCT exploration constant in thousandths (default 1414).
-`QuiescenceDepth` adds a small tactical capture/promotion/check search at rollout
-leaves (default 2 plies; set it to 0 to disable it).
+`QuiescenceDepth` adds a tactical capture/promotion/check search at rollout and
+alpha-beta leaves (default 2 plies; set it to 0 to disable it).
 `MultiPV` controls how many root candidates are reported in periodic `info`
 lines; `bestmove` remains the top-ranked candidate.
 `go ponder` keeps searching without a clock deadline until `ponderhit` changes
@@ -156,6 +185,8 @@ The match runner alternates colors, disables YaneuraOu opening-book use, and
 writes one JSONL record per played position. Use the NNUE binary instead after
 placing a compatible `eval/nn.bin` beside it with
 `--yaneuraou build/yaneuraou/YaneuraOu`.
+Use `--tinyshogi-nodes` and `--opponent-nodes` to measure engines at different
+node budgets; when omitted, both use the common `--nodes` limit.
 
 For another YaneuraOu-compatible NNUE, such as AobaNNUE, pass its Linux build
 and evaluation directory explicitly:
@@ -207,6 +238,32 @@ positions to SFEN/USI. It uses YaneuraOu's `nn.bin` through its normal NNUE
 loader; this is intentionally a process adapter rather than a reimplementation
 of YaneuraOu's private binary format. Set `YANEURAOU_EVAL_DIR` to the directory
 containing `nn.bin`.
+
+The clean-room native reader for the local HalfKP `nn.bin` can be built and
+used without the YaneuraOu evaluator process:
+
+```sh
+make BUILD=build/make examples
+YANEURAOU_NN_BIN="$HOME/work/YaneuraOu/eval/nn.bin" \
+  build/make/tinyshogi-yaneuraou-nnue-test
+```
+
+For a reproducible equal-node strength run, pass the native plugin to the
+match runner and validate the fixed gate afterward:
+
+```sh
+python3 scripts/selfplay_match.py \
+  --tinyshogi build/make/tinyshogi \
+  --tinyshogi-eval-plugin build/make/tinyshogi-yaneuraou-nnue-direct.so \
+  --tinyshogi-nn-bin "$HOME/work/YaneuraOu/eval/nn.bin" \
+  --yaneuraou "$HOME/work/YaneuraOu/source/YaneuraOu-by-FCC" \
+  --yaneuraou-eval-dir "$HOME/work/YaneuraOu/eval" \
+  --tinyshogi-search-mode alphabeta --paired-openings \
+  --games 100 --nodes 1000 \
+  --output match-yaneuraou.jsonl
+python3 scripts/match_gate.py match-yaneuraou.jsonl --games 100 \
+  --minimum-score 0.55
+```
 
 CUDA `TSM2` checkpoints can be quantized for deterministic CPU inference:
 

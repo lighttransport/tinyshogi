@@ -6,6 +6,7 @@ target("tinyshogi")
     set_kind("binary")
     add_files("src/main.c", "src/search.c", "src/shogi.c", "src/nnue.c", "src/simd.c", "src/eval.c", "src/thread_posix.c")
     add_syslinks("pthread", "m", "dl")
+    add_ldflags("-rdynamic")
 
 target("tinyshogi-rules-test")
     set_kind("binary")

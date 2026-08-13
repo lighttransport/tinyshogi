@@ -121,8 +121,38 @@ int main(void) {
     if (job == NULL) return fail("alpha-beta search creation");
     search_join(job, &result);
     if (!result.has_move || result.simulations == 0) return fail("alpha-beta search result");
+    SearchLine alpha_line;
+    if (search_get_root_lines(job, &alpha_line, 1) != 1 ||
+        alpha_line.move.from != result.move.from ||
+        alpha_line.move.to != result.move.to ||
+        alpha_line.move.promote != result.move.promote ||
+        alpha_line.move.drop != result.move.drop) {
+        return fail("alpha-beta best move reporting");
+    }
     ShogiPosition alpha_next = position;
     if (!shogi_make_move(&alpha_next, result.move)) return fail("alpha-beta legal move");
+    search_destroy(job);
+
+    ShogiPosition tactical;
+    if (!shogi_position_from_sfen(&tactical,
+            "4k4/9/9/4r4/4R4/9/9/9/4K4 b - 1")) {
+        return fail("alpha-beta tactical SFEN");
+    }
+    ShogiMove winning_capture;
+    if (!shogi_parse_usi_move("5e5d", &winning_capture))
+        return fail("alpha-beta tactical move parse");
+    memset(&limits, 0, sizeof(limits));
+    limits.depth = 1;
+    job = search_start(&tactical, &limits, &alphabeta);
+    if (job == NULL) return fail("alpha-beta tactical search creation");
+    search_join(job, &result);
+    if (!result.has_move || result.move.from != winning_capture.from ||
+        result.move.to != winning_capture.to ||
+        result.move.promote != winning_capture.promote ||
+        result.move.drop != winning_capture.drop) {
+        search_destroy(job);
+        return fail("alpha-beta tactical best move");
+    }
     search_destroy(job);
 
     memset(&limits, 0, sizeof(limits));

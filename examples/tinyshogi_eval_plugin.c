@@ -17,12 +17,10 @@ static int evaluate(void *userdata, const ShogiPosition *position,
 }
 
 static const TinyShogiEvalPlugin plugin = {
-    TINYSHOGI_EVAL_ABI_VERSION,
-    sizeof(TinyShogiEvalPlugin),
-    "example-material-plugin",
-    NULL,
-    NULL,
-    evaluate
+    .abi_version = TINYSHOGI_EVAL_ABI_VERSION,
+    .struct_size = sizeof(TinyShogiEvalPlugin),
+    .name = "example-material-plugin",
+    .evaluate = evaluate
 };
 
 const TinyShogiEvalPlugin *tinyshogi_eval_plugin(void) {

@@ -192,8 +192,12 @@ static void destroy_adapter(void *userdata) {
 }
 
 static const TinyShogiEvalPlugin plugin = {
-    TINYSHOGI_EVAL_ABI_VERSION, sizeof(TinyShogiEvalPlugin),
-    "yaneuraou-nnue-usi-adapter", create_adapter, destroy_adapter, evaluate
+    .abi_version = TINYSHOGI_EVAL_ABI_VERSION,
+    .struct_size = sizeof(TinyShogiEvalPlugin),
+    .name = "yaneuraou-nnue-usi-adapter",
+    .create = create_adapter,
+    .destroy = destroy_adapter,
+    .evaluate = evaluate
 };
 
 const TinyShogiEvalPlugin *tinyshogi_eval_plugin(void) { return &plugin; }
