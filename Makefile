@@ -22,7 +22,7 @@ BENCHMARKS := \
 
 .PHONY: all test check benchmarks examples clean
 
-all: $(ENGINE) $(TESTS) $(BENCHMARKS)
+all: $(ENGINE) $(TESTS) $(BENCHMARKS) examples
 
 test: $(ENGINE) $(TESTS)
 	$(ENGINE) --selftest

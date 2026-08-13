@@ -924,7 +924,8 @@ static int ab_quiescence(WorkerContext *worker, ShogiPosition *position,
          * tactical move score above deliberately marks those separately. */
         if (!in_check && depth != 0 && !tactical[index].gives_check &&
             ab_capture_gain(position, tactical[index].move) != 0 &&
-            best + ab_capture_gain(position, tactical[index].move) + 120 < alpha)
+            best + ab_capture_gain(position, tactical[index].move) +
+                (int)job->options.quiescence_margin < alpha)
             continue;
         ShogiUndo undo;
         if (!worker_make_move(worker, position, tactical[index].move, &undo)) continue;
@@ -1119,6 +1120,17 @@ static bool alpha_beta_root_depth(WorkerContext *worker, int depth,
     SearchJob *job = worker->job;
     int local_best = -AB_INFINITY;
     ShogiMove local_move = job->root->children[0].move;
+    /* A narrow root search may stop after a fail-high, and a node limit may
+     * stop an otherwise successful iteration before every child is visited.
+     * Keep the previous iteration's ordering score for those children.  The
+     * old uninitialized values made low-budget move ordering depend on stack
+     * contents and could discard promising root moves on the next iteration. */
+    for (unsigned i = 0; i < job->root->move_count; ++i) {
+        uint64_t value = __atomic_load_n(&job->root->children[i].value,
+                                         __ATOMIC_RELAXED);
+        if (value > VALUE_SCALE) value = VALUE_SCALE;
+        root_scores[i] = (int)((value * 2000U) / VALUE_SCALE) - 1000;
+    }
     for (unsigned i = 0; i < job->root->move_count; ++i) {
         if (should_stop(job)) return false;
         ShogiMove root_move = job->root->children[i].move;
@@ -1174,8 +1186,10 @@ static void run_alpha_beta(WorkerContext *worker) {
         int best_score = -AB_INFINITY;
         ShogiMove best_move = job->root->children[0].move;
         int root_scores[SHOGI_MAX_MOVES];
-        int window_alpha = previous_score - 128;
-        int window_beta = previous_score + 128;
+        unsigned aspiration = job->options.aspiration_window;
+        if (aspiration == 0) aspiration = SEARCH_DEFAULT_ASPIRATION_WINDOW;
+        int window_alpha = previous_score - (int)aspiration;
+        int window_beta = previous_score + (int)aspiration;
         if (window_alpha < -AB_INFINITY) window_alpha = -AB_INFINITY;
         if (window_beta > AB_INFINITY) window_beta = AB_INFINITY;
         if (!alpha_beta_root_depth(worker, depth, window_alpha, window_beta,
@@ -1766,6 +1780,8 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     if (job->options.rollout_depth == 0) job->options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
     if (job->options.quiescence_depth > 8) job->options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
     if (job->options.exploration_milli == 0) job->options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
+    if (job->options.aspiration_window == 0)
+        job->options.aspiration_window = SEARCH_DEFAULT_ASPIRATION_WINDOW;
     job->exploration_constant = (float)job->options.exploration_milli / 1000.0f;
     if (job->options.multi_pv == 0) job->options.multi_pv = SEARCH_DEFAULT_MULTIPV;
     if (job->options.multi_pv > SEARCH_MAX_MULTIPV) job->options.multi_pv = SEARCH_MAX_MULTIPV;
