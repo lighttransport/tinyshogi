@@ -10,6 +10,8 @@
 #define SEARCH_DEFAULT_ROLLOUT_DEPTH 256U
 #define SEARCH_DEFAULT_QUIESCENCE_DEPTH 2U
 #define SEARCH_DEFAULT_EXPLORATION_MILLI 1414U
+#define SEARCH_DEFAULT_ASPIRATION_WINDOW 2000U
+#define SEARCH_DEFAULT_QUIESCENCE_MARGIN 0U
 #define SEARCH_DEFAULT_MULTIPV 1U
 #define SEARCH_MAX_MULTIPV 8U
 #define SEARCH_MAX_PV 64U
@@ -52,6 +54,8 @@ typedef struct {
     unsigned rollout_depth;
     unsigned quiescence_depth;
     unsigned exploration_milli;
+    unsigned aspiration_window;
+    unsigned quiescence_margin;
     unsigned multi_pv;
     const ShogiEvaluator *evaluator;
     const ShogiEvaluator *evaluator_replicas;

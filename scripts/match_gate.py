@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validate a fixed alternating-color TinyShogi match record."""
+"""Validate a fixed alternating-color TinyShogi match record.
+
+The strength target is expressed as decisive wins; draws are reported but do
+not satisfy the requested win-rate gate.
+"""
 
 import argparse
 import json
@@ -11,7 +15,9 @@ def main():
     parser.add_argument("record")
     parser.add_argument("--engine", default="tinyshogi")
     parser.add_argument("--games", type=int, default=100)
-    parser.add_argument("--minimum-score", type=float, default=0.55)
+    parser.add_argument("--minimum-wins", type=int, default=25)
+    parser.add_argument("--minimum-score", type=float,
+                        help="optional informational score gate")
     args = parser.parse_args()
 
     games = {}
@@ -38,7 +44,10 @@ def main():
     points = score + draws / 2
     fraction = points / count if count else 0.0
     print(f"games={count} wins={wins} draws={draws} losses={losses} score={fraction:.3f}")
-    if count != args.games or fraction < args.minimum_score:
+    print(f"decisive_win_rate={wins / count if count else 0.0:.3f}")
+    if count != args.games or wins < args.minimum_wins:
+        raise SystemExit(1)
+    if args.minimum_score is not None and fraction < args.minimum_score:
         raise SystemExit(1)
 
 

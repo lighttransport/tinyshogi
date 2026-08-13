@@ -6,6 +6,7 @@ from collections import Counter
 import hashlib
 import json
 import os
+import re
 import selectors
 import subprocess
 import sys
@@ -31,6 +32,7 @@ class Engine:
         self.name = name
         self.path = str(path)
         self.timeout = timeout
+        self.last_nodes = None
         self.process = subprocess.Popen(
             [self.path], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, bufsize=0, env=environment
@@ -61,6 +63,9 @@ class Engine:
                 detail = f": {error}" if error else ""
                 raise RuntimeError(f"{self.name} closed stdout{detail}")
             line = line.decode(errors="replace").strip()
+            match = re.search(r"(?:^| )nodes (\d+)(?: |$)", line)
+            if match:
+                self.last_nodes = int(match.group(1))
             if "evaluator load failed" in line or "NNUE model load failed" in line:
                 raise RuntimeError(f"{self.name}: {line}")
             if line == marker or line.startswith(marker + " "):
@@ -78,8 +83,20 @@ class Engine:
             if line.count(" ") >= 3 and "/" in line:
                 return line
 
+    def set_position(self, position, moves=None):
+        if isinstance(position, str):
+            command = "position sfen " + position
+        else:
+            command = "position startpos"
+            if position:
+                command += " moves " + " ".join(position)
+        if moves:
+            command += " moves " + " ".join(moves)
+        self.send(command)
+
     def bestmove(self, position, limit):
-        self.send("position startpos" + (" moves " + " ".join(position) if position else ""))
+        self.last_nodes = None
+        self.set_position(position)
         self.send("go " + limit)
         line = self.read_until("bestmove")
         fields = line.split()
@@ -100,8 +117,8 @@ class Engine:
         self.selector.close()
 
 
-def query_sfen(engine, moves):
-    engine.send("position startpos" + (" moves " + " ".join(moves) if moves else ""))
+def query_sfen(engine, position, moves=None):
+    engine.set_position(position, moves)
     engine.send("sfen")
     return engine.read_sfen()
 
@@ -126,6 +143,12 @@ def parse_args():
     parser.add_argument("--tinyshogi-search-mode", choices=("mcts", "alphabeta"),
                         default="mcts",
                         help="Search mode for TinyShogi")
+    parser.add_argument("--tinyshogi-mcts-mode", choices=("auto", "neural", "rollout"),
+                        default="auto", help="TinyShogi MCTS evaluator policy")
+    parser.add_argument("--tinyshogi-uct-exploration", type=int, default=1414)
+    parser.add_argument("--tinyshogi-rollout-depth", type=int, default=256)
+    parser.add_argument("--tinyshogi-aspiration-window", type=int, default=2000)
+    parser.add_argument("--tinyshogi-quiescence-margin", type=int, default=0)
     parser.add_argument("--tinyshogi-quiescence-depth", type=int, default=2,
                         help="TinyShogi tactical quiescence depth")
     parser.add_argument("--opponent-threads", type=int, default=1)
@@ -157,6 +180,10 @@ def main():
     if (args.games < 1 or args.max_plies < 1 or args.nodes < 1 or
             args.tinyshogi_threads < 1 or args.opponent_threads < 1 or
             not 0 <= args.tinyshogi_quiescence_depth <= 8 or
+            not 1 <= args.tinyshogi_uct_exploration <= 3000 or
+            not 1 <= args.tinyshogi_rollout_depth <= 512 or
+            not 16 <= args.tinyshogi_aspiration_window <= 2000 or
+            not 0 <= args.tinyshogi_quiescence_margin <= 1000 or
             not 0 <= args.opening_offset < len(PAIRED_OPENINGS) or
             not 1 <= args.tinyshogi_leaf_batch <= 12 or
             not 1 <= args.opponent_leaf_batch <= 12):
@@ -179,6 +206,11 @@ def main():
         opponent_limit = f"nodes {args.opponent_nodes or args.nodes}"
     tiny_options = {"Threads": args.tinyshogi_threads, "Seed": args.seed,
                     "SearchMode": args.tinyshogi_search_mode,
+                    "MCTSMode": args.tinyshogi_mcts_mode,
+                    "UCTExploration": args.tinyshogi_uct_exploration,
+                    "RolloutDepth": args.tinyshogi_rollout_depth,
+                    "AspirationWindow": args.tinyshogi_aspiration_window,
+                    "QuiescenceMargin": args.tinyshogi_quiescence_margin,
                     "MaxTreeNodes": 100000,
                     "QuiescenceDepth": args.tinyshogi_quiescence_depth}
     if args.tinyshogi_eval_plugin is not None:
@@ -235,18 +267,20 @@ def main():
             opening_index = ((args.opening_offset + game // 2) % len(PAIRED_OPENINGS)
                              if args.paired_openings else 0)
             moves = list(PAIRED_OPENINGS[opening_index]) if args.paired_openings else []
+            current_sfen = query_sfen(tiny, moves)
             game_records = []
             result = "draw"
             for ply in range(args.max_plies):
                 side = ply % 2
                 current = engines[side]
-                sfen = query_sfen(tiny, moves)
+                sfen = current_sfen
                 try:
                     move = current.bestmove(
-                        moves, tiny_limit if current is tiny else opponent_limit)
+                        sfen, tiny_limit if current is tiny else opponent_limit)
                 except RuntimeError as error:
                     raise RuntimeError(
-                        f"game {game} ply {ply} ({current.name}, {len(moves)} moves): {error}"
+                        f"game {game} ply {ply} ({current.name}, {len(moves)} moves) "
+                        f"at SFEN {sfen}: {error}"
                     ) from error
                 if move in ("resign", "win"):
                     if move == "win":
@@ -261,9 +295,10 @@ def main():
                     "node_limit": None if args.movetime_ms else
                         (args.tinyshogi_nodes or args.nodes if current is tiny else
                          args.opponent_nodes or args.nodes),
+                    "reported_nodes": current.last_nodes,
                     "model_sha256": model_sha256
                 })
-                next_sfen = query_sfen(tiny, moves + [move])
+                next_sfen = query_sfen(tiny, sfen, [move])
                 try:
                     before_number = int(sfen.rsplit(" ", 1)[1])
                     after_number = int(next_sfen.rsplit(" ", 1)[1])
@@ -273,6 +308,7 @@ def main():
                     raise RuntimeError(
                         f"game {game} ply {ply}: illegal move from {current.name}: {move}")
                 moves.append(move)
+                current_sfen = next_sfen
                 if args.verbose:
                     print(f"game {game + 1} ply {ply + 1}: {current.name} {move}",
                           flush=True)

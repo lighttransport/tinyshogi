@@ -490,6 +490,8 @@ static void print_usi(void) {
     printf("option name RolloutDepth type spin default %u min 1 max 512\n", SEARCH_DEFAULT_ROLLOUT_DEPTH);
     printf("option name QuiescenceDepth type spin default %u min 0 max 8\n", SEARCH_DEFAULT_QUIESCENCE_DEPTH);
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
+    printf("option name AspirationWindow type spin default %u min 16 max 2000\n", SEARCH_DEFAULT_ASPIRATION_WINDOW);
+    printf("option name QuiescenceMargin type spin default %u min 0 max 1000\n", SEARCH_DEFAULT_QUIESCENCE_MARGIN);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
     puts("option name SearchMode type combo default mcts var mcts var alphabeta");
     puts("option name MCTSMode type combo default auto var auto var neural var rollout");
@@ -529,6 +531,10 @@ static void set_option(Application *application, char *line) {
         if (value <= 8) application->options.quiescence_depth = (unsigned)value;
     } else if (strcmp(tokens[2], "UCTExploration") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= 3000) application->options.exploration_milli = (unsigned)value;
+    } else if (strcmp(tokens[2], "AspirationWindow") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        if (value >= 16 && value <= 2000) application->options.aspiration_window = (unsigned)value;
+    } else if (strcmp(tokens[2], "QuiescenceMargin") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        if (value <= 1000) application->options.quiescence_margin = (unsigned)value;
     } else if (strcmp(tokens[2], "MultiPV") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= SEARCH_MAX_MULTIPV) application->options.multi_pv = (unsigned)value;
     } else if (strcmp(tokens[2], "SearchMode") == 0) {
@@ -891,6 +897,10 @@ static void process_line(Application *application, char *line) {
         finish_job(application, false);
         if (shogi_position_to_sfen(&application->position, sfen, sizeof(sfen))) puts(sfen);
         fflush(stdout);
+    } else if (strcmp(command, "hash") == 0) {
+        finish_job(application, false);
+        printf("info string hash %llu\n", (unsigned long long)application->position.hash);
+        fflush(stdout);
     } else if (strcmp(command, "eval") == 0) {
         finish_job(application, false);
         int score = shogi_evaluator_score(application->options.evaluator,
@@ -936,6 +946,7 @@ int main(int argc, char **argv) {
     application.options.max_tree_nodes = 1000000;
     application.options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
     application.options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
+    application.options.quiescence_margin = SEARCH_DEFAULT_QUIESCENCE_MARGIN;
     application.options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     application.options.multi_pv = SEARCH_DEFAULT_MULTIPV;
     application.options.evaluator = &application.evaluator;

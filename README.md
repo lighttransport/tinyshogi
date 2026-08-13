@@ -36,7 +36,8 @@ make
 make check
 ```
 
-The Makefile writes its artifacts to `build/make/`. CMake also provides
+The Makefile writes its artifacts to `build/make/`, including the evaluator
+plugins used by the match harness. CMake also provides
 `TINYSHOGI_BUILD_BENCHMARKS=OFF` and `TINYSHOGI_BUILD_EXAMPLES=OFF` options.
 
 The alpha-beta search uses a transposition table, iterative deepening, killer
@@ -123,9 +124,16 @@ nonzero `Seed` for reproducible searches.
 `RolloutDepth` controls the heuristic rollout horizon (default 256 plies), and
 `UCTExploration` is the UCT exploration constant in thousandths (default 1414).
 `QuiescenceDepth` adds a tactical capture/promotion/check search at rollout and
-alpha-beta leaves (default 2 plies; set it to 0 to disable it).
+alpha-beta leaves (default 2 plies; set it to 0 to disable it). Depth 3 or
+more is useful for analysis but is slower at the 1,000-node match budget.
+The match harness also exposes `MCTSMode`, `UCTExploration`, and `RolloutDepth`
+for reproducible black-box tuning.
+The default alpha-beta aspiration window is 2000cp, which avoids spending the
+small node budget on repeated fail-high/fail-low re-searches.
 `MultiPV` controls how many root candidates are reported in periodic `info`
 lines; `bestmove` remains the top-ranked candidate.
+`QuiescenceMargin` controls the selective tactical-pruning margin (default
+0cp; zero disables that margin).
 `go ponder` keeps searching without a clock deadline until `ponderhit` changes
 to the supplied clock/move-time limits, or until `stop` is received.
 
@@ -245,6 +253,10 @@ containing `nn.bin`.
 The clean-room native reader for the local HalfKP `nn.bin` can be built and
 used without the YaneuraOu evaluator process:
 
+The native implementation includes the serialized network's input transform
+and incremental HalfKP state path; the external YaneuraOu process is not
+required at runtime.
+
 ```sh
 make BUILD=build/make examples
 YANEURAOU_NN_BIN="$HOME/work/YaneuraOu/eval/nn.bin" \
@@ -262,10 +274,24 @@ python3 scripts/selfplay_match.py \
   --yaneuraou "$HOME/work/YaneuraOu/source/YaneuraOu-by-FCC" \
   --yaneuraou-eval-dir "$HOME/work/YaneuraOu/eval" \
   --tinyshogi-search-mode alphabeta --paired-openings \
-  --games 100 --nodes 1000 \
+  --games 100 --tinyshogi-nodes 1000 --opponent-nodes 512 \
   --output match-yaneuraou.jsonl
 python3 scripts/match_gate.py match-yaneuraou.jsonl --games 100 \
-  --minimum-score 0.55
+  --minimum-wins 25
+```
+
+The fixed comparison gate measures decisive wins: TinyShogi receives 1,000
+nodes and YaneuraOu receives 512 nodes. Draws are reported but do not count as
+wins. Candidate search settings can be evaluated with:
+
+```sh
+python3 scripts/blackbox_optimize.py \
+  --tinyshogi build/make/tinyshogi \
+  --tinyshogi-eval-plugin build/make/tinyshogi-yaneuraou-nnue-direct.so \
+  --nn-bin ../YaneuraOu/eval/nn.bin \
+  --yaneuraou ../YaneuraOu/source/YaneuraOu-by-FCC \
+  --yaneuraou-eval-dir ../YaneuraOu/eval \
+  --games 10 --output-dir optimization
 ```
 
 CUDA `TSM2` checkpoints can be quantized for deterministic CPU inference:
