@@ -18,7 +18,8 @@ TESTS := \
 BENCHMARKS := \
 	$(BUILD)/tinyshogi-simd-bench \
 	$(BUILD)/tinyshogi-nnue-state-bench \
-	$(BUILD)/tinyshogi-nnue-batch-bench
+	$(BUILD)/tinyshogi-nnue-batch-bench \
+	$(BUILD)/tinyshogi-perpetual-bench
 
 .PHONY: all test check benchmarks examples clean
 
@@ -113,6 +114,11 @@ $(BUILD)/tinyshogi-nnue-state-bench: $(BUILD)/bench/nnue_state_bench.o \
 
 $(BUILD)/tinyshogi-nnue-batch-bench: $(BUILD)/bench/nnue_batch_bench.o \
 	$(BUILD)/src/nnue.o $(BUILD)/src/simd.o $(BUILD)/src/shogi.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
+
+$(BUILD)/tinyshogi-perpetual-bench: $(BUILD)/bench/perpetual_check_bench.o \
+	$(BUILD)/src/search.o $(BUILD)/src/shogi.o $(BUILD)/src/nnue.o \
+	$(BUILD)/src/simd.o $(BUILD)/src/eval.o $(BUILD)/src/thread_posix.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/tinyshogi-eval-plugin.so: examples/tinyshogi_eval_plugin.c | $(BUILD)

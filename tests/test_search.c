@@ -19,6 +19,7 @@ static SearchOptions test_options(void) {
     options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
     options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     options.multi_pv = 2;
+    options.perpetual_check = true;
     return options;
 }
 

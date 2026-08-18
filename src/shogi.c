@@ -377,6 +377,50 @@ static bool parse_sfen_hands(ShogiPosition *position, const char *text) {
     return true;
 }
 
+/* Reject positions whose piece material is impossible.  A side starts with one
+ * rook, one bishop, two gold, two silver, two knight, two lance and nine pawns;
+ * captures move a piece to the capturer's hand (always unpromoted) and
+ * promotion keeps a piece within its family, so a side can never hold more than
+ * its own pieces plus one copy of each opponent piece.  The tight per-side
+ * maxima are: rook/bishop-family <= 2, gold/silver/knight/lance-family <= 4,
+ * pawn-family <= 18, and dragon/horse <= 1 (only a side's own rook/bishop can
+ * be promoted).  These upper bounds also accept reduced-material analysis
+ * positions, which the rules tests and fixtures use. */
+static bool validate_material(const ShogiPosition *position) {
+    unsigned board[2][7] = {{0}}; /* 0 pawn,1 lance,2 knight,3 silver,4 gold,5 rook,6 bishop */
+    unsigned dragon[2] = {0}, horse[2] = {0};
+    for (uint8_t square = 0; square < SHOGI_SQUARES; ++square) {
+        uint8_t piece = position->board[square];
+        if (piece == SHOGI_EMPTY) continue;
+        unsigned color = (piece >> 4) & 1U;
+        switch (piece & 0x0fU) {
+        case SHOGI_PAWN: case SHOGI_PRO_PAWN: board[color][0]++; break;
+        case SHOGI_LANCE: case SHOGI_PRO_LANCE: board[color][1]++; break;
+        case SHOGI_KNIGHT: case SHOGI_PRO_KNIGHT: board[color][2]++; break;
+        case SHOGI_SILVER: case SHOGI_PRO_SILVER: board[color][3]++; break;
+        case SHOGI_GOLD: board[color][4]++; break;
+        case SHOGI_ROOK: board[color][5]++; break;
+        case SHOGI_DRAGON: board[color][5]++; dragon[color]++; break;
+        case SHOGI_BISHOP: board[color][6]++; break;
+        case SHOGI_HORSE: board[color][6]++; horse[color]++; break;
+        default: break; /* king is validated separately */
+        }
+    }
+    for (int color = 0; color < 2; ++color) {
+        ShogiColor c = (ShogiColor)color;
+        /* hand: 0 pawn,1 lance,2 knight,3 silver,4 gold,5 bishop,6 rook */
+        if (board[color][0] + position->hand[c][0] > 18U) return false;
+        if (board[color][1] + position->hand[c][1] > 4U) return false;
+        if (board[color][2] + position->hand[c][2] > 4U) return false;
+        if (board[color][3] + position->hand[c][3] > 4U) return false;
+        if (board[color][4] + position->hand[c][4] > 4U) return false;
+        if (board[color][5] + position->hand[c][6] > 2U) return false;
+        if (board[color][6] + position->hand[c][5] > 2U) return false;
+        if (dragon[color] > 1U || horse[color] > 1U) return false;
+    }
+    return true;
+}
+
 bool shogi_position_from_sfen(ShogiPosition *position, const char *sfen) {
     shogi_init();
     if (position == NULL || sfen == NULL) return false;
@@ -407,6 +451,7 @@ bool shogi_position_from_sfen(ShogiPosition *position, const char *sfen) {
         }
         if (kings != 1) return false;
     }
+    if (!validate_material(&parsed)) return false;
     char *end = NULL;
     unsigned long move_number = strtoul(fields[3], &end, 10);
     if (*fields[3] == '\0' || *end != '\0' || move_number == 0 || move_number > UINT_MAX) return false;
@@ -431,7 +476,8 @@ static char piece_letter(ShogiPieceType type) {
     }
 }
 
-bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out_size) {
+static bool write_sfen(const ShogiPosition *position, char *out, size_t out_size,
+                       bool include_opponent_hand) {
     if (position == NULL || out == NULL || out_size == 0) return false;
     size_t used = 0;
     for (int row = 0; row < 9; ++row) {
@@ -475,7 +521,24 @@ bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out
         SHOGI_ROOK, SHOGI_BISHOP, SHOGI_GOLD, SHOGI_SILVER,
         SHOGI_KNIGHT, SHOGI_LANCE, SHOGI_PAWN
     };
-    for (size_t color = 0; color < 2; ++color) {
+    /* Standard SFEN lists only the side-to-move's hand.  The dual-hand form
+     * (black hand then white hand, matching the historical output) is kept for
+     * the self-play training export, where tools/prepare_nnue.py recovers both
+     * sides' HalfKP hand features from the hand field.  Emitting the dual-hand
+     * string for external output produced a non-standard form that strict
+     * consumers (ShogiGUI, SFEN validators, the web app, YaneuraOu) misread. */
+    int colors[2];
+    int color_count;
+    if (include_opponent_hand) {
+        colors[0] = SHOGI_BLACK;
+        colors[1] = SHOGI_WHITE;
+        color_count = 2;
+    } else {
+        colors[0] = (int)position->side;
+        color_count = 1;
+    }
+    for (int c = 0; c < color_count; ++c) {
+        ShogiColor color = (ShogiColor)colors[c];
         for (size_t i = 0; i < 7; ++i) {
             int index = hand_index(hand_types[i]);
             unsigned count = position->hand[color][index];
@@ -499,6 +562,14 @@ bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out
     int written = snprintf(out + used, out_size - used, " %u", position->move_number);
     if (written < 0 || (size_t)written >= out_size - used) return false;
     return true;
+}
+
+bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out_size) {
+    return write_sfen(position, out, out_size, false);
+}
+
+bool shogi_position_to_sfen_full(const ShogiPosition *position, char *out, size_t out_size) {
+    return write_sfen(position, out, out_size, true);
 }
 
 static bool square_attacked(const ShogiPosition *position, uint8_t target, ShogiColor attacker) {
@@ -879,6 +950,17 @@ bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *un
     return shogi_make_move_undo_internal(position, move, undo, true, true);
 }
 
+/* The incremental fast make path can skip check bookkeeping to save the
+ * per-node is_in_check scan in throughput-only searches; with it off, fourfold
+ * repetition collapses to a draw instead of awarding a perpetual-check win.
+ * Enabled by default for correct rules.  Thread-local because each search
+ * worker owns its positions and the flag is set per worker before it runs. */
+static _Thread_local bool fast_check_bookkeeping = true;
+
+void shogi_set_fast_check_bookkeeping(bool enabled) {
+    fast_check_bookkeeping = enabled;
+}
+
 bool shogi_make_move_undo_fast(ShogiPosition *position, ShogiMove move, ShogiUndo *undo) {
     if (position == NULL || undo == NULL || move.to >= SHOGI_SQUARES) return false;
     ShogiColor color = position->side;
@@ -951,7 +1033,11 @@ bool shogi_make_move_undo_fast(ShogiPosition *position, ShogiMove move, ShogiUnd
         size_t index = position->history_length++;
         position->history[index] = hash;
         position->history_mover[index] = (uint8_t)color;
-        position->history_check[index] = 0;
+        /* Record whether the move gives check so repeated_position() can
+         * award a perpetual-check win during search (matching the trusted
+         * make path) instead of collapsing it to a fourfold draw. */
+        position->history_check[index] =
+            (fast_check_bookkeeping && shogi_is_in_check(position, position->side)) ? 1 : 0;
     }
     undo->valid = 1;
     return true;
@@ -1024,9 +1110,32 @@ static size_t generate_legal_mut_internal(ShogiPosition *position, ShogiMove *mo
     return count;
 }
 
+/* Copy only the live prefix of a position (board, hand, and the history up to
+ * history_length).  The repetition-history arrays are sized for a full game, so
+ * a by-value copy drags ~40 KiB of dead tail on every call; the non-mut entry
+ * points only ever read the active prefix. */
+static void copy_position_active(ShogiPosition *destination,
+                                 const ShogiPosition *source) {
+    memcpy(destination->board, source->board, sizeof(destination->board));
+    memcpy(destination->hand, source->hand, sizeof(destination->hand));
+    destination->side = source->side;
+    destination->move_number = source->move_number;
+    destination->hash = source->hash;
+    destination->king_square[SHOGI_BLACK] = source->king_square[SHOGI_BLACK];
+    destination->king_square[SHOGI_WHITE] = source->king_square[SHOGI_WHITE];
+    destination->history_length = source->history_length;
+    memcpy(destination->history, source->history,
+           source->history_length * sizeof(source->history[0]));
+    memcpy(destination->history_mover, source->history_mover,
+           source->history_length * sizeof(source->history_mover[0]));
+    memcpy(destination->history_check, source->history_check,
+           source->history_length * sizeof(source->history_check[0]));
+}
+
 size_t shogi_generate_legal(const ShogiPosition *position, ShogiMove *moves, size_t capacity) {
     if (position == NULL || moves == NULL) return 0;
-    ShogiPosition work = *position;
+    ShogiPosition work;
+    copy_position_active(&work, position);
     return generate_legal_mut_internal(&work, moves, capacity, true);
 }
 

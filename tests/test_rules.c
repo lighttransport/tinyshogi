@@ -67,9 +67,8 @@ static int check_fast_generated_moves(const ShogiPosition *position,
         if (!shogi_make_move_undo(&checked, moves[index], &checked_undo) ||
             !shogi_make_move_undo_fast(&fast, moves[index], &fast_undo))
             return fail(label);
-        /* Search defers perpetual-check bookkeeping; compare the otherwise
-         * identical active state produced by the trusted path. */
-        checked.history_check[checked.history_length - 1U] = 0;
+        /* The fast path records the same active state and check bookkeeping
+         * as the trusted path, so the two must match exactly. */
         if (!same_active_position(&checked, &fast)) return fail(label);
         if (!shogi_unmake_move(&checked, &checked_undo) ||
             !shogi_unmake_move(&fast, &fast_undo) ||
@@ -123,6 +122,28 @@ int main(void) {
         return fail("SFEN roundtrip");
     }
 
+    /* Standard SFEN lists only the side-to-move's hand; the dual-hand form
+     * (used by the self-play training export) lists both, black then white. */
+    {
+        char standard[512], full[512];
+        if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 b 1R1r 1"))
+            return fail("dual-hand SFEN parse");
+        if (!shogi_position_to_sfen(&parsed, standard, sizeof(standard)) ||
+            strcmp(standard, "4k4/9/9/9/9/9/9/9/4K4 b R 1") != 0)
+            return fail("standard SFEN side-to-move hand only");
+        if (!shogi_position_to_sfen_full(&parsed, full, sizeof(full)) ||
+            strcmp(full, "4k4/9/9/9/9/9/9/9/4K4 b Rr 1") != 0)
+            return fail("dual-hand SFEN lists both sides");
+        if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 w 1R1r 2"))
+            return fail("dual-hand SFEN parse (gote)");
+        if (!shogi_position_to_sfen(&parsed, standard, sizeof(standard)) ||
+            strcmp(standard, "4k4/9/9/9/9/9/9/9/4K4 w r 2") != 0)
+            return fail("standard SFEN side-to-move hand only (gote)");
+        if (!shogi_position_to_sfen_full(&parsed, full, sizeof(full)) ||
+            strcmp(full, "4k4/9/9/9/9/9/9/9/4K4 w Rr 2") != 0)
+            return fail("dual-hand SFEN lists both sides (gote)");
+    }
+
     ShogiMove drop;
     if (!shogi_parse_usi_move("P*7f", &drop) || drop.from != SHOGI_SQ_NONE) return fail("drop notation");
     if (shogi_parse_and_make_move(&position, "7g7f+")) return fail("invalid pawn promotion acceptance");
@@ -149,6 +170,14 @@ int main(void) {
     if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 b N 1")) return fail("dead drop SFEN");
     if (shogi_parse_and_make_move(&parsed, "N*5a")) return fail("dead-rank drop rejection");
 
+    /* Material validation: reject impossible piece counts. */
+    if (shogi_position_from_sfen(&parsed, "3RRR3/9/9/9/4k4/9/9/9/4K4 b - 1"))
+        return fail("material: three rooks accepted");
+    if (shogi_position_from_sfen(&parsed, "1+R2+R4/9/9/9/4k4/9/9/9/4K4 b - 1"))
+        return fail("material: two dragons accepted");
+    if (shogi_position_from_sfen(&parsed, "1+R2+R4/9/9/9/4k4/9/9/9/4K4 b 3R 1"))
+        return fail("material: rook hand overflow accepted");
+
     if (!shogi_position_from_sfen(&parsed, "4r3k/9/9/9/9/9/9/4R4/4K4 b - 1")) return fail("pin SFEN");
     if (check_fast_generated_moves(&parsed, "fast pinned moves") != 0) return 1;
     if (shogi_parse_and_make_move(&parsed, "5h4h")) return fail("self-check rejection");
@@ -170,5 +199,44 @@ int main(void) {
         }
     }
     if (shogi_game_result(&parsed) != SHOGI_RESULT_DRAW) return fail("fourfold repetition draw");
+
+    /* Perpetual check: the position repeats four times while Black gives check
+     * on every one of its moves (rook 5a/5b checks the cornered white king, which
+     * can only shuttle 1a/1b), so the repetition is a win for the non-checking
+     * side (White) rather than a draw. */
+    if (!shogi_position_from_sfen(&parsed, "4R3k/9/9/9/9/9/9/9/K8 w - 1"))
+        return fail("perpetual-check SFEN");
+    const char *perpetual[] = {"1a1b", "5a5b", "1b1a", "5b5a"};
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        for (size_t move = 0; move < sizeof(perpetual) / sizeof(perpetual[0]); ++move) {
+            if (!shogi_parse_and_make_move(&parsed, perpetual[move])) return fail("perpetual-check move");
+        }
+    }
+    if (shogi_game_result(&parsed) != SHOGI_RESULT_WHITE_WIN)
+        return fail("perpetual check is a win for the non-checking side");
+
+    /* The fast make path records check bookkeeping only when enabled (the
+     * PerpetualCheck option); verify both states directly. */
+    {
+        ShogiPosition gate_position;
+        ShogiMove gate_move;
+        ShogiUndo gate_undo;
+        if (!shogi_position_from_sfen(&gate_position, "R3k4/9/9/9/9/9/9/9/4K4 b - 1"))
+            return fail("perpetual-check gate SFEN");
+        if (!shogi_parse_usi_move("9a6a", &gate_move)) return fail("perpetual-check gate move");
+        shogi_set_fast_check_bookkeeping(true);
+        if (!shogi_make_move_undo_fast(&gate_position, gate_move, &gate_undo))
+            return fail("perpetual-check gate make (on)");
+        if (gate_position.history_check[gate_position.history_length - 1U] != 1)
+            return fail("fast path records check when enabled");
+        if (!shogi_unmake_move(&gate_position, &gate_undo)) return fail("perpetual-check gate unmake");
+        shogi_set_fast_check_bookkeeping(false);
+        if (!shogi_make_move_undo_fast(&gate_position, gate_move, &gate_undo))
+            return fail("perpetual-check gate make (off)");
+        if (gate_position.history_check[gate_position.history_length - 1U] != 0)
+            return fail("fast path defers check when disabled");
+        if (!shogi_unmake_move(&gate_position, &gate_undo)) return fail("perpetual-check gate unmake");
+        shogi_set_fast_check_bookkeeping(true);
+    }
     return 0;
 }

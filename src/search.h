@@ -63,6 +63,7 @@ typedef struct {
     SearchMctsPolicy mcts_policy;
     unsigned leaf_batch_size;
     bool a64fx_uct;
+    bool perpetual_check;
     SearchContext *context;
 } SearchOptions;
 

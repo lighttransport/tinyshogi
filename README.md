@@ -5,8 +5,8 @@ currently a CLI/USI engine using CPU-based, shared-tree Monte Carlo Tree Search
 (UCT with heuristic rollouts and virtual loss).
 
 The implementation includes orthodox move legality: promotion, drops, nifu,
-dead-rank drops, uchifuzume, check and checkmate, fourfold repetition, and the
-27-point entering-king declaration profile. The declaration profile requires
+dead-rank drops, uchifuzume, check and checkmate, fourfold repetition with
+perpetual-check detection, and the 27-point entering-king declaration profile. The declaration profile requires
 the king to be in the enemy camp, at least ten other pieces in that camp, no
 check on the king, and 28 points for Sente or 27 for Gote. Rooks, bishops,
 dragons, and horses are worth five points; other non-king pieces are worth one.
@@ -134,6 +134,12 @@ small node budget on repeated fail-high/fail-low re-searches.
 lines; `bestmove` remains the top-ranked candidate.
 `QuiescenceMargin` controls the selective tactical-pruning margin (default
 0cp; zero disables that margin).
+`PerpetualCheck` (default `on`) records check state in the incremental search
+make path so a fourfold repetition that is really perpetual check is awarded
+as a win for the non-checking side instead of a draw; set it to `off` to skip
+that bookkeeping and recover a few percent of NPS for throughput-only data
+generation. `tinyshogi-perpetual-bench` (a Meson benchmark) measures that NPS
+trade-off by running the same fixed-seed search with the option on and off.
 `go ponder` keeps searching without a clock deadline until `ponderhit` changes
 to the supplied clock/move-time limits, or until `stop` is received.
 
@@ -160,7 +166,11 @@ side-to-move perspective, and the complete root visit distribution:
 Use `--temperature 0` for deterministic visit-max move selection. Games that
 reach `--max-plies` without a terminal result are recorded as draws. The JSONL
 format is versioned with `"version":1` and is intended for external training
-pipelines.
+pipelines. The `sfen` field in that export uses a dual-hand form (both
+sides' captured pieces, black then white) so `tools/prepare_nnue.py` can
+recover both sides' hand features. The `sfen` USI command and board printing
+both emit standard SFEN (the hand of the side to move only), and the parser
+accepts both the standard and dual-hand forms on input.
 
 The optional no-SDK CUDA handoff is documented in [cuda/README.md](cuda/README.md).
 It uses a CUEW-style runtime loader and builds the CUDA probe with only `cc` and
@@ -598,7 +608,11 @@ make -C fuzz run
 
 The harness uses the seed corpus in `fuzz/corpus/` and enables AddressSanitizer
 and UndefinedBehaviorSanitizer. To run longer, pass options directly to the
-target, for example `fuzz/shogi-fuzz -max_total_time=300 fuzz/corpus`.
+target, for example `fuzz/shogi-fuzz -max_total_time=300 fuzz/corpus`. It
+round-trips each parsed SFEN through the lossless dual-hand form (the standard
+form is lossy when the opponent holds pieces) and makes and unmakes the
+generated moves; the seed corpus includes a dual-hand position and impossible
+material positions that exercise the parser's material validation.
 
 For local automation and LLM-assisted play, `tools/tinyshogi_mcp.py` provides
 a dependency-free stdio MCP server. It exposes board queries, legal move
