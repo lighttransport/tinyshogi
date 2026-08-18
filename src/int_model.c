@@ -124,12 +124,25 @@ static void *aligned_calloc_256(size_t count, size_t element_size) {
     return memory;
 }
 
+/* Compute a * b * element_size, returning false if the product would overflow
+ * size_t.  Used for buffer sizing from file metadata so a crafted model file
+ * cannot wrap a size to a small value. */
+static bool mul3_size(size_t a, size_t b, size_t element_size, size_t *out) {
+    if (a != 0 && b > SIZE_MAX / a) return false;
+    size_t ab = a * b;
+    if (element_size != 0 && ab > SIZE_MAX / element_size) return false;
+    *out = ab * element_size;
+    return true;
+}
+
 static void int_model_build_gemm_caches(IntModel *model) {
     if (model == NULL || model->feature_dim == 0 || model->hidden_dim == 0 ||
         model->action_count == 0) return;
     model->w1_gemm_hidden_dim = round_up_u32(model->hidden_dim, 64U);
     if ((model->feature_dim & 3U) == 0U) {
-        size_t count = (size_t)model->feature_dim * model->w1_gemm_hidden_dim;
+        size_t count = 0;
+        if (!mul3_size(model->feature_dim, model->w1_gemm_hidden_dim,
+                       sizeof(*model->w1_gemm_i8), &count)) return;
         model->w1_gemm_i8 = aligned_calloc_256(count, sizeof(*model->w1_gemm_i8));
         if (model->w1_gemm_i8 != NULL) {
             for (uint32_t output_panel = 0; output_panel < model->w1_gemm_hidden_dim; output_panel += 64U)
@@ -165,12 +178,16 @@ bool int_model_load(IntModel *model, const char *path) {
     model->feature_dim = metadata[1]; model->hidden_dim = metadata[2]; model->action_count = metadata[3];
     model->input_scale_q16 = scales[0]; model->hidden_scale_q16 = scales[1];
     model->policy_scale_q16 = scales[2]; model->value_scale_q16 = scales[3];
-    size_t w1_count = (size_t)model->feature_dim * model->hidden_dim;
-    size_t policy_count = (size_t)model->action_count * model->hidden_dim;
+    size_t w1_count = 0, policy_count = 0, policy_i16_bytes = 0;
+    ok = mul3_size(model->feature_dim, model->hidden_dim, sizeof(*model->w1), &w1_count) &&
+        mul3_size(model->action_count, model->hidden_dim, sizeof(*model->policy), &policy_count) &&
+        mul3_size(model->action_count, model->hidden_dim, sizeof(*model->policy_i16),
+                  &policy_i16_bytes);
+    if (!ok) { fclose(file); return false; }
     model->w1 = malloc(w1_count); model->b1 = malloc(model->hidden_dim * sizeof(int32_t));
     model->value = malloc(model->hidden_dim); model->policy = malloc(policy_count);
     model->value_i16 = malloc((size_t)model->hidden_dim * sizeof(int16_t));
-    model->policy_i16 = malloc((size_t)model->action_count * model->hidden_dim * sizeof(int16_t));
+    model->policy_i16 = malloc(policy_i16_bytes);
     ok = model->w1 != NULL && model->b1 != NULL && model->value != NULL && model->policy != NULL &&
          model->value_i16 != NULL && model->policy_i16 != NULL &&
          fread(model->w1, 1, w1_count, file) == w1_count &&
