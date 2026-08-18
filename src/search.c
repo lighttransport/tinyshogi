@@ -1043,7 +1043,8 @@ static int alpha_beta(WorkerContext *worker, ShogiPosition *position, int depth,
                 unsigned from = cutoff_move.from == SHOGI_SQ_NONE ?
                     SHOGI_SQUARES : cutoff_move.from;
                 int *history = &job->ab_history[position->side][from][cutoff_move.to];
-                int bonus = depth * depth * 16;
+                int64_t bonus_wide = (int64_t)depth * (int64_t)depth * 16;
+                int bonus = bonus_wide > INT32_MAX ? INT32_MAX : (int)bonus_wide;
                 *history = *history > 1000000 - bonus ? 1000000 : *history + bonus;
             }
             break;
@@ -1170,6 +1171,10 @@ static bool alpha_beta_root_depth(WorkerContext *worker, int depth,
 static void run_alpha_beta(WorkerContext *worker) {
     SearchJob *job = worker->job;
     int max_depth = job->limits.depth > 0 ? job->limits.depth : 64;
+    /* A shogi game cannot meaningfully exceed a few hundred plies.  Cap the depth
+     * so an absurd `go depth N` cannot push depth-based arithmetic past int range
+     * or spend the budget on infeasible lines. */
+    if (max_depth > 512) max_depth = 512;
     alpha_beta_root_prepass(worker);
     /* The prepass orders every legal move and guarantees a valid fallback,
      * but it cannot replace depth one: quiescence must reject superficially
