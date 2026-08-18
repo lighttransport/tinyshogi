@@ -90,6 +90,11 @@ bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out
  * by the self-play training export so tools/prepare_nnue.py can recover both
  * sides' hand features; the parser accepts this form on input. */
 bool shogi_position_to_sfen_full(const ShogiPosition *position, char *out, size_t out_size);
+/* Copy a position's live state (board, hand, and history up to history_length)
+ * without dragging the reserved dead tail.  For non-mutating callers that only
+ * read the active prefix. */
+void shogi_position_copy_active(ShogiPosition *destination,
+                                const ShogiPosition *source);
 
 bool shogi_make_move(ShogiPosition *position, ShogiMove move);
 bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *undo);

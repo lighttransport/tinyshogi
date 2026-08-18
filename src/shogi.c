@@ -1114,8 +1114,8 @@ static size_t generate_legal_mut_internal(ShogiPosition *position, ShogiMove *mo
  * history_length).  The repetition-history arrays are sized for a full game, so
  * a by-value copy drags ~40 KiB of dead tail on every call; the non-mut entry
  * points only ever read the active prefix. */
-static void copy_position_active(ShogiPosition *destination,
-                                 const ShogiPosition *source) {
+void shogi_position_copy_active(ShogiPosition *destination,
+                                const ShogiPosition *source) {
     memcpy(destination->board, source->board, sizeof(destination->board));
     memcpy(destination->hand, source->hand, sizeof(destination->hand));
     destination->side = source->side;
@@ -1135,7 +1135,7 @@ static void copy_position_active(ShogiPosition *destination,
 size_t shogi_generate_legal(const ShogiPosition *position, ShogiMove *moves, size_t capacity) {
     if (position == NULL || moves == NULL) return 0;
     ShogiPosition work;
-    copy_position_active(&work, position);
+    shogi_position_copy_active(&work, position);
     return generate_legal_mut_internal(&work, moves, capacity, true);
 }
 
