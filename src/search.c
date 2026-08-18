@@ -1271,28 +1271,6 @@ typedef struct {
     bool terminal;
 } NeuralLane;
 
-/* ShogiPosition reserves enough repetition history for an entire game.  A
- * neural lane only needs the live prefix: make/unmake never observes entries
- * beyond history_length.  Avoid clearing and copying roughly 40 KiB of dead
- * history for every leaf in every batch. */
-static void position_copy_active(ShogiPosition *destination,
-                                 const ShogiPosition *source) {
-    memcpy(destination->board, source->board, sizeof(destination->board));
-    memcpy(destination->hand, source->hand, sizeof(destination->hand));
-    destination->side = source->side;
-    destination->move_number = source->move_number;
-    destination->hash = source->hash;
-    destination->king_square[SHOGI_BLACK] = source->king_square[SHOGI_BLACK];
-    destination->king_square[SHOGI_WHITE] = source->king_square[SHOGI_WHITE];
-    destination->history_length = source->history_length;
-    memcpy(destination->history, source->history,
-           source->history_length * sizeof(destination->history[0]));
-    memcpy(destination->history_mover, source->history_mover,
-           source->history_length * sizeof(destination->history_mover[0]));
-    memcpy(destination->history_check, source->history_check,
-           source->history_length * sizeof(destination->history_check[0]));
-}
-
 static bool prepare_neural_lane(WorkerContext *worker, NeuralLane *lane) {
     SearchJob *job = worker->job;
     TreeNode *node = worker->root;
@@ -1386,7 +1364,7 @@ static void run_neural_batch(WorkerContext *worker, size_t lane_count) {
     uint64_t root_values[SHOGI_MAX_MOVES] = {0};
     size_t score_count = 0;
     for (size_t index = 0; index < lane_count; ++index) {
-        position_copy_active(&lanes[index].position, &worker->job->root_position);
+        shogi_position_copy_active(&lanes[index].position, &worker->job->root_position);
         lanes[index].eval_state = worker->neural_eval_states[index];
         lanes[index].undo_length = 0;
         lanes[index].path.length = 0;
@@ -1766,7 +1744,7 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     if (position == NULL || limits == NULL || options == NULL) return NULL;
     SearchJob *job = calloc(1, sizeof(*job));
     if (job == NULL) return NULL;
-    position_copy_active(&job->root_position, position);
+    shogi_position_copy_active(&job->root_position, position);
     job->limits = *limits;
     job->options = *options;
     if (job->options.mode != SEARCH_MODE_ALPHABETA && job->options.threads == 0)
