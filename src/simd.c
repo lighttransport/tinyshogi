@@ -172,7 +172,7 @@ static int32_t dot_i8_sve(const int8_t *left, const int8_t *right, size_t count)
                          svld1_s8(full, right + i + 3 * lanes));
     }
     if (i < count) {
-        svbool_t pg = svwhilelt_b8(i, count);
+        svbool_t pg = svwhilelt_b8((uint64_t)i, (uint64_t)count);
         sum0 = svdot_s32(sum0, svld1_s8(pg, left + i),
                          svld1_s8(pg, right + i));
     }
@@ -283,8 +283,8 @@ static void add_i16_i32_sve(int32_t *accumulator, const int16_t *weights,
         /* svunpklo_s32 expands the lower half of the 16-bit vector to
          * svcntw() 32-bit lanes, so advance by the full word-lane count. */
         size_t lanes = svcntw();
-        svbool_t pg16 = svwhilelt_b16(i, count);
-        svbool_t pg32 = svwhilelt_b32(i, count);
+        svbool_t pg16 = svwhilelt_b16((uint64_t)i, (uint64_t)count);
+        svbool_t pg32 = svwhilelt_b32((uint64_t)i, (uint64_t)count);
         svint32_t a = svld1_s32(pg32, accumulator + i);
         svint32_t w = svunpklo_s32(svld1_s16(pg16, weights + i));
         a = sign > 0 ? svadd_s32_m(pg32, a, w) : svsub_s32_m(pg32, a, w);
@@ -300,8 +300,8 @@ static void add_i16_i32_rows_sve(int32_t *accumulator,
     svbool_t all32 = svptrue_b32();
     size_t i = 0;
     while (i < count) {
-        svbool_t pg32 = svwhilelt_b32(i, count);
-        svbool_t pg16 = svwhilelt_b16(i, count);
+        svbool_t pg32 = svwhilelt_b32((uint64_t)i, (uint64_t)count);
+        svbool_t pg16 = svwhilelt_b16((uint64_t)i, (uint64_t)count);
         svint32_t a = svld1_s32(pg32, accumulator + i);
         for (size_t row = 0; row < row_count; ++row) {
             svint32_t w = svunpklo_s32(svld1_s16(pg16, rows[row] + i));
@@ -315,7 +315,7 @@ static void add_i16_i32_rows_sve(int32_t *accumulator,
 static void add_f32_sve(float *accumulator, const float *values, size_t count) {
     size_t i = 0;
     while (i < count) {
-        svbool_t pg = svwhilelt_b32(i, count);
+        svbool_t pg = svwhilelt_b32((uint64_t)i, (uint64_t)count);
         svst1_f32(pg, accumulator + i,
                   svadd_f32_m(pg, svld1_f32(pg, accumulator + i), svld1_f32(pg, values + i)));
         i += svcntw();

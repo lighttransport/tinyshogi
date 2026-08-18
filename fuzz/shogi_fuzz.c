@@ -14,11 +14,19 @@ static void try_sfen(const uint8_t *data, size_t size) {
     ShogiPosition position;
     if (!shogi_position_from_sfen(&position, text)) return;
 
+    /* Roundtrip through the lossless dual-hand form to check hash integrity
+     * (the standard form only carries the side-to-move hand and is lossy when
+     * the opponent also holds pieces). */
     char roundtrip[512];
-    if (!shogi_position_to_sfen(&position, roundtrip, sizeof(roundtrip))) abort();
+    if (!shogi_position_to_sfen_full(&position, roundtrip, sizeof(roundtrip))) abort();
     ShogiPosition parsed;
     if (!shogi_position_from_sfen(&parsed, roundtrip)) abort();
     if (parsed.hash != position.hash) abort();
+
+    char standard[512];
+    if (!shogi_position_to_sfen(&position, standard, sizeof(standard))) abort();
+    ShogiPosition standard_parsed;
+    if (!shogi_position_from_sfen(&standard_parsed, standard)) abort();
 
     ShogiMove moves[SHOGI_MAX_MOVES];
     size_t count = shogi_generate_legal(&position, moves, SHOGI_MAX_MOVES);
@@ -89,7 +97,7 @@ static void exercise_undo_sequence(const uint8_t *data, size_t size) {
         ++length;
         char sfen[512];
         ShogiPosition parsed;
-        if (!shogi_position_to_sfen(&position, sfen, sizeof(sfen)) ||
+        if (!shogi_position_to_sfen_full(&position, sfen, sizeof(sfen)) ||
             !shogi_position_from_sfen(&parsed, sfen) || parsed.hash != position.hash) abort();
         if (shogi_game_result(&position) != SHOGI_RESULT_ONGOING) break;
     }

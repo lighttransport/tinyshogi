@@ -83,11 +83,20 @@ typedef struct {
 void shogi_init(void);
 void shogi_position_start(ShogiPosition *position);
 bool shogi_position_from_sfen(ShogiPosition *position, const char *sfen);
+/* Standard SFEN: the hand field lists only the side-to-move's captured
+ * pieces, so the string cannot represent the opponent's hand. */
 bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out_size);
+/* Dual-hand SFEN: the hand field lists both sides (black then white).  Used
+ * by the self-play training export so tools/prepare_nnue.py can recover both
+ * sides' hand features; the parser accepts this form on input. */
+bool shogi_position_to_sfen_full(const ShogiPosition *position, char *out, size_t out_size);
 
 bool shogi_make_move(ShogiPosition *position, ShogiMove move);
 bool shogi_make_move_undo(ShogiPosition *position, ShogiMove move, ShogiUndo *undo);
 bool shogi_make_move_undo_fast(ShogiPosition *position, ShogiMove move, ShogiUndo *undo);
+/* Toggle perpetual-check bookkeeping in the fast make path (on by default).
+ * Turn it off to recover the deferred-bookkeeping NPS for throughput runs. */
+void shogi_set_fast_check_bookkeeping(bool enabled);
 bool shogi_unmake_move(ShogiPosition *position, const ShogiUndo *undo);
 bool shogi_parse_usi_move(const char *text, ShogiMove *move);
 bool shogi_move_to_usi(ShogiMove move, char *out, size_t out_size);

@@ -497,6 +497,7 @@ static void print_usi(void) {
     puts("option name MCTSMode type combo default auto var auto var neural var rollout");
     puts("option name LeafBatch type spin default 5 min 1 max 12");
     puts("option name A64FXMode type combo default auto var auto var off");
+    puts("option name PerpetualCheck type combo default on var on var off");
     puts("option name EvalPlugin type string default none");
     puts("option name EvalModel type string default none");
     puts("usiok");
@@ -561,6 +562,9 @@ static void set_option(Application *application, char *line) {
                     application->nnue_replica_count : 1U;
             }
         }
+    } else if (strcmp(tokens[2], "PerpetualCheck") == 0) {
+        if (strcmp(tokens[value_index], "on") == 0 || strcmp(tokens[value_index], "off") == 0)
+            application->options.perpetual_check = strcmp(tokens[value_index], "on") == 0;
     } else if (strcmp(tokens[2], "EvalPlugin") == 0) {
         if (strcmp(tokens[value_index], "none") == 0) {
             destroy_nnue_replicas(application);
@@ -754,8 +758,10 @@ static bool run_selfplay(int argc, char **argv) {
         uint64_t game_id = game_offset + game;
         uint64_t rng = seed + game_id * UINT64_C(0x9e3779b97f4a7c15);
         for (unsigned ply = 0; ply < max_plies && result == SHOGI_RESULT_ONGOING; ++ply) {
-            if (!shogi_position_to_sfen(&position, samples[sample_count].sfen,
-                                        sizeof(samples[sample_count].sfen))) goto selfplay_fail;
+            /* Dual-hand SFEN: tools/prepare_nnue.py recovers both sides' hand
+             * features from this field when building training records. */
+            if (!shogi_position_to_sfen_full(&position, samples[sample_count].sfen,
+                                             sizeof(samples[sample_count].sfen))) goto selfplay_fail;
             samples[sample_count].side = position.side;
             shogi_ndf_record_from_position(&samples[sample_count].record,
                                            &position, 0, 0);
@@ -771,6 +777,7 @@ static bool run_selfplay(int argc, char **argv) {
                 .multi_pv = 1,
                 .evaluator = &evaluator,
                 .mcts_policy = SEARCH_MCTS_AUTO,
+                .perpetual_check = true,
                 .leaf_batch_size = leaf_batch,
 #if defined(TINYSHOGI_A64FX_NUMA)
                 .a64fx_uct = true,
@@ -949,6 +956,7 @@ int main(int argc, char **argv) {
     application.options.quiescence_margin = SEARCH_DEFAULT_QUIESCENCE_MARGIN;
     application.options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     application.options.multi_pv = SEARCH_DEFAULT_MULTIPV;
+    application.options.perpetual_check = true;
     application.options.evaluator = &application.evaluator;
 #if defined(TINYSHOGI_A64FX_NUMA)
     application.options.a64fx_uct = true;

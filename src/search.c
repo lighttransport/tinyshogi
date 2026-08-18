@@ -1081,7 +1081,9 @@ static void alpha_beta_root_prepass(WorkerContext *worker) {
         ShogiUndo undo;
         if (!worker_make_move(worker, &next, child.move, &undo)) continue;
         atomic_fetch_add_explicit(&job->simulations, 1, memory_order_relaxed);
-        ShogiResult result = shogi_game_result(&next);
+        ShogiMove result_moves[SHOGI_MAX_MOVES];
+        ShogiResult result = shogi_game_result_with_moves_mut(&next, result_moves,
+                                                              SHOGI_MAX_MOVES, NULL);
         int score = result == SHOGI_RESULT_ONGOING ?
             -ab_static_evaluation(worker, &next) :
             -ab_terminal_score(job, &next, result, 1);
@@ -1448,6 +1450,7 @@ static void *worker_main(void *opaque) {
     WorkerContext *worker = opaque;
     SearchJob *job = worker->job;
     (void)ts_thread_pin_allowed(worker->id);
+    shogi_set_fast_check_bookkeeping(job->options.perpetual_check);
     worker->eval_cache_capacity = WORKER_EVAL_CACHE_CAPACITY;
     worker->eval_cache = calloc(worker->eval_cache_capacity, sizeof(*worker->eval_cache));
     if (worker->eval_cache == NULL) worker->eval_cache_capacity = 0;
@@ -1763,7 +1766,7 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     if (position == NULL || limits == NULL || options == NULL) return NULL;
     SearchJob *job = calloc(1, sizeof(*job));
     if (job == NULL) return NULL;
-    job->root_position = *position;
+    position_copy_active(&job->root_position, position);
     job->limits = *limits;
     job->options = *options;
     if (job->options.mode != SEARCH_MODE_ALPHABETA && job->options.threads == 0)

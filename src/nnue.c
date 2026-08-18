@@ -623,9 +623,18 @@ bool shogi_nnue_state_reset(ShogiNnueState *state, const ShogiPosition *position
     return true;
 }
 
+static bool nnue_delta_push(uint32_t *array, uint8_t *count, uint32_t id) {
+    if (*count >= SHOGI_NNUE_DELTA_MAX) return false;
+    array[(*count)++] = id;
+    return true;
+}
+
 static void nnue_state_apply_ids(ShogiNnueState *state, const uint32_t *ids,
                                  size_t count, int sign) {
-    const int16_t *rows[4];
+    const int16_t *rows[SHOGI_NNUE_DELTA_MAX];
+    /* Counts are bounded by nnue_delta_push; clamp as a last-line defense so a
+     * corrupted count cannot overflow rows[]. */
+    if (count > SHOGI_NNUE_DELTA_MAX) count = SHOGI_NNUE_DELTA_MAX;
     for (size_t i = 0; i < count; ++i)
         rows[i] = state->model->feature_weights + (size_t)ids[i] * state->hidden_dim;
     tinyshogi_add_i16_i32_rows(state->sum, rows, count, state->hidden_dim, sign);
@@ -647,23 +656,39 @@ bool shogi_nnue_state_apply_move(ShogiNnueState *state,
     }
     uint8_t king = after->king_square[state->perspective];
     if (undo->move.from == SHOGI_SQ_NONE) {
-        delta->added[delta->added_count++] = board_feature(
-            king, undo->move.to, after->board[undo->move.to], state->perspective);
+        if (!nnue_delta_push(delta->added, &delta->added_count,
+                             board_feature(king, undo->move.to,
+                                           after->board[undo->move.to],
+                                           state->perspective)))
+            return false;
     } else {
-        delta->removed[delta->removed_count++] = board_feature(
-            king, undo->move.from, undo->moving_piece, state->perspective);
-        delta->added[delta->added_count++] = board_feature(
-            king, undo->move.to, after->board[undo->move.to], state->perspective);
-        if (undo->captured_piece != SHOGI_EMPTY)
-            delta->removed[delta->removed_count++] = board_feature(
-                king, undo->move.to, undo->captured_piece, state->perspective);
+        if (!nnue_delta_push(delta->removed, &delta->removed_count,
+                             board_feature(king, undo->move.from,
+                                           undo->moving_piece,
+                                           state->perspective)))
+            return false;
+        if (!nnue_delta_push(delta->added, &delta->added_count,
+                             board_feature(king, undo->move.to,
+                                           after->board[undo->move.to],
+                                           state->perspective)))
+            return false;
+        if (undo->captured_piece != SHOGI_EMPTY &&
+            !nnue_delta_push(delta->removed, &delta->removed_count,
+                             board_feature(king, undo->move.to,
+                                           undo->captured_piece,
+                                           state->perspective)))
+            return false;
     }
     if (undo->hand_touched && undo->hand_index < 7) {
         unsigned relative = mover == state->perspective ? 0U : 1U;
-        delta->removed[delta->removed_count++] = hand_feature(
-            relative, undo->hand_index, undo->hand_before);
-        delta->added[delta->added_count++] = hand_feature(
-            relative, undo->hand_index, after->hand[mover][undo->hand_index]);
+        if (!nnue_delta_push(delta->removed, &delta->removed_count,
+                             hand_feature(relative, undo->hand_index,
+                                          undo->hand_before)))
+            return false;
+        if (!nnue_delta_push(delta->added, &delta->added_count,
+                             hand_feature(relative, undo->hand_index,
+                                          after->hand[mover][undo->hand_index])))
+            return false;
     }
     nnue_state_apply_ids(state, delta->removed, delta->removed_count, -1);
     nnue_state_apply_ids(state, delta->added, delta->added_count, 1);

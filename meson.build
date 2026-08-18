@@ -67,3 +67,10 @@ nnue_batch_bench = executable('tinyshogi-nnue-batch-bench',
   sources : ['src/nnue.c', 'src/simd.c', 'src/shogi.c'],
   dependencies : [math_dep], install : false)
 benchmark('nnue-batch', nnue_batch_bench)
+
+perpetual_bench = executable('tinyshogi-perpetual-bench',
+  'bench/perpetual_check_bench.c',
+  sources : ['src/search.c', 'src/shogi.c', 'src/nnue.c', 'src/simd.c',
+             'src/eval.c', 'src/thread_posix.c'],
+  dependencies : [threads_dep, math_dep, dl_dep], install : false)
+benchmark('perpetual-check', perpetual_bench)

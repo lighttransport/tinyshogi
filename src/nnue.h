@@ -49,9 +49,17 @@ typedef struct {
     bool valid;
 } ShogiNnueState;
 
+/* A single move changes at most three "removed" features (moving piece +
+ * captured piece + one hand slot) and two "added" features (destination +
+ * one hand slot).  SHOGI_NNUE_DELTA_MAX sizes both buffers with headroom; the
+ * incremental apply path bounds-checks every push against it, and the read
+ * path clamps to it, so a future change that emits more deltas fails loudly
+ * instead of overflowing the buffers. */
+#define SHOGI_NNUE_DELTA_MAX 4U
+
 typedef struct {
-    uint32_t removed[4];
-    uint32_t added[4];
+    uint32_t removed[SHOGI_NNUE_DELTA_MAX];
+    uint32_t added[SHOGI_NNUE_DELTA_MAX];
     uint8_t removed_count;
     uint8_t added_count;
     uint8_t rebuild;
