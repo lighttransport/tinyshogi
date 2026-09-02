@@ -1,4 +1,5 @@
 import createTinyshogi from './build/tinyshogi.js';
+import { WebGpuNnue } from './nnue-webgpu.js';
 
 async function main() {
 const module = await createTinyshogi();
@@ -21,7 +22,9 @@ const api = {
   redo: module.cwrap('web_redo', 'number', []),
   getSfen: module.cwrap('web_get_sfen', 'string', []),
   setSfen: module.cwrap('web_set_sfen', 'number', ['string']),
-  result: module.cwrap('web_game_result', 'number', [])
+  result: module.cwrap('web_game_result', 'number', []),
+  nnueFeatureCount: module.cwrap('web_nnue_feature_count', 'number', ['number']),
+  nnueFeatureId: module.cwrap('web_nnue_feature_id', 'number', ['number', 'number'])
 };
 const engineWorker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
 let engineBusy = false;
@@ -31,6 +34,9 @@ const status = document.querySelector('#status');
 const sfen = document.querySelector('#sfen');
 let selected = -1;
 let selectedDrop = 0;
+let gpuNnue = null;
+let nnueScore = null;
+let evaluationSerial = 0;
 
 const names = ['', '歩', '香', '桂', '銀', '金', '角', '飛', '玉', 'と', '杏', '圭', '全', '馬', '龍'];
 const handNames = ['歩', '香', '桂', '銀', '金', '角', '飛'];
@@ -61,12 +67,37 @@ function render() {
   }
   renderHands();
   const result = api.result();
-  status.textContent = result === 0 ? (api.side() === 0 ? 'Black to move' : 'White to move')
+  const turn = result === 0 ? (api.side() === 0 ? 'Black to move' : 'White to move')
     : result === 1 ? 'Black wins' : result === 2 ? 'White wins' : 'Draw';
+  status.textContent = turn;
+  const score = document.querySelector('#evaluation');
+  score.textContent = nnueScore == null ? 'Evaluation: material search' : `NNUE: ${formatScore(nnueScore)} (${api.side() === 0 ? 'Black' : 'White'} perspective)`;
   sfen.value = api.getSfen();
   document.querySelector('#undo').disabled = !api.canUndo();
   document.querySelector('#redo').disabled = !api.canRedo();
   document.querySelector('#engine-move').disabled = engineBusy || result !== 0;
+  requestEvaluation();
+}
+
+function formatScore(score) { return `${score >= 0 ? '+' : ''}${(score / 100).toFixed(2)}`; }
+
+function currentFeatures(perspective) {
+  const count = api.nnueFeatureCount(perspective);
+  return Array.from({ length: count }, (_, index) => api.nnueFeatureId(perspective, index));
+}
+
+async function requestEvaluation() {
+  const serial = ++evaluationSerial;
+  if (!gpuNnue) return;
+  try {
+    const score = await gpuNnue.evaluate(currentFeatures(api.side()), api.side());
+    if (serial === evaluationSerial) { nnueScore = score; document.querySelector('#evaluation').textContent = `NNUE: ${formatScore(score)} (${api.side() === 0 ? 'Black' : 'White'} perspective)`; }
+  } catch (error) {
+    if (serial === evaluationSerial) {
+      gpuNnue = null; nnueScore = null;
+      document.querySelector('#nnue-state').textContent = `NNUE disabled: ${error.message}`;
+    }
+  }
 }
 
 function renderHands() {
@@ -122,6 +153,22 @@ document.querySelector('#load-sfen').addEventListener('click', () => {
   if (!api.setSfen(sfen.value.trim())) window.alert('Invalid SFEN');
   refresh();
 });
+document.querySelector('#nnue-model').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const state = document.querySelector('#nnue-state');
+  state.textContent = `Loading ${file.name} onto WebGPU…`;
+  try {
+    const evaluator = new WebGpuNnue();
+    const description = await evaluator.load(await file.arrayBuffer());
+    gpuNnue = evaluator; nnueScore = null;
+    state.textContent = `WebGPU NNUE active — ${description}`;
+    requestEvaluation();
+  } catch (error) {
+    gpuNnue = null; nnueScore = null;
+    state.textContent = `NNUE unavailable: ${error.message}`;
+  }
+});
 document.querySelector('#engine-move').addEventListener('click', () => {
   if (engineBusy) return;
   engineBusy = true;
@@ -142,6 +189,9 @@ document.addEventListener('keydown', event => {
   }
 });
 api.init();
+document.querySelector('#nnue-state').textContent = WebGpuNnue.available()
+  ? 'Load a .nnue model to evaluate with WebGPU.'
+  : 'WebGPU is not available; engine moves use the built-in evaluator.';
 render();
 }
 

@@ -1,5 +1,6 @@
 #include "../src/shogi.h"
 #include "../src/search.h"
+#include "../src/nnue.h"
 
 #include <stddef.h>
 
@@ -135,9 +136,16 @@ int web_set_sfen(const char *sfen) {
 const char *web_engine_move(unsigned nodes) {
     static char move_text[16];
     SearchLimits limits = {0};
-    SearchOptions options = {1, 1, false, 50000, 64,
-                             SEARCH_DEFAULT_QUIESCENCE_DEPTH,
-                             SEARCH_DEFAULT_EXPLORATION_MILLI, 1, NULL};
+    SearchOptions options = {
+        .mode = SEARCH_MODE_ALPHABETA,
+        .threads = 1,
+        .seed = 1,
+        .max_tree_nodes = 50000,
+        .rollout_depth = 64,
+        .quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH,
+        .exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI,
+        .multi_pv = 1
+    };
     limits.nodes = nodes == 0 ? 64 : nodes;
     SearchJob *job = search_start(&position, &limits, &options);
     if (job == NULL) return "";
@@ -151,6 +159,25 @@ const char *web_engine_move(unsigned nodes) {
 
 int web_game_result(void) {
     return (int)shogi_game_result(&position);
+}
+
+/* Keep the model in JavaScript, where it can be uploaded to WebGPU.  These
+ * small accessors expose the engine's canonical sparse feature encoding, so
+ * the browser evaluator and native NNUE always agree about a position. */
+int web_nnue_feature_count(int perspective) {
+    uint32_t features[SHOGI_SQUARES + 14];
+    if (perspective < SHOGI_BLACK || perspective > SHOGI_WHITE) return 0;
+    return (int)shogi_nnue_feature_ids(&position, (ShogiColor)perspective,
+                                       features, sizeof(features) / sizeof(features[0]));
+}
+
+unsigned web_nnue_feature_id(int perspective, int index) {
+    uint32_t features[SHOGI_SQUARES + 14];
+    if (perspective < SHOGI_BLACK || perspective > SHOGI_WHITE || index < 0)
+        return 0;
+    size_t count = shogi_nnue_feature_ids(&position, (ShogiColor)perspective,
+                                          features, sizeof(features) / sizeof(features[0]));
+    return (size_t)index < count ? features[index] : 0;
 }
 
 void web_init(void) {
