@@ -77,7 +77,11 @@ engine's legal-move generator, including promotion and drop restrictions. The
 app also supports undo/redo, Ctrl/Cmd-Z, SFEN import/export, and an optional
 single-thread engine move running in a Web Worker. The Makefile-generated
 Emscripten files are written to `web/build/`; Vite's production bundle is
-written to `web/dist/`.
+written to `web/dist/`. On a WebGPU-capable browser, the demo can also load a
+local tinyshogi `.nnue` file. Its sparse feature transformer runs in a WebGPU
+compute shader and the score is shown beside the board; model data stays local
+to the browser. The engine-move button intentionally keeps the compact WASM
+material search, since WebGPU command submission is asynchronous.
 
 The core is C11. The initial threading and CLI backend uses POSIX pthreads and
 `poll`; no third-party runtime or source dependency is required.

@@ -7,22 +7,23 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main>
-    <h1>tinyshogi</h1>
-    <p id="status">Loading…</p>
-    <div id="hand-1" class="hand" aria-label="White pieces in hand"></div>
-    <div id="board" class="board" aria-label="Shogi board"></div>
-    <div id="hand-0" class="hand" aria-label="Black pieces in hand"></div>
-    <div class="controls">
+  <main class="app-shell">
+    <header class="hero"><p class="eyebrow">WASM + WebGPU</p><h1>tinyshogi</h1><p id="status" aria-live="polite">Loading…</p><p id="evaluation" class="evaluation">Evaluation: loading…</p></header>
+    <section class="game" aria-label="Shogi game">
+      <div class="hand-label">White hand</div><div id="hand-1" class="hand" aria-label="White pieces in hand"></div>
+      <div id="board" class="board" aria-label="Shogi board"></div>
+      <div class="hand-label">Black hand</div><div id="hand-0" class="hand" aria-label="Black pieces in hand"></div>
+    </section>
+    <div class="controls" aria-label="Game controls">
       <button id="undo" type="button">Undo</button>
       <button id="redo" type="button">Redo</button>
       <button id="reset" type="button">New game</button>
       <button id="engine-move" type="button">Engine move</button>
     </div>
-    <label class="sfen-label" for="sfen">SFEN position</label>
-    <textarea id="sfen" rows="2" spellcheck="false"></textarea>
-    <button id="load-sfen" type="button">Load SFEN</button>
-    <p class="hint">Click a piece, then a highlighted square.</p>
+    <section class="panel"><label class="sfen-label" for="sfen">SFEN position</label>
+      <textarea id="sfen" rows="2" spellcheck="false"></textarea><button id="load-sfen" type="button">Load SFEN</button></section>
+    <section class="panel nnue-panel"><label for="nnue-model">NNUE model</label><input id="nnue-model" type="file" accept=".nnue,application/octet-stream"><p id="nnue-state" class="hint"></p></section>
+    <p class="hint">Select a piece or a hand piece, then a highlighted square. Ctrl/Cmd-Z undoes.</p>
   </main>
   <script type="module" src="app.js"></script>
 </body>

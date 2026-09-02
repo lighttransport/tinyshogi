@@ -14,6 +14,9 @@ int ts_thread_join(TsThread *thread) {
     return 0;
 }
 
+int ts_thread_pin_allowed(unsigned worker_index) { (void)worker_index; return 0; }
+unsigned ts_thread_allowed_count(void) { return 1; }
+
 int ts_mutex_init(TsMutex *mutex) { (void)mutex; return 0; }
 int ts_mutex_destroy(TsMutex *mutex) { (void)mutex; return 0; }
 int ts_mutex_lock(TsMutex *mutex) { (void)mutex; return 0; }
