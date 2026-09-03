@@ -11,15 +11,31 @@ static ShogiUndo undo_stack[WEB_MAX_UNDO];
 static size_t undo_count;
 static ShogiMove redo_stack[WEB_MAX_UNDO];
 static size_t redo_count;
+static uint64_t engine_last_nodes;
+static int engine_last_score;
+static unsigned engine_last_depth;
+static uint64_t engine_last_time_ms;
+static uint64_t engine_last_nps;
+static char root_sfen[512];
 
 static void web_clear_history(void) {
     undo_count = 0;
     redo_count = 0;
 }
 
+static void web_capture_root_sfen(void) {
+    if (!shogi_position_to_sfen(&position, root_sfen, sizeof(root_sfen))) root_sfen[0] = '\0';
+}
+
 void web_reset(void) {
     shogi_position_start(&position);
     web_clear_history();
+    web_capture_root_sfen();
+    engine_last_nodes = 0;
+    engine_last_score = 0;
+    engine_last_depth = 0;
+    engine_last_time_ms = 0;
+    engine_last_nps = 0;
 }
 
 /* Black pieces are positive, white pieces are negative, and empty is zero. */
@@ -100,6 +116,28 @@ int web_play_usi(const char *text) {
 int web_can_undo(void) { return undo_count != 0; }
 int web_can_redo(void) { return redo_count != 0; }
 
+int web_history_count(void) { return (int)undo_count; }
+
+const char *web_history_move(int index) {
+    static char move_text[16];
+    if (index < 0 || (size_t)index >= undo_count ||
+        !shogi_move_to_usi(undo_stack[index].move, move_text, sizeof(move_text))) return "";
+    return move_text;
+}
+
+/* The timeline includes the current line and moves available through redo.
+ * redo_stack is a LIFO stack, so its next move is at redo_count - 1. */
+int web_timeline_count(void) { return (int)(undo_count + redo_count); }
+
+const char *web_timeline_move(int index) {
+    static char move_text[16];
+    ShogiMove move;
+    if (index < 0 || (size_t)index >= undo_count + redo_count) return "";
+    if ((size_t)index < undo_count) move = undo_stack[index].move;
+    else move = redo_stack[redo_count - 1U - ((size_t)index - undo_count)];
+    return shogi_move_to_usi(move, move_text, sizeof(move_text)) ? move_text : "";
+}
+
 int web_undo(void) {
     if (undo_count == 0) return 0;
     ShogiUndo *undo = &undo_stack[undo_count - 1];
@@ -125,11 +163,14 @@ const char *web_get_sfen(void) {
     return shogi_position_to_sfen(&position, sfen, sizeof(sfen)) ? sfen : "";
 }
 
+const char *web_get_root_sfen(void) { return root_sfen; }
+
 int web_set_sfen(const char *sfen) {
     ShogiPosition next;
     if (sfen == NULL || !shogi_position_from_sfen(&next, sfen)) return 0;
     position = next;
     web_clear_history();
+    web_capture_root_sfen();
     return 1;
 }
 
@@ -151,11 +192,24 @@ const char *web_engine_move(unsigned nodes) {
     if (job == NULL) return "";
     SearchResult result;
     search_join(job, &result);
+    SearchProgress progress = {0};
+    (void)search_get_progress(job, &progress);
+    engine_last_nodes = progress.nodes;
+    engine_last_score = progress.score_cp;
+    engine_last_depth = (unsigned)progress.depth;
+    engine_last_time_ms = progress.time_ms;
+    engine_last_nps = progress.nps;
     bool ok = result.has_move && shogi_move_to_usi(result.move, move_text, sizeof(move_text));
     if (ok) ok = web_play_usi(move_text);
     search_destroy(job);
     return ok ? move_text : "";
 }
+
+unsigned web_engine_last_nodes(void) { return (unsigned)engine_last_nodes; }
+int web_engine_last_score(void) { return engine_last_score; }
+unsigned web_engine_last_depth(void) { return engine_last_depth; }
+unsigned web_engine_last_time_ms(void) { return (unsigned)engine_last_time_ms; }
+unsigned web_engine_last_nps(void) { return (unsigned)engine_last_nps; }
 
 int web_game_result(void) {
     return (int)shogi_game_result(&position);
@@ -178,6 +232,32 @@ unsigned web_nnue_feature_id(int perspective, int index) {
     size_t count = shogi_nnue_feature_ids(&position, (ShogiColor)perspective,
                                           features, sizeof(features) / sizeof(features[0]));
     return (size_t)index < count ? features[index] : 0;
+}
+
+static size_t web_nnue_move_features(int move_index, int perspective,
+                                     uint32_t *features, size_t capacity) {
+    ShogiMove move;
+    ShogiPosition next;
+    if (perspective < SHOGI_BLACK || perspective > SHOGI_WHITE ||
+        !web_get_move(move_index, &move)) return 0;
+    next = position;
+    if (!shogi_make_move(&next, move)) return 0;
+    return shogi_nnue_feature_ids(&next, (ShogiColor)perspective, features, capacity);
+}
+
+int web_nnue_move_feature_count(int move_index, int perspective) {
+    uint32_t features[SHOGI_SQUARES + 14];
+    return (int)web_nnue_move_features(move_index, perspective, features,
+                                       sizeof(features) / sizeof(features[0]));
+}
+
+unsigned web_nnue_move_feature_id(int move_index, int perspective, int feature_index) {
+    uint32_t features[SHOGI_SQUARES + 14];
+    size_t count;
+    if (feature_index < 0) return 0;
+    count = web_nnue_move_features(move_index, perspective, features,
+                                   sizeof(features) / sizeof(features[0]));
+    return (size_t)feature_index < count ? features[feature_index] : 0;
 }
 
 void web_init(void) {
