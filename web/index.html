@@ -19,12 +19,20 @@
       <button id="redo" type="button">Redo</button>
       <button id="reset" type="button">New game</button>
       <button id="engine-move" type="button">Engine move</button>
+      <button id="engine-cancel" type="button">Cancel search</button>
+      <button id="nnue-move" type="button" title="Choose the highest-scoring legal move using the loaded NNUE model">NNUE move (1 ply)</button>
+      <button id="flip-board" type="button">Flip board</button>
     </div>
+    <section class="analysis panel"><div class="engine-settings"><label for="engine-strength">Playing strength</label><select id="engine-strength"><option value="practice">Practice</option><option value="casual">Casual</option><option value="club" selected>Club</option><option value="strong">Strong</option><option value="expert">Expert</option><option value="custom">Custom budget</option></select><label for="engine-side">Auto-play</label><select id="engine-side"><option value="">Off</option><option value="0">Engine as Black</option><option value="1">Engine as White</option></select><label class="budget-label" for="engine-nodes">Search budget <output id="engine-nodes-value">256</output> nodes</label></div>
+      <input id="engine-nodes" type="range" min="64" max="4096" step="64" value="256"><p id="engine-info" class="hint"></p></section>
+    <section class="panel move-panel"><h2>Moves</h2><ol id="moves" aria-label="Move timeline"></ol><p class="hint">Select a move to jump to that position.</p></section>
     <section class="panel"><label class="sfen-label" for="sfen">SFEN position</label>
-      <textarea id="sfen" rows="2" spellcheck="false"></textarea><button id="load-sfen" type="button">Load SFEN</button></section>
+      <textarea id="sfen" rows="2" spellcheck="false"></textarea><div class="export-actions"><button id="load-sfen" type="button">Load SFEN</button><button id="copy-sfen" type="button">Copy SFEN</button><button id="copy-usi" type="button">Copy USI position</button></div><p id="export-state" class="hint" aria-live="polite"></p></section>
     <section class="panel nnue-panel"><label for="nnue-model">NNUE model</label><input id="nnue-model" type="file" accept=".nnue,application/octet-stream"><p id="nnue-state" class="hint"></p></section>
-    <p class="hint">Select a piece or a hand piece, then a highlighted square. Ctrl/Cmd-Z undoes.</p>
+    <p class="hint">Select a piece or a hand piece, then a highlighted square. Use Tab and arrow keys to navigate the board; Ctrl/Cmd-Z undoes.</p>
   </main>
+  <dialog id="promotion-dialog" aria-labelledby="promotion-title"><form method="dialog"><h2 id="promotion-title">Promote this piece?</h2><p>Choose the form to place on this square.</p><div class="dialog-actions"><button type="button" data-promotion="yes">Promote</button><button type="button" data-promotion="no">Keep original</button><button value="cancel">Cancel</button></div></form></dialog>
+  <dialog id="result-dialog" aria-labelledby="result-title"><form method="dialog"><h2 id="result-title">Game over</h2><p id="result-detail"></p><div class="dialog-actions"><button id="result-new-game" type="button">New game</button><button value="close">Review position</button></div></form></dialog>
   <script type="module" src="app.js"></script>
 </body>
 </html>

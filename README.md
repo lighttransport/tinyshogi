@@ -80,8 +80,12 @@ Emscripten files are written to `web/build/`; Vite's production bundle is
 written to `web/dist/`. On a WebGPU-capable browser, the demo can also load a
 local tinyshogi `.nnue` file. Its sparse feature transformer runs in a WebGPU
 compute shader and the score is shown beside the board; model data stays local
-to the browser. The engine-move button intentionally keeps the compact WASM
-material search, since WebGPU command submission is asynchronous.
+to the browser. With a model loaded, **NNUE move (1 ply)** scores every legal
+child on WebGPU and plays the best one. The regular engine-move button keeps
+the compact deeper WASM material search, since WebGPU command submission is
+asynchronous. The web UI offers Practice through Expert strength presets;
+they control the WASM engine's per-move search budget, with a Custom setting
+for the raw node slider.
 
 The core is C11. The initial threading and CLI backend uses POSIX pthreads and
 `poll`; no third-party runtime or source dependency is required.
