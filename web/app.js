@@ -35,6 +35,7 @@ const api = {
 };
 let engineWorker;
 let engineBusy = false;
+let engineSearchSfen = '';
 
 const board = document.querySelector('#board');
 const status = document.querySelector('#status');
@@ -345,19 +346,20 @@ document.querySelector('#nnue-model').addEventListener('change', async event => 
   if (!file) return;
   const state = document.querySelector('#nnue-state');
   state.textContent = `Loading ${file.name} onto WebGPU…`;
+  const previous = gpuNnue;
   let evaluator = null;
   try {
     evaluator = new WebGpuNnue();
     const description = await evaluator.load(await file.arrayBuffer());
-    const previous = gpuNnue;
     gpuNnue = evaluator; nnueScore = null;
     if (previous) previous.dispose();
     state.textContent = `WebGPU NNUE active — ${description}`;
     requestEvaluation();
   } catch (error) {
     if (evaluator) evaluator.dispose();
-    gpuNnue = null; nnueScore = null;
-    state.textContent = `NNUE unavailable: ${error.message}`;
+    state.textContent = previous
+      ? `New NNUE model rejected: ${error.message}. The current model remains active.`
+      : `NNUE unavailable: ${error.message}`;
   }
 });
 function configuredEngineSide() {
@@ -372,9 +374,10 @@ function engineOwnsTurn() {
 function startEngineMove() {
   if (engineBusy || api.result() !== 0) return;
   engineBusy = true;
+  engineSearchSfen = api.getSfen();
   engineInfo = 'Engine is searching…';
   render();
-  engineWorker.postMessage({ sfen: api.getSfen(), nodes: Number(document.querySelector('#engine-nodes').value) });
+  engineWorker.postMessage({ sfen: engineSearchSfen, nodes: Number(document.querySelector('#engine-nodes').value) });
 }
 
 function maybeStartEngineMove() {
@@ -387,6 +390,7 @@ document.querySelector('#engine-cancel').addEventListener('click', () => {
   engineWorker.terminate();
   engineWorker = createEngineWorker();
   engineBusy = false;
+  engineSearchSfen = '';
   engineInfo = 'Engine search cancelled.';
   render();
 });
@@ -453,6 +457,14 @@ function createEngineWorker() {
   const worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
   worker.onmessage = event => {
     engineBusy = false;
+    const stale = engineSearchSfen !== api.getSfen();
+    engineSearchSfen = '';
+    if (stale) {
+      engineInfo = 'Engine result discarded because the position changed.';
+      render();
+      maybeStartEngineMove();
+      return;
+    }
     if (event.data.error || !event.data.move || !api.playUsi(event.data.move)) {
       window.alert(event.data.error || 'Engine search failed');
       refresh();
@@ -465,6 +477,7 @@ function createEngineWorker() {
   };
   worker.onerror = event => {
     engineBusy = false;
+    engineSearchSfen = '';
     engineInfo = `Engine worker failed: ${event.message || 'unknown error'}`;
     render();
   };
