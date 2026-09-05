@@ -19,9 +19,12 @@ function parseModel(bytes) {
   if (featureCount !== FEATURE_COUNT || hidden === 0 || hidden > 4096) throw new Error('Unsupported NNUE dimensions');
   let headDim = 0;
   if (magic === 'NNUE3') {
+    if (version !== 3) throw new Error('Unsupported NNUE metadata');
     headDim = u32();
     if (u32() !== 2 || headDim === 0 || headDim > 128) throw new Error('Unsupported NNUE3 heads');
-    i32(); i32(); i32(); // feature, head, output scales
+    const featureScale = i32(), headScale = i32(), outputScale = i32();
+    if (featureScale !== 256 || headScale !== 256 || outputScale !== 1024)
+      throw new Error('Unsupported NNUE3 scales');
     const activationClip = i32(), headClip = i32();
     const featureOffset = offset, featureBytes = featureCount * hidden * 2;
     need(featureBytes);
@@ -37,7 +40,10 @@ function parseModel(bytes) {
     const finalBias = [view.getBigInt64(offset, true), view.getBigInt64(offset + 8, true)];
     return { magic, hidden, featureOffset, featureBytes, headDim, headWeights, headBias, finalWeights, finalBias, activationClip, headClip };
   }
+  if (version !== (magic === 'NNUE1' ? 1 : 2) || u32() !== 2)
+    throw new Error('Unsupported NNUE metadata');
   const featureScale = i32(), outputScale = i32();
+  if (featureScale <= 0 || outputScale <= 0) throw new Error('Invalid NNUE scales');
   const activationClip = magic === 'NNUE2' ? i32() : 0x7fffffff;
   const featureOffset = offset, featureBytes = featureCount * hidden * 2;
   need(featureBytes);
@@ -50,7 +56,13 @@ function parseModel(bytes) {
 function packFeatureRows(bytes, model) {
   const wordsPerRow = Math.ceil(model.hidden / 2);
   if ((model.hidden & 1) === 0) {
-    return { data: null, byteLength: model.featureBytes, wordsPerRow };
+    /* NNUE headers are not four-byte aligned (NNUE1 starts weights at byte
+     * 29, NNUE2 at 33, and NNUE3 at 45). GPUQueue.writeBuffer requires an
+     * aligned source offset, so make an aligned copy even though row packing
+     * itself is already correct for even hidden dimensions. */
+    const data = new Uint32Array(bytes.slice(model.featureOffset,
+      model.featureOffset + model.featureBytes));
+    return { data, byteLength: data.byteLength, wordsPerRow };
   }
   const source = new DataView(bytes, model.featureOffset, model.featureBytes);
   const packed = new Uint32Array(FEATURE_COUNT * wordsPerRow);
@@ -103,20 +115,31 @@ export class WebGpuNnue {
     this.device = device;
     this.model = model;
     this.evaluationTail = Promise.resolve();
-    const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
-    this.weightBuffer = device.createBuffer({ size: featureUpload.byteLength, usage: storage });
-    if (featureUpload.data) device.queue.writeBuffer(this.weightBuffer, 0, featureUpload.data);
-    else device.queue.writeBuffer(this.weightBuffer, 0, bytes, model.featureOffset, model.featureBytes);
-    this.idBuffer = device.createBuffer({ size: 128 * 4, usage: storage });
-    this.sumBuffer = device.createBuffer({ size: model.hidden * 4, usage: storage | GPUBufferUsage.COPY_SRC });
-    this.readBuffer = device.createBuffer({ size: model.hidden * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-    this.paramBuffer = device.createBuffer({ size: 8, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    const module = device.createShaderModule({ code: shader });
-    this.pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-    this.bindGroup = device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: { buffer: this.weightBuffer } }, { binding: 1, resource: { buffer: this.idBuffer } },
-      { binding: 2, resource: { buffer: this.sumBuffer } }, { binding: 3, resource: { buffer: this.paramBuffer } }
-    ] });
+    device.pushErrorScope('validation');
+    try {
+      const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+      this.weightBuffer = device.createBuffer({ size: featureUpload.byteLength, usage: storage });
+      device.queue.writeBuffer(this.weightBuffer, 0, featureUpload.data);
+      this.idBuffer = device.createBuffer({ size: 128 * 4, usage: storage });
+      this.sumBuffer = device.createBuffer({ size: model.hidden * 4, usage: storage | GPUBufferUsage.COPY_SRC });
+      this.readBuffer = device.createBuffer({ size: model.hidden * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+      this.paramBuffer = device.createBuffer({ size: 8, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      const module = device.createShaderModule({ code: shader });
+      this.pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+      this.bindGroup = device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: this.weightBuffer } }, { binding: 1, resource: { buffer: this.idBuffer } },
+        { binding: 2, resource: { buffer: this.sumBuffer } }, { binding: 3, resource: { buffer: this.paramBuffer } }
+      ] });
+    } catch (error) {
+      await device.popErrorScope();
+      this.dispose();
+      throw error;
+    }
+    const validationError = await device.popErrorScope();
+    if (validationError) {
+      this.dispose();
+      throw new Error(`WebGPU validation failed: ${validationError.message}`);
+    }
     device.lost.then(info => { this.failure = `WebGPU device lost: ${info.message || info.reason}`; });
     return `${model.magic}, ${model.hidden} hidden units`;
   }
@@ -159,7 +182,7 @@ export class WebGpuNnue {
   score(sum, perspective) {
     const m = this.model;
     if (m.magic !== 'NNUE3') {
-      let raw = BigInt(m.outputBias);
+      let raw = BigInt(m.outputBias) * BigInt(m.featureScale);
       const base = perspective * m.hidden;
       for (let i = 0; i < m.hidden; ++i) raw += BigInt(Math.min(Math.max(sum[i], 0), m.activationClip)) * BigInt(m.outputWeights[base + i]);
       return Math.round(Math.tanh(Number(raw) / (m.featureScale * m.outputScale)) * 1000);
