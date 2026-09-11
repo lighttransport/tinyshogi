@@ -3,10 +3,13 @@
 #include "../src/nnue.h"
 
 #include <stddef.h>
+#include <stdlib.h>
+
+extern const TinyShogiEvalPlugin *tinyshogi_eval_plugin(void);
 
 /* A deliberately small, single-position API for the browser demo. */
 static ShogiPosition position;
-#define WEB_MAX_UNDO 512
+#define WEB_MAX_UNDO 1024
 static ShogiUndo undo_stack[WEB_MAX_UNDO];
 static size_t undo_count;
 static ShogiMove redo_stack[WEB_MAX_UNDO];
@@ -17,6 +20,8 @@ static unsigned engine_last_depth;
 static uint64_t engine_last_time_ms;
 static uint64_t engine_last_nps;
 static char root_sfen[512];
+static ShogiEvaluator web_nnue_evaluator;
+static bool web_nnue_model_loaded;
 
 static void web_clear_history(void) {
     undo_count = 0;
@@ -185,7 +190,8 @@ const char *web_engine_move(unsigned nodes) {
         .rollout_depth = 64,
         .quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH,
         .exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI,
-        .multi_pv = 1
+        .multi_pv = 1,
+        .evaluator = web_nnue_model_loaded ? &web_nnue_evaluator : NULL
     };
     limits.nodes = nodes == 0 ? 64 : nodes;
     SearchJob *job = search_start(&position, &limits, &options);
@@ -261,6 +267,24 @@ unsigned web_nnue_move_feature_id(int move_index, int perspective, int feature_i
 }
 
 void web_init(void) {
+    const TinyShogiEvalPlugin *plugin;
+    void *userdata;
     shogi_init();
+    shogi_evaluator_init(&web_nnue_evaluator);
+    plugin = tinyshogi_eval_plugin();
+    userdata = plugin == NULL || plugin->create == NULL ? NULL : plugin->create("20");
+    web_nnue_model_loaded = userdata != NULL && plugin->evaluate != NULL &&
+        shogi_evaluator_set(&web_nnue_evaluator, userdata, plugin->evaluate,
+                            plugin->destroy, plugin->name);
+    if (web_nnue_model_loaded && plugin->struct_size >= sizeof(*plugin) &&
+        plugin->state_create != NULL && plugin->state_destroy != NULL &&
+        plugin->state_make != NULL && plugin->state_unmake != NULL &&
+        plugin->state_score != NULL) {
+        web_nnue_model_loaded = shogi_evaluator_set_state_callbacks(
+            &web_nnue_evaluator, plugin->state_create, plugin->state_destroy,
+            plugin->state_make, plugin->state_unmake, plugin->state_score);
+    }
     web_reset();
 }
+
+int web_nnue_active(void) { return web_nnue_model_loaded ? 1 : 0; }

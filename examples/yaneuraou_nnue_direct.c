@@ -382,8 +382,13 @@ static void *direct_create(const char *config) {
         if (*end != '\0' || parsed < 1 || parsed > 128) return NULL;
         scale = (unsigned)parsed;
     }
-    const char *path = getenv("YANEURAOU_NN_BIN");
+    const char *path;
+#ifdef TINYSHOGI_WEB_NNUE
+    path = "/nn.bin";
+#else
+    path = getenv("YANEURAOU_NN_BIN");
     if (path == NULL || path[0] == '\0') path = "eval/nn.bin";
+#endif
     DirectEvaluator *evaluator = calloc(1, sizeof(*evaluator));
     if (evaluator == NULL || !direct_model_load(&evaluator->model, path)) {
         direct_destroy(evaluator);

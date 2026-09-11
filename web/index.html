@@ -20,10 +20,12 @@
       <button id="reset" type="button">New game</button>
       <button id="engine-move" type="button">Engine move</button>
       <button id="engine-cancel" type="button">Cancel search</button>
+      <button id="autoplay" type="button">Auto-play game</button>
+      <button id="autoplay-cancel" type="button">Cancel auto-play</button>
       <button id="nnue-move" type="button" title="Choose the highest-scoring legal move using the loaded NNUE model">NNUE move (1 ply)</button>
       <button id="flip-board" type="button">Flip board</button>
     </div>
-    <section class="analysis panel"><div class="engine-settings"><label for="engine-strength">Playing strength</label><select id="engine-strength"><option value="practice">Practice</option><option value="casual">Casual</option><option value="club" selected>Club</option><option value="strong">Strong</option><option value="expert">Expert</option><option value="custom">Custom budget</option></select><label for="engine-side">Auto-play</label><select id="engine-side"><option value="">Off</option><option value="0">Engine as Black</option><option value="1">Engine as White</option></select><label class="budget-label" for="engine-nodes">Search budget <output id="engine-nodes-value">256</output> nodes</label></div>
+    <section class="analysis panel"><div class="engine-settings"><label for="engine-strength">Playing strength</label><select id="engine-strength"><option value="practice">Practice</option><option value="casual">Casual</option><option value="club" selected>Club</option><option value="strong">Strong</option><option value="expert">Expert</option><option value="custom">Custom budget</option></select><label for="engine-side">Auto-play</label><select id="engine-side"><option value="">Off</option><option value="0">Engine as Black</option><option value="1" selected>Engine as White</option></select><label class="budget-label" for="engine-nodes">Search budget <output id="engine-nodes-value">256</output> nodes</label></div>
       <input id="engine-nodes" type="range" min="64" max="4096" step="64" value="256"><p id="engine-info" class="hint"></p></section>
     <section class="panel move-panel"><h2>Moves</h2><ol id="moves" aria-label="Move timeline"></ol><p class="hint">Select a move to jump to that position.</p></section>
     <section class="panel"><label class="sfen-label" for="sfen">SFEN position</label>

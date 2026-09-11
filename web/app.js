@@ -36,6 +36,8 @@ const api = {
 let engineWorker;
 let engineBusy = false;
 let engineSearchSfen = '';
+let autoplayBusy = false;
+let autoplaySearchSfen = '';
 
 const board = document.querySelector('#board');
 const status = document.querySelector('#status');
@@ -54,6 +56,9 @@ let pendingPromotion = [];
 let nnueMoveBusy = false;
 let previousResult = 0;
 let focusedVisualSquare = 40;
+let engineMoveFrom = -1;
+let engineMoveTo = -1;
+let engineEffectActive = false;
 
 const names = ['', '歩', '香', '桂', '銀', '金', '角', '飛', '玉', 'と', '杏', '圭', '全', '馬', '龍'];
 const handNames = ['歩', '香', '桂', '銀', '金', '角', '飛'];
@@ -84,6 +89,8 @@ function render() {
     if (square === selected) button.classList.add('selected');
     if (targets.has(square)) button.classList.add('target');
     if (square === lastMove) button.classList.add('last-move');
+    if (engineEffectActive && square === engineMoveFrom) button.classList.add('engine-move-origin');
+    if (engineEffectActive && square === engineMoveTo) button.classList.add('engine-move-effect');
     button.dataset.square = square;
     button.dataset.visualSquare = visualSquare;
     button.tabIndex = visualSquare === focusedVisualSquare ? 0 : -1;
@@ -108,6 +115,7 @@ function render() {
     button.addEventListener('click', () => clickSquare(square, moves));
     board.append(button);
   }
+  engineEffectActive = false;
   renderHands();
   renderMoveList();
   const result = api.result();
@@ -119,8 +127,10 @@ function render() {
   sfen.value = api.getSfen();
   document.querySelector('#undo').disabled = !api.canUndo();
   document.querySelector('#redo').disabled = !api.canRedo();
-  document.querySelector('#engine-move').disabled = engineBusy || result !== 0;
+  document.querySelector('#engine-move').disabled = engineBusy || autoplayBusy || result !== 0;
   document.querySelector('#engine-cancel').disabled = !engineBusy;
+  document.querySelector('#autoplay').disabled = engineBusy || autoplayBusy || result !== 0;
+  document.querySelector('#autoplay-cancel').disabled = !autoplayBusy;
   document.querySelector('#nnue-move').disabled = !gpuNnue || nnueMoveBusy || result !== 0;
   document.querySelector('#engine-nodes-value').textContent = document.querySelector('#engine-nodes').value;
   document.querySelector('#engine-info').textContent = engineInfo;
@@ -296,12 +306,15 @@ function playMove(move) {
     lastMove = move.to;
     focusedVisualSquare = flipped ? 80 - move.to : move.to;
   }
+  engineMoveFrom = -1;
+  engineMoveTo = -1;
+  engineEffectActive = false;
   selected = -1; selectedDrop = 0; engineInfo = '';
   render();
   maybeStartEngineMove();
 }
 
-function refresh() { selected = -1; selectedDrop = 0; lastMove = -1; render(); }
+function refresh() { selected = -1; selectedDrop = 0; lastMove = -1; engineMoveFrom = -1; engineMoveTo = -1; engineEffectActive = false; render(); }
 document.querySelector('#reset').addEventListener('click', () => { api.reset(); engineInfo = ''; refresh(); maybeStartEngineMove(); });
 document.querySelector('#undo').addEventListener('click', () => { if (api.undo()) { engineInfo = ''; refresh(); } });
 document.querySelector('#redo').addEventListener('click', () => { if (api.redo()) { engineInfo = ''; refresh(); } });
@@ -368,11 +381,11 @@ function configuredEngineSide() {
 }
 
 function engineOwnsTurn() {
-  return engineBusy || (api.result() === 0 && configuredEngineSide() === api.side());
+  return engineBusy || autoplayBusy || (api.result() === 0 && configuredEngineSide() === api.side());
 }
 
 function startEngineMove() {
-  if (engineBusy || api.result() !== 0) return;
+  if (engineBusy || autoplayBusy || api.result() !== 0) return;
   engineBusy = true;
   engineSearchSfen = api.getSfen();
   engineInfo = 'Engine is searching…';
@@ -392,6 +405,24 @@ document.querySelector('#engine-cancel').addEventListener('click', () => {
   engineBusy = false;
   engineSearchSfen = '';
   engineInfo = 'Engine search cancelled.';
+  render();
+});
+document.querySelector('#autoplay').addEventListener('click', () => {
+  if (engineBusy || autoplayBusy || api.result() !== 0) return;
+  autoplayBusy = true;
+  autoplaySearchSfen = api.getSfen();
+  engineInfo = 'Auto-play is running up to 1,000 plies…';
+  render();
+  engineWorker.postMessage({ mode: 'autoplay', sfen: autoplaySearchSfen,
+    nodes: Number(document.querySelector('#engine-nodes').value), maxPlies: 1000 });
+});
+document.querySelector('#autoplay-cancel').addEventListener('click', () => {
+  if (!autoplayBusy) return;
+  engineWorker.terminate();
+  engineWorker = createEngineWorker();
+  autoplayBusy = false;
+  autoplaySearchSfen = '';
+  engineInfo = 'Auto-play cancelled.';
   render();
 });
 document.querySelector('#engine-side').addEventListener('change', () => {
@@ -443,6 +474,9 @@ document.querySelector('#nnue-move').addEventListener('click', async () => {
     if (!api.play(bestMove.index)) throw new Error('chosen NNUE move is no longer legal');
     playedMove = true;
     lastMove = bestMove.to;
+    engineMoveFrom = bestMove.from === 255 ? -1 : bestMove.from;
+    engineMoveTo = bestMove.to;
+    engineEffectActive = true;
     engineInfo = `NNUE 1-ply: ${moveLabel(bestMove)} · ${formatScore(bestScore)}`;
   } catch (error) {
     engineInfo = `NNUE move failed: ${error.message}`;
@@ -456,6 +490,47 @@ document.querySelector('#nnue-move').addEventListener('click', async () => {
 function createEngineWorker() {
   const worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
   worker.onmessage = event => {
+    if (event.data.autoplay) {
+      autoplayBusy = false;
+      const stale = autoplaySearchSfen !== api.getSfen();
+      autoplaySearchSfen = '';
+      if (event.data.error) {
+        engineInfo = `Auto-play failed: ${event.data.error}`;
+        render();
+        return;
+      }
+      if (stale) {
+        engineInfo = 'Auto-play result discarded because the position changed.';
+        render();
+        return;
+      }
+      let applied = 0;
+      const moves = event.data.moves || [];
+      for (const move of moves) {
+        if (!api.playUsi(move)) break;
+        applied++;
+      }
+      if (applied !== moves.length) {
+        engineInfo = `Auto-play stopped: could not apply move ${applied + 1}.`;
+        refresh();
+        return;
+      }
+      if (moves.length) {
+        lastMove = usiDestination(moves[moves.length - 1]);
+        engineMoveFrom = usiOrigin(moves[moves.length - 1]);
+        engineMoveTo = lastMove;
+        engineEffectActive = true;
+        focusedVisualSquare = flipped ? 80 - lastMove : lastMove;
+      }
+      const reason = event.data.reason === 'move-limit' ? '1,000-ply limit' :
+        event.data.reason === 'search-error' ? 'search error' :
+        event.data.reason === 'black-wins' ? 'Black wins' :
+        event.data.reason === 'white-wins' ? 'White wins' :
+        event.data.reason === 'draw' ? 'draw' : 'terminal position';
+      engineInfo = `${event.data.nnue ? 'WASM NNUE' : 'Material'} auto-play: ${applied} plies · stopped by ${reason}.`;
+      render();
+      return;
+    }
     engineBusy = false;
     const stale = engineSearchSfen !== api.getSfen();
     engineSearchSfen = '';
@@ -469,15 +544,20 @@ function createEngineWorker() {
       window.alert(event.data.error || 'Engine search failed');
       refresh();
     } else {
-      engineInfo = `Engine: ${event.data.move} · depth ${event.data.depth} · ${event.data.nodes} nodes · ${event.data.timeMs} ms · ${formatNps(event.data.nps)} N/s · ${formatScore(event.data.score)}`;
+      engineInfo = `${event.data.nnue ? 'WASM NNUE' : 'Material'} engine: ${event.data.move} · depth ${event.data.depth} · ${event.data.nodes} nodes · ${event.data.timeMs} ms · ${formatNps(event.data.nps)} N/s · ${formatScore(event.data.score)}`;
       lastMove = usiDestination(event.data.move);
+      engineMoveFrom = usiOrigin(event.data.move);
+      engineMoveTo = lastMove;
+      engineEffectActive = true;
       focusedVisualSquare = flipped ? 80 - lastMove : lastMove;
       selected = -1; selectedDrop = 0; render();
     }
   };
   worker.onerror = event => {
     engineBusy = false;
+    autoplayBusy = false;
     engineSearchSfen = '';
+    autoplaySearchSfen = '';
     engineInfo = `Engine worker failed: ${event.message || 'unknown error'}`;
     render();
   };
@@ -487,6 +567,10 @@ function createEngineWorker() {
 function usiDestination(move) {
   if (!move || move.length < 4) return -1;
   return (move.charCodeAt(3) - 97) * 9 + 9 - Number(move[2]);
+}
+function usiOrigin(move) {
+  if (!move || move.length < 4 || move[1] === '*') return -1;
+  return (move.charCodeAt(1) - 97) * 9 + 9 - Number(move[0]);
 }
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {

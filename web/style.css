@@ -5,12 +5,12 @@ body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, 
 h1 { margin: .15rem 0 .25rem; font-size: clamp(2rem, 7vw, 3.1rem); letter-spacing: -.06em; }.hero p { margin-left: auto; margin-right: auto; }
 #status { min-height: 1.5em; margin: 0; font-weight: 650; }.evaluation { margin: .25rem 0 0; color: #6d5b49; font: .86rem ui-monospace, monospace; }
 .game { padding: 1rem; background: #fffaf0a8; border: 1px solid #cdbd9e; border-radius: 18px; box-shadow: 0 14px 38px #6a4c2730; }
-.board { display: grid; grid-template-columns: repeat(9, 1fr); width: min(90vw, 540px); margin: .5rem auto 1rem; border: 3px solid #51351f; box-shadow: 0 5px 12px #4a301c55; }
+.board { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); width: min(90vw, 540px); margin: .5rem auto 1rem; border: 3px solid #51351f; box-shadow: 0 5px 12px #4a301c55; }
 .hand-label { text-align: left; margin: .2rem .25rem; color: #785d42; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }.hand { display: flex; flex-wrap: wrap; justify-content: center; gap: .3rem; min-height: 2.3rem; }
 .hand-piece { min-width: 3.3rem; padding: .32rem; font: inherit; background: #f0d7a9; border: 1px solid #a67b4c; border-radius: 6px; }
 .hand-piece:disabled { opacity: .45; }
 .hand-piece.selected { background: #b8d486; outline: 2px solid #477b45; }
-.square { position: relative; aspect-ratio: 1; border: 0; border-right: 1px solid #8a633d; border-bottom: 1px solid #8a633d; background: linear-gradient(135deg, #e9c276, #d7a55b); font-size: clamp(1.4rem, 6vw, 2.5rem); cursor: pointer; transition: background .12s, transform .12s; }.square:hover { background: #f2d183; }.square:focus-visible { z-index: 1; outline: 3px solid #1d5574; outline-offset: -3px; }
+.square { box-sizing: border-box; min-width: 0; position: relative; aspect-ratio: 1; padding: 0; border: 0; border-right: 1px solid #8a633d; border-bottom: 1px solid #8a633d; background: linear-gradient(135deg, #e9c276, #d7a55b); font-size: clamp(1.4rem, 6vw, 2.5rem); cursor: pointer; transition: background .12s, transform .12s; }.square:hover { background: #f2d183; }.square:focus-visible { z-index: 1; outline: 3px solid #1d5574; outline-offset: -3px; }
 .square:nth-child(9n) { border-right: 0; }
 .square:nth-last-child(-n+9) { border-bottom: 0; }
 .square.white { color: #fffaf0; text-shadow: 1px 1px #382516; }
@@ -19,6 +19,12 @@ h1 { margin: .15rem 0 .25rem; font-size: clamp(2rem, 7vw, 3.1rem); letter-spacin
 .square.selected { background: #f4d57d; outline: 3px solid #477b45; outline-offset: -3px; }
 .square.target { background: #b8d486; }
 .square.last-move { box-shadow: inset 0 0 0 3px #c56e28; }
+.square.engine-move-origin { animation: engine-origin .8s ease-out; }
+.square.engine-move-effect { z-index: 1; animation: engine-arrival 1.1s ease-out; }
+.square.engine-move-effect::after { content: ''; position: absolute; inset: 15%; border: 3px solid #4f8d5c; border-radius: 50%; pointer-events: none; animation: engine-ring 1.1s ease-out; }
+@keyframes engine-origin { 0%, 100% { box-shadow: inset 0 0 0 3px #c56e28; } 35% { box-shadow: inset 0 0 0 5px #e7a63c, 0 0 18px #e7a63c99; } }
+@keyframes engine-arrival { 0% { box-shadow: inset 0 0 0 3px #c56e28, 0 0 0 0 #4f8d5c; transform: scale(.9); } 45% { box-shadow: inset 0 0 0 5px #4f8d5c, 0 0 0 12px #4f8d5c66; transform: scale(1.04); } 100% { box-shadow: inset 0 0 0 3px #c56e28, 0 0 0 20px transparent; transform: scale(1); } }
+@keyframes engine-ring { 0% { opacity: .95; transform: scale(.45); } 100% { opacity: 0; transform: scale(1.35); } }
 .piece-label { display: block; line-height: 1; }.coordinate { position: absolute; color: #68431f; font: 700 clamp(.48rem, 1.5vw, .68rem)/1 ui-monospace, monospace; pointer-events: none; }.coordinate-file { top: 2px; right: 3px; }.coordinate-rank { bottom: 2px; left: 3px; }
 button { padding: .55rem .9rem; border: 1px solid #94714d; border-radius: 7px; background: #fff8eb; color: inherit; font: inherit; cursor: pointer; } button:hover:not(:disabled) { background: #f3dba9; } button:disabled { cursor: not-allowed; }
 .controls { display: flex; justify-content: center; gap: .45rem; flex-wrap: wrap; margin: 1rem 0; }.controls #engine-move { background: #345c42; border-color: #345c42; color: white; }.controls #engine-cancel { border-color: #a64b37; color: #8a321e; }
