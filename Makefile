@@ -1,4 +1,5 @@
 CC ?= cc
+PYTHON ?= python3
 BUILD ?= build/make
 
 CPPFLAGS ?= -Isrc
@@ -34,6 +35,7 @@ test: $(ENGINE) $(TESTS)
 	$(BUILD)/tinyshogi-integer-test
 	$(BUILD)/tinyshogi-integer-batch-test
 	$(BUILD)/tinyshogi-simd-test
+	$(PYTHON) -B tests/test_match_tools.py $(ENGINE)
 	if [ -r "$${YANEURAOU_NN_BIN:-eval/nn.bin}" ]; then \
 		YANEURAOU_NN_BIN="$${YANEURAOU_NN_BIN:-eval/nn.bin}" $(BUILD)/tinyshogi-yaneuraou-nnue-test; \
 	fi
@@ -51,15 +53,15 @@ $(BUILD):
 
 $(BUILD)/src/%.o: src/%.c
 	mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD)/tests/%.o: tests/%.c
 	mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD)/bench/%.o: bench/%.c
 	mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(ENGINE): $(BUILD)/src/main.o $(BUILD)/src/search.o $(BUILD)/src/shogi.o \
 	$(BUILD)/src/nnue.o $(BUILD)/src/simd.o $(BUILD)/src/eval.o \
@@ -99,11 +101,11 @@ $(BUILD)/tinyshogi-yaneuraou-nnue-test: $(BUILD)/tests/test_yaneuraou_nnue.o \
 
 $(BUILD)/tests/test_yaneuraou_nnue.o: tests/test_yaneuraou_nnue.c
 	mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD)/examples/yaneuraou_nnue_direct.o: examples/yaneuraou_nnue_direct.c
 	mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD)/tinyshogi-simd-bench: $(BUILD)/bench/simd_bench.o $(BUILD)/src/simd.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
@@ -132,3 +134,5 @@ $(BUILD)/tinyshogi-yaneuraou-eval-adapter.so: examples/yaneuraou_eval_adapter.c 
 
 clean:
 	rm -rf $(BUILD)
+
+-include $(wildcard $(BUILD)/src/*.d $(BUILD)/tests/*.d $(BUILD)/bench/*.d $(BUILD)/examples/*.d)

@@ -122,29 +122,42 @@ int main(void) {
         return fail("SFEN roundtrip");
     }
 
-    /* Standard SFEN lists only the side-to-move's hand; the dual-hand form
-     * (used by the self-play training export) lists both, black then white. */
+    /* Both serialization entry points must preserve both hands. */
     {
         char standard[512], full[512];
         if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 b 1R1r 1"))
             return fail("dual-hand SFEN parse");
         if (!shogi_position_to_sfen(&parsed, standard, sizeof(standard)) ||
-            strcmp(standard, "4k4/9/9/9/9/9/9/9/4K4 b R 1") != 0)
-            return fail("standard SFEN side-to-move hand only");
+            strcmp(standard, "4k4/9/9/9/9/9/9/9/4K4 b Rr 1") != 0)
+            return fail("standard SFEN both hands");
+        if (check_hash_roundtrip(&parsed, "both hands, black to move")) return 1;
         if (!shogi_position_to_sfen_full(&parsed, full, sizeof(full)) ||
             strcmp(full, "4k4/9/9/9/9/9/9/9/4K4 b Rr 1") != 0)
             return fail("dual-hand SFEN lists both sides");
         if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 w 1R1r 2"))
             return fail("dual-hand SFEN parse (gote)");
         if (!shogi_position_to_sfen(&parsed, standard, sizeof(standard)) ||
-            strcmp(standard, "4k4/9/9/9/9/9/9/9/4K4 w r 2") != 0)
-            return fail("standard SFEN side-to-move hand only (gote)");
+            strcmp(standard, "4k4/9/9/9/9/9/9/9/4K4 w Rr 2") != 0)
+            return fail("standard SFEN both hands (gote)");
+        if (check_hash_roundtrip(&parsed, "both hands, white to move")) return 1;
         if (!shogi_position_to_sfen_full(&parsed, full, sizeof(full)) ||
             strcmp(full, "4k4/9/9/9/9/9/9/9/4K4 w Rr 2") != 0)
             return fail("dual-hand SFEN lists both sides (gote)");
     }
 
+    if (!shogi_position_from_sfen(&parsed, "4k4/9/9/9/9/9/9/9/4K4 b S2Pb3p 1") ||
+        check_hash_roundtrip(&parsed, "USI specification hand example")) return 1;
+
     ShogiMove drop;
+    /* White's lance must not inherit Black's forward ray mask. */
+    if (!shogi_position_from_sfen(&parsed, "4k4/9/4K4/9/4l4/9/9/9/9 b - 1") ||
+        shogi_is_in_check(&parsed, SHOGI_BLACK)) return fail("white lance cannot attack backwards");
+    if (!shogi_position_from_sfen(&parsed, "4k4/9/4l4/9/4K4/9/9/9/9 b - 1") ||
+        !shogi_is_in_check(&parsed, SHOGI_BLACK)) return fail("white lance attacks forwards");
+    if (!shogi_position_from_sfen(&parsed, "9/9/4k4/9/4L4/9/9/9/4K4 w - 1") ||
+        !shogi_is_in_check(&parsed, SHOGI_WHITE)) return fail("black lance attacks forwards");
+    if (!shogi_position_from_sfen(&parsed, "9/9/4L4/9/4k4/9/9/9/4K4 w - 1") ||
+        shogi_is_in_check(&parsed, SHOGI_WHITE)) return fail("black lance cannot attack backwards");
     if (!shogi_parse_usi_move("P*7f", &drop) || drop.from != SHOGI_SQ_NONE) return fail("drop notation");
     if (shogi_parse_and_make_move(&position, "7g7f+")) return fail("invalid pawn promotion acceptance");
     if (shogi_game_result(&position) != SHOGI_RESULT_ONGOING) return fail("premature terminal result");
@@ -173,10 +186,20 @@ int main(void) {
     /* Material validation: reject impossible piece counts. */
     if (shogi_position_from_sfen(&parsed, "3RRR3/9/9/9/4k4/9/9/9/4K4 b - 1"))
         return fail("material: three rooks accepted");
-    if (shogi_position_from_sfen(&parsed, "1+R2+R4/9/9/9/4k4/9/9/9/4K4 b - 1"))
-        return fail("material: two dragons accepted");
+    if (!shogi_position_from_sfen(&parsed, "1+R2+R4/9/9/9/4k4/9/9/9/4K4 b - 1"))
+        return fail("material: two dragons are legal");
+    if (!shogi_position_from_sfen(&parsed, "1+B2+B4/9/9/9/4k4/9/9/9/4K4 b - 1"))
+        return fail("material: two horses are legal");
+    if (shogi_position_from_sfen(&parsed, "1R2R4/9/9/9/4k4/9/9/9/4K4 b r 1"))
+        return fail("material: global rook limit");
     if (shogi_position_from_sfen(&parsed, "1+R2+R4/9/9/9/4k4/9/9/9/4K4 b 3R 1"))
         return fail("material: rook hand overflow accepted");
+    if (shogi_can_promote(SHOGI_GOLD) || shogi_can_promote(SHOGI_KING))
+        return fail("gold and king cannot promote");
+    if (!shogi_position_from_sfen(&parsed, "4k4/G8/9/9/9/9/9/9/4K4 b - 1") ||
+        shogi_parse_and_make_move(&parsed, "9b8a+")) return fail("gold promotion rejection");
+    if (shogi_position_from_sfen(&parsed, "4k4/+G8/9/9/9/9/9/9/4K4 b - 1"))
+        return fail("promoted gold SFEN rejection");
 
     if (!shogi_position_from_sfen(&parsed, "4r3k/9/9/9/9/9/9/4R4/4K4 b - 1")) return fail("pin SFEN");
     if (check_fast_generated_moves(&parsed, "fast pinned moves") != 0) return 1;

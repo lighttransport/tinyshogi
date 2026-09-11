@@ -348,6 +348,17 @@ static void finish_job(Application *application, bool emit_bestmove) {
     search_join(application->job, &result);
     if (emit_bestmove) {
         print_search_info(application);
+        SearchDiagnostics diagnostics;
+        if (search_get_diagnostics(application->job, &diagnostics))
+            printf("info string searchstats mainnodes %llu qnodes %llu rootnodes %llu "
+                   "ttcutoffs %llu transcutoffs %llu evaluations %llu evalhits %llu\n",
+                   (unsigned long long)diagnostics.main_nodes,
+                   (unsigned long long)diagnostics.quiescence_nodes,
+                   (unsigned long long)diagnostics.root_nodes,
+                   (unsigned long long)diagnostics.tt_cutoffs,
+                   (unsigned long long)diagnostics.transposition_cutoffs,
+                   (unsigned long long)diagnostics.evaluations,
+                   (unsigned long long)diagnostics.evaluation_cache_hits);
         print_bestmove(&result);
     }
     search_destroy(application->job);
@@ -490,10 +501,20 @@ static void print_usi(void) {
     printf("option name RolloutDepth type spin default %u min 1 max 512\n", SEARCH_DEFAULT_ROLLOUT_DEPTH);
     printf("option name QuiescenceDepth type spin default %u min 0 max 8\n", SEARCH_DEFAULT_QUIESCENCE_DEPTH);
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
-    printf("option name AspirationWindow type spin default %u min 16 max 2000\n", SEARCH_DEFAULT_ASPIRATION_WINDOW);
+    printf("option name AspirationWindow type spin default %u min 16 max 8000\n", SEARCH_DEFAULT_ASPIRATION_WINDOW);
     printf("option name QuiescenceMargin type spin default %u min 0 max 1000\n", SEARCH_DEFAULT_QUIESCENCE_MARGIN);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
     puts("option name SearchMode type combo default mcts var mcts var alphabeta");
+    puts("option name USI_Hash type spin default 64 min 1 max 4096");
+    puts("option name AlphaBetaPolicy type combo default ordered var classic var ordered var selective");
+    puts("option name QuiescenceChecks type check default true");
+    puts("option name RootUpdates type combo default partial var complete var partial");
+    puts("option name QuiescenceHash type check default true");
+    puts("option name RootPrepass type check default true");
+    puts("option name NullMove type check default true");
+    puts("option name NodeOverrun type spin default 0 min 0 max 10");
+    puts("option name RootMoveLimit type spin default 0 min 0 max 32");
+    puts("option name TranspositionHistory type combo default exact var exact var shallow");
     puts("option name MCTSMode type combo default auto var auto var neural var rollout");
     puts("option name LeafBatch type spin default 5 min 1 max 12");
     puts("option name A64FXMode type combo default auto var auto var off");
@@ -533,11 +554,39 @@ static void set_option(Application *application, char *line) {
     } else if (strcmp(tokens[2], "UCTExploration") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= 3000) application->options.exploration_milli = (unsigned)value;
     } else if (strcmp(tokens[2], "AspirationWindow") == 0 && parse_unsigned(tokens[value_index], &value)) {
-        if (value >= 16 && value <= 2000) application->options.aspiration_window = (unsigned)value;
+        if (value >= 16 && value <= 8000) application->options.aspiration_window = (unsigned)value;
     } else if (strcmp(tokens[2], "QuiescenceMargin") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value <= 1000) application->options.quiescence_margin = (unsigned)value;
     } else if (strcmp(tokens[2], "MultiPV") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= SEARCH_MAX_MULTIPV) application->options.multi_pv = (unsigned)value;
+    } else if (strcmp(tokens[2], "USI_Hash") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        if (value >= 1 && value <= 4096) application->options.hash_mb = (unsigned)value;
+    } else if (strcmp(tokens[2], "QuiescenceChecks") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_skip_quiet_checks = false;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_skip_quiet_checks = true;
+    } else if (strcmp(tokens[2], "AlphaBetaPolicy") == 0) {
+        if (strcmp(tokens[value_index], "classic") == 0) application->options.ab_policy = 0;
+        else if (strcmp(tokens[value_index], "ordered") == 0) application->options.ab_policy = 1;
+        else if (strcmp(tokens[value_index], "selective") == 0) application->options.ab_policy = 2;
+    } else if (strcmp(tokens[2], "RootUpdates") == 0) {
+        if (strcmp(tokens[value_index], "complete") == 0) application->options.ab_partial_root = false;
+        else if (strcmp(tokens[value_index], "partial") == 0) application->options.ab_partial_root = true;
+    } else if (strcmp(tokens[2], "TranspositionHistory") == 0) {
+        if (strcmp(tokens[value_index], "exact") == 0) application->options.ab_shallow_transpositions = false;
+        else if (strcmp(tokens[value_index], "shallow") == 0) application->options.ab_shallow_transpositions = true;
+    } else if (strcmp(tokens[2], "QuiescenceHash") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_quiescence_hash = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_quiescence_hash = false;
+    } else if (strcmp(tokens[2], "RootPrepass") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_root_prepass = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_root_prepass = false;
+    } else if (strcmp(tokens[2], "NullMove") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_null_move = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_null_move = false;
+    } else if (strcmp(tokens[2], "NodeOverrun") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        application->options.node_overrun_percent = value > 10 ? 10 : value;
+    } else if (strcmp(tokens[2], "RootMoveLimit") == 0 && parse_unsigned(tokens[value_index], &value)) {
+        application->options.root_move_limit = value > 32 ? 32 : value;
     } else if (strcmp(tokens[2], "SearchMode") == 0) {
         if (strcmp(tokens[value_index], "alphabeta") == 0)
             application->options.mode = SEARCH_MODE_ALPHABETA;
@@ -888,13 +937,44 @@ static void process_line(Application *application, char *line) {
         fflush(stdout);
     } else if (strcmp(command, "setoption") == 0) {
         finish_job(application, false);
+        search_context_clear(application->search_context);
         set_option(application, line);
     } else if (strcmp(command, "usinewgame") == 0) {
         finish_job(application, false);
+        search_context_clear(application->search_context);
         shogi_position_start(&application->position);
     } else if (strcmp(command, "position") == 0) {
         finish_job(application, false);
-        (void)set_position_command(application, line);
+        if (!set_position_command(application, line)) {
+            puts("info string invalid position");
+            fflush(stdout);
+        }
+    } else if (strcmp(command, "status") == 0) {
+        finish_job(application, false);
+        ShogiPosition *position = &application->position;
+        ShogiMove moves[SHOGI_MAX_MOVES];
+        size_t count = shogi_generate_legal_mut(position, moves, SHOGI_MAX_MOVES);
+        ShogiResult result = SHOGI_RESULT_ONGOING;
+        const char *reason = "ongoing";
+        if (shogi_repetition_result(position, &result)) {
+            reason = result == SHOGI_RESULT_DRAW ? "repetition" : "perpetual_check";
+        } else if (count == 0) {
+            result = position->side == SHOGI_BLACK ? SHOGI_RESULT_WHITE_WIN : SHOGI_RESULT_BLACK_WIN;
+            reason = "no_legal_moves";
+        }
+        static const char *names[] = {"ongoing", "black", "white", "draw"};
+        char sfen[512];
+        shogi_position_to_sfen(position, sfen, sizeof(sfen));
+        printf("info string status {\"sfen\":\"%s\",\"result\":\"%s\",\"reason\":\"%s\","
+               "\"declaration\":%s,\"legal_moves\":[", sfen, names[result], reason,
+               shogi_is_declaration_win(position, position->side) ? "true" : "false");
+        for (size_t index = 0; index < count; ++index) {
+            char move[16];
+            shogi_move_to_usi(moves[index], move, sizeof(move));
+            printf("%s\"%s\"", index == 0 ? "" : ",", move);
+        }
+        puts("]}");
+        fflush(stdout);
     } else if (strcmp(command, "d") == 0) {
         finish_job(application, false);
         shogi_print_position(&application->position);
@@ -949,6 +1029,11 @@ int main(int argc, char **argv) {
     shogi_position_start(&application.position);
     application.options.threads = detected_threads();
     application.options.mode = SEARCH_MODE_MCTS;
+    application.options.ab_policy = 1;
+    application.options.ab_partial_root = true;
+    application.options.ab_quiescence_hash = true;
+    application.options.ab_root_prepass = true;
+    application.options.ab_null_move = true;
     application.options.seed_auto = true;
     application.options.max_tree_nodes = 1000000;
     application.options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;

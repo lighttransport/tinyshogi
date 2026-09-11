@@ -52,6 +52,7 @@ def main():
     match = args.output_dir / "match.jsonl"
     run([sys.executable, root / "scripts/selfplay_match.py", "--games", args.match_games,
          "--nodes", args.match_nodes, "--tinyshogi", args.engine, "--yaneuraou", args.engine,
+         "--tinyshogi-search-mode", "mcts",
          "--tinyshogi-eval-model", candidate, "--yaneuraou-eval-model", args.current,
          "--output", match])
     results = {}

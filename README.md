@@ -142,6 +142,25 @@ small node budget on repeated fail-high/fail-low re-searches.
 lines; `bestmove` remains the top-ranked candidate.
 `QuiescenceMargin` controls the selective tactical-pruning margin (default
 0cp; zero disables that margin).
+`USI_Hash` reserves up to the requested MiB for the alpha-beta transposition
+table (default 64), retained between moves and cleared on `usinewgame` or
+option changes. `AlphaBetaPolicy` selects `classic`, `ordered` (default; exchange,
+capture/quiet/continuation histories), or experimental `selective` pruning.
+`QuiescenceChecks` enables quiet checking moves in alpha-beta quiescence;
+all legal check evasions remain searched even when it is disabled.
+`QuiescenceHash` (default `true`) caches tactical continuations with depth-qualified
+bounds. `RootUpdates=partial` (default) retains a fully searched, exact root
+improvement when a later sibling exhausts the budget; reported depth still
+means a completed iteration. Use `complete` for the previous behavior.
+`TranspositionHistory=exact` (default) requires identical histories for cached
+scores. Experimental `shallow` also permits repetition-free histories when a
+tracked dependency-height bound proves fourfold repetition unreachable.
+`NodeOverrun` (default `0`) optionally permits up to 10% extra nodes to finish
+an in-progress root iteration; the match harness exposes this as
+`--tinyshogi-node-overrun`. A 5% setting is useful for the asymmetric strength
+profile while retaining an exact cap by default.
+Final `info string searchstats` reports main, quiescence and root node counts
+(which sum to `nodes`), cache cutoffs and evaluation counts.
 `PerpetualCheck` (default `on`) records check state in the incremental search
 make path so a fourfold repetition that is really perpetual check is awarded
 as a win for the non-checking side instead of a draw; set it to `off` to skip
@@ -174,11 +193,14 @@ side-to-move perspective, and the complete root visit distribution:
 Use `--temperature 0` for deterministic visit-max move selection. Games that
 reach `--max-plies` without a terminal result are recorded as draws. The JSONL
 format is versioned with `"version":1` and is intended for external training
-pipelines. The `sfen` field in that export uses a dual-hand form (both
-sides' captured pieces, black then white) so `tools/prepare_nnue.py` can
-recover both sides' hand features. The `sfen` USI command and board printing
-both emit standard SFEN (the hand of the side to move only), and the parser
-accepts both the standard and dual-hand forms on input.
+pipelines. Standard SFEN includes both sides' captured pieces, black then
+white. Self-play export, the `sfen` command, and board printing all preserve
+both hands. Older exports that omitted the opponent's hand cannot recover
+that lost information without the original move history.
+
+The diagnostic USI `status` command emits `info string status {JSON}` with
+the canonical SFEN, legal moves, repetition/perpetual-check result, and
+declaration availability. Availability alone does not claim a declaration.
 
 The optional no-SDK CUDA handoff is documented in [cuda/README.md](cuda/README.md).
 It uses a CUEW-style runtime loader and builds the CUDA probe with only `cc` and
@@ -207,12 +229,27 @@ python3 scripts/selfplay_match.py --games 10 --nodes 256 \
   --output selfplay-tiny-yaneuraou.jsonl
 ```
 
-The match runner alternates colors, disables YaneuraOu opening-book use, and
-writes one JSONL record per played position. Use the NNUE binary instead after
+The match runner alternates colors, preserves the full move history, disables
+YaneuraOu opening-book use, and writes move records plus separate game summaries
+and a checksummed experiment manifest. Use the NNUE binary instead after
 placing a compatible `eval/nn.bin` beside it with
 `--yaneuraou build/yaneuraou/YaneuraOu`.
 Use `--tinyshogi-nodes` and `--opponent-nodes` to measure engines at different
 node budgets; when omitted, both use the common `--nodes` limit.
+Add `--random-openings` with `--openings` to deterministically sample a fresh
+opening subset from the file using `--seed`, avoiding contiguous-block tuning.
+For the current asymmetric strength profile, use 4,000 tinyshogi nodes versus
+1,000 YaneuraOu nodes with `--tinyshogi-node-overrun 5`,
+`--tinyshogi-quiescence-depth 3`,
+`--tinyshogi-option AlphaBetaPolicy=selective`, and
+`--tinyshogi-option TranspositionHistory=shallow`.
+For the reduced 1,200-node budget, set
+`--tinyshogi-quiescence-depth 2` and
+`--tinyshogi-option NullMove=false`, with
+`--tinyshogi-option QuiescenceMargin=300` and
+`--tinyshogi-node-overrun 10`; this low-budget profile avoids the verified-null
+overhead and prunes low-impact tactical branches while reserving nodes for the
+main search.
 
 For another YaneuraOu-compatible NNUE, such as AobaNNUE, pass its Linux build
 and evaluation directory explicitly:
@@ -268,10 +305,8 @@ loader; this is intentionally a process adapter rather than a reimplementation
 of YaneuraOu's private binary format. Set `YANEURAOU_EVAL_DIR` to the directory
 containing `nn.bin`.
 
-The clean-room native reader for the local HalfKP `nn.bin` can be built and
-used without the YaneuraOu evaluator process:
-
-The native implementation includes the serialized network's input transform
+The clean-room native reader supports standard HalfKP256x2-32-32 `nn.bin`
+files, not every network architecture. It includes the input transform
 and incremental HalfKP state path; the external YaneuraOu process is not
 required at runtime.
 
@@ -281,36 +316,56 @@ YANEURAOU_NN_BIN="$HOME/work/YaneuraOu/eval/nn.bin" \
   build/make/tinyshogi-yaneuraou-nnue-test
 ```
 
-For a reproducible equal-node strength run, pass the native plugin to the
-match runner and validate the fixed gate afterward:
+Set `YANEURAOU_FV_SCALE` to the network's output divisor (default 16; the
+benchmark's Háo network requires 20). A numeric plugin configuration overrides
+the environment. The weights are an external artifact, not part of the
+Apache-licensed engine.
+
+For the pinned shared-weight benchmark, prepare the verified external fixtures
+and freeze the disjoint development/held-out opening sets once:
 
 ```sh
+bash scripts/download_strength_fixtures.sh
+python3 scripts/prepare_strength.py
+python3 scripts/verify_yaneuraou_nnue.py \
+  --state-test build/make/tinyshogi-yaneuraou-nnue-test \
+  --output runs/strength/candidate-eval-parity.json
+# Install python-shogi==1.1.1 in a separate validation environment first.
+python3 scripts/verify_rules.py --positions 5000 \
+  --output runs/strength/candidate-rules-parity.json
+
+# Tune only on development.sfens. Use heldout.sfens only after freezing a candidate.
 python3 scripts/selfplay_match.py \
   --tinyshogi build/make/tinyshogi \
   --tinyshogi-eval-plugin build/make/tinyshogi-yaneuraou-nnue-direct.so \
-  --tinyshogi-nn-bin "$HOME/work/YaneuraOu/eval/nn.bin" \
-  --yaneuraou "$HOME/work/YaneuraOu/source/YaneuraOu-by-FCC" \
-  --yaneuraou-eval-dir "$HOME/work/YaneuraOu/eval" \
-  --tinyshogi-search-mode alphabeta --paired-openings \
-  --games 100 --tinyshogi-nodes 1000 --opponent-nodes 512 \
+  --tinyshogi-nn-bin eval/hao/eval/nn.bin \
+  --yaneuraou build/yaneuraou/YaneuraOu \
+  --yaneuraou-eval-dir eval/hao/eval \
+  --tinyshogi-option AlphaBetaPolicy=ordered \
+  --openings runs/strength/openings/heldout.sfens \
+  --games 1000 --nodes 1000 --jobs 8 --strict \
   --output match-yaneuraou.jsonl
-python3 scripts/match_gate.py match-yaneuraou.jsonl --games 100 \
-  --minimum-wins 25
+python3 scripts/match_gate.py match-yaneuraou.jsonl \
+  --parity-report runs/strength/candidate-eval-parity.json \
+  --rules-report runs/strength/candidate-rules-parity.json
 ```
 
-The fixed comparison gate measures decisive wins: TinyShogi receives 1,000
-nodes and YaneuraOu receives 512 nodes. Draws are reported but do not count as
-wins. Candidate search settings can be evaluated with:
+The fixed gate requires **850 outright wins in 1,000 held-out games**; draws
+count as zero wins. Both engines request 1,000 nodes, one thread, 64 MiB hash,
+MultiPV 1, identical weights and output scale, no book or pondering. Any
+reported node overrun above 5% invalidates a strict run. The pinned YaneuraOu
+binary sometimes overruns this tolerance; do not treat a diagnostic match as
+a pass or reduce its requested node budget to conceal that issue.
+Diagnostic runs may set independent `--tinyshogi-node-tolerance` and
+`--opponent-node-tolerance` values (default 5%); both are recorded in the
+manifest. The fixed acceptance gate remains unchanged.
+See [the strength experiment report](doc/strength.md) for exact artifact
+hashes, results, limitations, and reproduction instructions.
 
-```sh
-python3 scripts/blackbox_optimize.py \
-  --tinyshogi build/make/tinyshogi \
-  --tinyshogi-eval-plugin build/make/tinyshogi-yaneuraou-nnue-direct.so \
-  --nn-bin ../YaneuraOu/eval/nn.bin \
-  --yaneuraou ../YaneuraOu/source/YaneuraOu-by-FCC \
-  --yaneuraou-eval-dir ../YaneuraOu/eval \
-  --games 10 --output-dir optimization
-```
+`scripts/blackbox_optimize.py` runs development-only parameter trials with
+paired openings and confidence intervals. Its explicit `--diagnostic` mode
+continues through node overruns but never accepts the 85% target. Use
+`scripts/match_gate.py RECORD --report-only` for descriptive results.
 
 CUDA `TSM2` checkpoints can be quantized for deterministic CPU inference:
 
@@ -617,9 +672,8 @@ make -C fuzz run
 The harness uses the seed corpus in `fuzz/corpus/` and enables AddressSanitizer
 and UndefinedBehaviorSanitizer. To run longer, pass options directly to the
 target, for example `fuzz/shogi-fuzz -max_total_time=300 fuzz/corpus`. It
-round-trips each parsed SFEN through the lossless dual-hand form (the standard
-form is lossy when the opponent holds pieces) and makes and unmakes the
-generated moves; the seed corpus includes a dual-hand position and impossible
+round-trips each parsed SFEN through the lossless standard form and makes and
+unmakes the generated moves; the seed corpus includes a position with both hands and impossible
 material positions that exercise the parser's material validation.
 
 For local automation and LLM-assisted play, `tools/tinyshogi_mcp.py` provides
@@ -642,6 +696,8 @@ The project is distributed under the Apache License 2.0 in `LICENSE`.
 The shipped engine is a clean-room implementation and contains no GPL-sourced
 code and no third-party runtime dependency. The rules tests are project-owned;
 independent external validators may be used for test-only comparison, but
-their source is not copied, linked, or distributed with this project. Any
-future permissively licensed dependency or test fixture will be listed here
-with its license and required attribution.
+their source is not copied, linked, or distributed with this project.
+The optional strength fixtures use the upstream MIT-licensed
+BalancedPositions2025 opening corpus and separately licensed Háo NNUE weights;
+downloads and licenses remain under ignored local artifact directories.
+See [fixture provenance](doc/strength.md#fixtures-and-provenance).

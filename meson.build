@@ -20,6 +20,10 @@ engine_sources = files(
 tinyshogi = executable('tinyshogi', engine_sources, dependencies : [threads_dep, math_dep, dl_dep],
   link_args : ['-rdynamic'], install : false)
 test('selftest', tinyshogi, args : ['--selftest'])
+python = find_program('python3', required : false)
+if python.found()
+  test('match-tools', python, args : ['-B', files('tests/test_match_tools.py'), tinyshogi])
+endif
 
 rules_test = executable('tinyshogi-rules-test', 'tests/test_rules.c',
   sources : ['src/shogi.c'], dependencies : [threads_dep, math_dep], install : false)

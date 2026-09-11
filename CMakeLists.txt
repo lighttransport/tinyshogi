@@ -63,6 +63,11 @@ if(BUILD_TESTING)
   add_test(NAME simd COMMAND tinyshogi-simd-test)
 
   add_test(NAME selftest COMMAND tinyshogi --selftest)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME match-tools COMMAND ${Python3_EXECUTABLE} -B
+             ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_match_tools.py $<TARGET_FILE:tinyshogi>)
+  endif()
 
   tinyshogi_target(tinyshogi-yaneuraou-nnue-test
                    tests/test_yaneuraou_nnue.c
