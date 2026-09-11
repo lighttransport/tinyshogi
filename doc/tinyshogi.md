@@ -5,6 +5,10 @@ A64FX optimizations, measured performance, and training workflow. Measurements
 are snapshots from the native A64FX work described in the repository; they are
 performance results, not claims about playing strength.
 
+The separate [shared-NNUE strength report](strength.md) documents the pinned
+equal-node protocol, search changes, rules/evaluation validation and actual
+match results. The 85% outright-win target against YaneuraOu is not achieved.
+
 ## 1. Project overview
 
 TinyShogi is a clean-room C11 engine for standard 9x9 shogi. It provides:

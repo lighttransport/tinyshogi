@@ -12,6 +12,8 @@ int main(void) {
     const TinyShogiEvalPlugin *plugin = tinyshogi_eval_plugin();
     if (plugin == NULL || plugin->create == NULL || plugin->evaluate == NULL)
         return 1;
+    if (plugin->create("0") != NULL || plugin->create("129") != NULL ||
+        plugin->create("invalid") != NULL) return 1;
     void *state = plugin->create(NULL);
     if (state == NULL) {
         /* The model is an external fixture; preserve a useful build without
@@ -65,6 +67,48 @@ int main(void) {
             }
         }
         plugin->state_destroy(incremental);
+
+        /* Exercise both accumulator perspectives through 1,024 legal moves,
+         * then unwind every path. The external oracle checks the same full
+         * evaluator separately; equality here tests sparse updates/restoration. */
+        uint64_t random = 7;
+        unsigned checked = 0;
+        for (unsigned game = 0; game < 16; ++game) {
+            shogi_position_start(&position);
+            void *states[2] = {plugin->state_create(state, &position, SHOGI_BLACK),
+                               plugin->state_create(state, &position, SHOGI_WHITE)};
+            if (states[0] == NULL || states[1] == NULL) return 1;
+            ShogiUndo history[64];
+            size_t length = 0;
+            for (; length < 64; ++length) {
+                ShogiMove legal[SHOGI_MAX_MOVES];
+                size_t count = shogi_generate_legal_mut(&position, legal, SHOGI_MAX_MOVES);
+                if (count == 0) break;
+                random ^= random << 13;
+                random ^= random >> 7;
+                random ^= random << 17;
+                if (!shogi_make_move_undo_fast(&position, legal[random % count], &history[length])) return 1;
+                for (unsigned side = 0; side < 2; ++side) {
+                    if (!plugin->state_make(states[side], &position, &history[length]) ||
+                        plugin->state_score(states[side]) !=
+                        plugin->evaluate(state, &position, (ShogiColor)side)) return 1;
+                }
+                ++checked;
+            }
+            while (length > 0) {
+                --length;
+                if (!shogi_unmake_move(&position, &history[length])) return 1;
+                for (unsigned side = 0; side < 2; ++side) {
+                    if (!plugin->state_unmake(states[side], &position, &history[length]) ||
+                        plugin->state_score(states[side]) !=
+                        plugin->evaluate(state, &position, (ShogiColor)side)) return 1;
+                }
+            }
+            plugin->state_destroy(states[0]);
+            plugin->state_destroy(states[1]);
+        }
+        printf("incremental NNUE verified %u moves, both perspectives and undo\n", checked);
+        if (checked < 1000) return 1;
     }
     if (plugin->destroy != NULL) plugin->destroy(state);
     return 0;

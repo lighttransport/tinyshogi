@@ -23,6 +23,7 @@
 #define MAX_DESCRIPTION 4096U
 
 typedef struct {
+    unsigned fv_scale;
     int16_t *feature_bias;
     int16_t *feature_weights;
     int32_t bias1[HIDDEN_DIM];
@@ -245,7 +246,7 @@ static int network_evaluate(const DirectModel *model,
     int64_t output = model->bias3;
     for (unsigned index = 0; index < HIDDEN_DIM; ++index)
         output += (int64_t)model->weights3[index] * hidden2[index];
-    return (int)(output / 16);
+    return (int)(output / model->fv_scale);
 }
 
 static int direct_evaluate(void *userdata, const ShogiPosition *position,
@@ -372,7 +373,15 @@ static void direct_destroy(void *userdata) {
 }
 
 static void *direct_create(const char *config) {
-    (void)config;
+    const char *scale_text = config != NULL && config[0] != '\0' ? config :
+        getenv("YANEURAOU_FV_SCALE");
+    unsigned scale = 16;
+    if (scale_text != NULL && scale_text[0] != '\0') {
+        char *end;
+        unsigned long parsed = strtoul(scale_text, &end, 10);
+        if (*end != '\0' || parsed < 1 || parsed > 128) return NULL;
+        scale = (unsigned)parsed;
+    }
     const char *path = getenv("YANEURAOU_NN_BIN");
     if (path == NULL || path[0] == '\0') path = "eval/nn.bin";
     DirectEvaluator *evaluator = calloc(1, sizeof(*evaluator));
@@ -380,6 +389,7 @@ static void *direct_create(const char *config) {
         direct_destroy(evaluator);
         return NULL;
     }
+    evaluator->model.fv_scale = scale;
     return evaluator;
 }
 

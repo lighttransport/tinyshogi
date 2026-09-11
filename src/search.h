@@ -57,6 +57,24 @@ typedef struct {
     unsigned aspiration_window;
     unsigned quiescence_margin;
     unsigned multi_pv;
+    unsigned hash_mb;
+    /* 0: classic, 1: exchange/history ordering, 2: selective search. */
+    unsigned ab_policy;
+    bool ab_skip_quiet_checks;
+    /* Publish a fully searched, exact root improvement before the entire
+     * iteration finishes. Interrupted child searches never qualify. */
+    bool ab_partial_root;
+    bool ab_quiescence_hash;
+    bool ab_root_prepass;
+    bool ab_null_move;
+    /* Reuse shallow bounds across repetition-free histories only when the
+     * recorded search dependency height proves repetition unreachable. */
+    bool ab_shallow_transpositions;
+    /* Optional percentage of node-budget overrun used to finish a root
+     * iteration. Zero preserves the exact hard cap. */
+    unsigned node_overrun_percent;
+    /* Maximum root moves searched after static preordering; zero means all. */
+    unsigned root_move_limit;
     const ShogiEvaluator *evaluator;
     const ShogiEvaluator *evaluator_replicas;
     unsigned evaluator_replica_count;
@@ -85,6 +103,18 @@ typedef struct {
     ShogiMove move;
 } SearchProgress;
 
+/* Alpha-beta counters are available only once the worker has finished.
+ * The three node categories partition SearchResult.simulations exactly. */
+typedef struct {
+    uint64_t main_nodes;
+    uint64_t quiescence_nodes;
+    uint64_t root_nodes;
+    uint64_t tt_cutoffs;
+    uint64_t transposition_cutoffs;
+    uint64_t evaluations;
+    uint64_t evaluation_cache_hits;
+} SearchDiagnostics;
+
 typedef struct {
     ShogiMove move;
     uint64_t visits;
@@ -104,6 +134,12 @@ typedef struct SearchJob SearchJob;
  * have only one active SearchJob at a time. */
 SearchContext *search_context_create(void);
 void search_context_destroy(SearchContext *context);
+/* Clear retained alpha-beta state; caller must first join any active job.
+ * Call on a new game or when changing evaluator/search parameters. */
+void search_context_clear(SearchContext *context);
+/* Material swap estimate including captured hand pieces and promotions.
+ * The supplied move must be legal. No evaluator or search nodes are used. */
+int search_static_exchange(const ShogiPosition *position, ShogiMove move);
 
 SearchJob *search_start(const ShogiPosition *position,
                         const SearchLimits *limits,
@@ -114,6 +150,9 @@ bool search_is_pondering(const SearchJob *job);
 bool search_waits_for_stop(const SearchJob *job);
 bool search_ponderhit(SearchJob *job);
 bool search_get_progress(const SearchJob *job, SearchProgress *progress);
+bool search_get_diagnostics(const SearchJob *job, SearchDiagnostics *diagnostics);
+/* During alpha-beta search only the atomically published primary line is
+ * available; secondary lines and root policy are available once done. */
 size_t search_get_root_lines(const SearchJob *job, SearchLine *lines, size_t capacity);
 size_t search_get_root_policy(const SearchJob *job, SearchPolicyEntry *entries, size_t capacity);
 void search_request_stop(SearchJob *job);

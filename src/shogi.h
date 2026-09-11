@@ -83,12 +83,9 @@ typedef struct {
 void shogi_init(void);
 void shogi_position_start(ShogiPosition *position);
 bool shogi_position_from_sfen(ShogiPosition *position, const char *sfen);
-/* Standard SFEN: the hand field lists only the side-to-move's captured
- * pieces, so the string cannot represent the opponent's hand. */
+/* Standard SFEN includes both players' captured pieces, black then white. */
 bool shogi_position_to_sfen(const ShogiPosition *position, char *out, size_t out_size);
-/* Dual-hand SFEN: the hand field lists both sides (black then white).  Used
- * by the self-play training export so tools/prepare_nnue.py can recover both
- * sides' hand features; the parser accepts this form on input. */
+/* Backward-compatible alias for shogi_position_to_sfen. */
 bool shogi_position_to_sfen_full(const ShogiPosition *position, char *out, size_t out_size);
 /* Copy a position's live state (board, hand, and history up to history_length)
  * without dragging the reserved dead tail.  For non-mutating callers that only
@@ -132,7 +129,13 @@ ShogiResult shogi_game_result_with_moves_mut(ShogiPosition *position,
                                              size_t capacity,
                                              size_t *move_count);
 bool shogi_is_in_check(const ShogiPosition *position, ShogiColor color);
+/* Geometric attack including intervening occupancy, without a pin test. */
+bool shogi_piece_attacks_square(const ShogiPosition *position, uint8_t from, uint8_t to);
+/* Search-only pass: toggles side/hash, without entering an illegal move into
+ * game history. Apply twice to restore; callers isolate repetition and NNUE. */
+void shogi_search_null_move(ShogiPosition *position);
 ShogiResult shogi_game_result(const ShogiPosition *position);
+bool shogi_repetition_result(const ShogiPosition *position, ShogiResult *result);
 bool shogi_is_declaration_win(const ShogiPosition *position, ShogiColor color);
 
 uint8_t shogi_piece(ShogiColor color, ShogiPieceType type);

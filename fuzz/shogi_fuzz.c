@@ -14,9 +14,7 @@ static void try_sfen(const uint8_t *data, size_t size) {
     ShogiPosition position;
     if (!shogi_position_from_sfen(&position, text)) return;
 
-    /* Roundtrip through the lossless dual-hand form to check hash integrity
-     * (the standard form only carries the side-to-move hand and is lossy when
-     * the opponent also holds pieces). */
+    /* Standard SFEN preserves both hands; check the compatibility alias too. */
     char roundtrip[512];
     if (!shogi_position_to_sfen_full(&position, roundtrip, sizeof(roundtrip))) abort();
     ShogiPosition parsed;
