@@ -11,6 +11,21 @@ the king to be in the enemy camp, at least ten other pieces in that camp, no
 check on the king, and 28 points for Sente or 27 for Gote. Rooks, bishops,
 dragons, and horses are worth five points; other non-king pieces are worth one.
 
+## Live browser demo
+
+[Play tinyshogi on GitHub Pages](https://lighttransport.github.io/tinyshogi/)
+— no installation required. Play against the WASM engine, review the move
+history, or import a position using SFEN. NNUE models are optional and loaded
+from your own files.
+
+<p>
+  <img src="doc/screenshots/web-demo-board.png" alt="TinyShogi browser demo showing the board and a selected pawn's legal destination" width="48%">
+  <img src="doc/screenshots/web-demo-controls.png" alt="TinyShogi engine controls, move history, SFEN position, and optional NNUE model input" width="48%">
+</p>
+
+The board highlights legal moves; the controls provide strength presets,
+auto-play, undo/redo, position sharing, and local model loading.
+
 ## Build
 
 Meson:
