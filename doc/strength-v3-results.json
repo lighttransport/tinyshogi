@@ -1,0 +1,1591 @@
+{
+  "date": "2026-09-12",
+  "target_accepted": false,
+  "acceptance_games": 0,
+  "protocol": {
+    "version": 3,
+    "budget": "tiny-2000-yane-1000",
+    "seed": 20260913,
+    "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782",
+    "baseline_sha256": "6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8",
+    "opponent": {
+      "commit": "33ccf1f907eb7184889fa23051243f81ab0bf973",
+      "sha256": "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc",
+      "compiler": "Ubuntu clang version 21.1.8 (++20251221032922+2078da43e25a-1~exp1~20251221153059.70)",
+      "build": "normal YANEURAOU_EDITION=YANEURAOU_ENGINE_NNUE TARGET_CPU=AVX2 COMPILER=clang++"
+    },
+    "source_sha256": {
+      "start_sfens_ply24.txt": "f93098ab6c0cf5eab5f55aaffd48da4421934e08d4c2fcfba68f7b60853ac0a2",
+      "start_sfens_ply32.txt": "b54a3f87b14b1b2c5815767d23a47ea7e78a20286f2d78e36bdc44a431db7252"
+    },
+    "excluded": "both historical 500-pair splits, seed 20260910",
+    "excluded_protocol_sha256": [
+      "054eeac41b605b3d174c0346394254bc95a39bb869090627b3fbb72ec5c7a96b"
+    ],
+    "splits": {
+      "development": {
+        "file": "development.sfens",
+        "sha256": "6a2736df2130e5a384f186557111a2e919ff31d94de5ea66c78361c45bef929f"
+      },
+      "validation": {
+        "file": "validation.sfens",
+        "sha256": "9b4e18a034d9c3e69827c6e99d5082c3330f554f3f74d1610b2c541300a6e89c"
+      },
+      "acceptance": {
+        "file": "acceptance.sfens",
+        "sha256": "16ce484ac4d6de61e4d2e62c306acfce3089ea0f596473efee51a9856556abcc"
+      }
+    }
+  },
+  "protocol_sha256": "a2d2648eff973ed0f1cfc275c93f68d8da8f2b57dd0192b1088d1e8bf8e06721",
+  "selected": {
+    "created_unix": 1789195592.5467436,
+    "selection": "Highest outright win rate in full 1000-game development matches, after 26 fixed 100-game screens; interrupted runs excluded. No validation or acceptance outcomes used.",
+    "candidate_sha256": "2262842960cab47326277eb0ca3396adc530a4ad1296c30a7e3fcc079de5de41",
+    "plugin_sha256": "b8cf047553ee45e6d9668c4fd703baaf3577ad04b4744650df517d9a89f0c027",
+    "options": {
+      "Threads": 1,
+      "Seed": 1,
+      "SearchMode": "alphabeta",
+      "MCTSMode": "auto",
+      "UCTExploration": 1414,
+      "RolloutDepth": 256,
+      "AspirationWindow": 2000,
+      "QuiescenceMargin": 0,
+      "QuiescenceDepth": 4,
+      "USI_Hash": 64,
+      "RootPrepass": "true",
+      "NullMove": "true",
+      "NodeOverrun": 0,
+      "MultiPV": 1,
+      "PerpetualCheck": "on",
+      "EvalPlugin": "/home/syoyo/work/tinyshogi/build/strength-v3-final/tinyshogi-yaneuraou-nnue-direct.so",
+      "AlphaBetaPolicy": "selective",
+      "TranspositionHistory": "shallow",
+      "CompletedResults": "true",
+      "BucketHash": "true",
+      "QuiescenceRecaptures": "false",
+      "RootReductions": "false",
+      "QuiescenceHistory": "true",
+      "QuiescencePruning": "true"
+    },
+    "protocol_sha256": "a2d2648eff973ed0f1cfc275c93f68d8da8f2b57dd0192b1088d1e8bf8e06721",
+    "development": {
+      "baseline": {
+        "games": 1000,
+        "wins": 557,
+        "draws": 2,
+        "losses": 441,
+        "win_rate": 0.557,
+        "score": 0.558
+      },
+      "q4": {
+        "games": 1000,
+        "wins": 618,
+        "draws": 4,
+        "losses": 378,
+        "win_rate": 0.618,
+        "score": 0.62
+      },
+      "selected": {
+        "games": 1000,
+        "wins": 670,
+        "draws": 1,
+        "losses": 329,
+        "win_rate": 0.67,
+        "score": 0.6705
+      }
+    },
+    "paired_change": {
+      "paired_win_rate_change": 0.113,
+      "paired_change_95_interval": [
+        0.073,
+        0.154
+      ]
+    },
+    "acceptance_eligible": false
+  },
+  "validation": {
+    "candidate": {
+      "games": 1000,
+      "wins": 683,
+      "draws": 1,
+      "losses": 316,
+      "win_rate": 0.683,
+      "score": 0.6835
+    },
+    "baseline": {
+      "games": 1000,
+      "wins": 571,
+      "draws": 4,
+      "losses": 425,
+      "win_rate": 0.571,
+      "score": 0.573
+    },
+    "direct": {
+      "games": 1000,
+      "wins": 582,
+      "draws": 4,
+      "losses": 414,
+      "win_rate": 0.582,
+      "score": 0.584
+    },
+    "paired_win_rate_change": 0.112,
+    "paired_change_95_interval": [
+      0.072,
+      0.15
+    ],
+    "direct_score_95_interval": [
+      0.5545,
+      0.613
+    ],
+    "promotion_supported": true,
+    "acceptance_eligible": false,
+    "target_accepted": false
+  },
+  "reports": {
+    "baseline-development": {
+      "games": 1000,
+      "wins": 557,
+      "draws": 2,
+      "losses": 441,
+      "win_rate": 0.557,
+      "score": 0.558,
+      "win_rate_95_interval": [
+        0.526,
+        0.589
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17502,
+      "budget_semantics": "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 996.0234198042651,
+          "median": 1000.0,
+          "maximum": 58713,
+          "over_1000": 17502,
+          "requested": 1000,
+          "over_request": 17502
+        },
+        "tinyshogi": {
+          "mean": 1999.9808993320103,
+          "median": 2000,
+          "maximum": 2000,
+          "over_1000": 46857,
+          "requested": 2000,
+          "over_request": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 3.7722270062658936,
+          "maximum": 324.6666199993342
+        },
+        "tinyshogi": {
+          "median": 64.50727098854259,
+          "maximum": 804.0512090083212
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "q4-development": {
+      "games": 1000,
+      "wins": 618,
+      "draws": 4,
+      "losses": 378,
+      "win_rate": 0.618,
+      "score": 0.62,
+      "win_rate_95_interval": [
+        0.59,
+        0.647
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17649,
+      "budget_semantics": "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 998.4513999787075,
+          "median": 1000,
+          "maximum": 30813,
+          "over_1000": 17649,
+          "requested": 1000,
+          "over_request": 17649
+        },
+        "tinyshogi": {
+          "mean": 2000,
+          "median": 2000,
+          "maximum": 2000,
+          "over_1000": 47085,
+          "requested": 2000,
+          "over_request": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 4.8956619866658,
+          "maximum": 301.5006860077847
+        },
+        "tinyshogi": {
+          "median": 84.06761899823323,
+          "maximum": 1167.5219269818626
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "pruning-development": {
+      "games": 1000,
+      "wins": 670,
+      "draws": 1,
+      "losses": 329,
+      "win_rate": 0.67,
+      "score": 0.6705,
+      "win_rate_95_interval": [
+        0.639,
+        0.701
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17327,
+      "budget_semantics": "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 996.4632221884102,
+          "median": 1000.0,
+          "maximum": 7433,
+          "over_1000": 17327,
+          "requested": 1000,
+          "over_request": 17327
+        },
+        "tinyshogi": {
+          "mean": 2000,
+          "median": 2000.0,
+          "maximum": 2000,
+          "over_1000": 46176,
+          "requested": 2000,
+          "over_request": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 3.254650000599213,
+          "maximum": 159.2064849974122
+        },
+        "tinyshogi": {
+          "median": 63.099763487116434,
+          "maximum": 681.1609509750269
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "baseline-validation": {
+      "games": 1000,
+      "wins": 571,
+      "draws": 4,
+      "losses": 425,
+      "win_rate": 0.571,
+      "score": 0.573,
+      "win_rate_95_interval": [
+        0.542,
+        0.601
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17151,
+      "budget_semantics": "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 995.2519219141401,
+          "median": 1000.0,
+          "maximum": 25886,
+          "over_1000": 17151,
+          "requested": 1000,
+          "over_request": 17151
+        },
+        "tinyshogi": {
+          "mean": 1999.9582812297874,
+          "median": 2000.0,
+          "maximum": 2000,
+          "over_1000": 46381,
+          "requested": 2000,
+          "over_request": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 5.381790004321374,
+          "maximum": 164.86084400094114
+        },
+        "tinyshogi": {
+          "median": 85.30248449824285,
+          "maximum": 423.99206600384787
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "selected-validation": {
+      "games": 1000,
+      "wins": 683,
+      "draws": 1,
+      "losses": 316,
+      "win_rate": 0.683,
+      "score": 0.6835,
+      "win_rate_95_interval": [
+        0.653,
+        0.712
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17672,
+      "budget_semantics": "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 999.4612859625411,
+          "median": 1000,
+          "maximum": 50819,
+          "over_1000": 17672,
+          "requested": 1000,
+          "over_request": 17672
+        },
+        "tinyshogi": {
+          "mean": 1999.9586485446853,
+          "median": 2000.0,
+          "maximum": 2000,
+          "over_1000": 46793,
+          "requested": 2000,
+          "over_request": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 5.379634007113054,
+          "maximum": 154.49356799945235
+        },
+        "tinyshogi": {
+          "median": 100.87942150130402,
+          "maximum": 441.31281701265834
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "selected-direct": {
+      "games": 1000,
+      "wins": 582,
+      "draws": 4,
+      "losses": 414,
+      "win_rate": 0.582,
+      "score": 0.584,
+      "win_rate_95_interval": [
+        0.553,
+        0.611
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 0,
+      "budget_semantics": "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 2000,
+          "median": 2000,
+          "maximum": 2000,
+          "over_1000": 48257,
+          "requested": 2000,
+          "over_request": 0
+        },
+        "tinyshogi": {
+          "mean": 1999.962660322714,
+          "median": 2000.0,
+          "maximum": 2000,
+          "over_1000": 48339,
+          "requested": 2000,
+          "over_request": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 104.42044801311567,
+          "maximum": 452.97461602604017
+        },
+        "tinyshogi": {
+          "median": 121.089120497345,
+          "maximum": 552.7400620048866
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    }
+  },
+  "screens": {
+    "screen": [
+      {
+        "name": "q2-ordered-exact",
+        "config": {
+          "name": "q2-ordered-exact",
+          "policy": "ordered",
+          "transposition_history": "exact",
+          "quiescence_depth": 2,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/screen/q2-ordered-exact.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 37,
+        "draws": 0,
+        "losses": 63,
+        "win_rate": 0.37,
+        "score": 0.37,
+        "node_violations": 1797,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.29,
+          0.45
+        ]
+      },
+      {
+        "name": "q2-selective-shallow",
+        "config": {
+          "name": "q2-selective-shallow",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 2,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/screen/q2-selective-shallow.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 45,
+        "draws": 0,
+        "losses": 55,
+        "win_rate": 0.45,
+        "score": 0.45,
+        "node_violations": 1632,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.36,
+          0.54
+        ]
+      },
+      {
+        "name": "q3-ordered-exact",
+        "config": {
+          "name": "q3-ordered-exact",
+          "policy": "ordered",
+          "transposition_history": "exact",
+          "quiescence_depth": 3,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/screen/q3-ordered-exact.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 61,
+        "draws": 0,
+        "losses": 39,
+        "win_rate": 0.61,
+        "score": 0.61,
+        "node_violations": 1804,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.52,
+          0.7
+        ]
+      },
+      {
+        "name": "q3-selective-shallow",
+        "config": {
+          "name": "q3-selective-shallow",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 3,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/screen/q3-selective-shallow.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 61,
+        "draws": 0,
+        "losses": 39,
+        "win_rate": 0.61,
+        "score": 0.61,
+        "node_violations": 1706,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.52,
+          0.7
+        ]
+      },
+      {
+        "name": "q4-ordered-exact",
+        "config": {
+          "name": "q4-ordered-exact",
+          "policy": "ordered",
+          "transposition_history": "exact",
+          "quiescence_depth": 4,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/screen/q4-ordered-exact.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 64,
+        "draws": 0,
+        "losses": 36,
+        "win_rate": 0.64,
+        "score": 0.64,
+        "node_violations": 1797,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.54,
+          0.74
+        ]
+      },
+      {
+        "name": "q4-selective-shallow",
+        "config": {
+          "name": "q4-selective-shallow",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 4,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/screen/q4-selective-shallow.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 68,
+        "draws": 0,
+        "losses": 32,
+        "win_rate": 0.68,
+        "score": 0.68,
+        "node_violations": 1770,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.6,
+          0.76
+        ]
+      },
+      {
+        "name": "q1-selective-recaptures",
+        "config": {
+          "name": "q1-selective-recaptures",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 1,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": true
+        },
+        "record": "runs/strength/v3/screen/q1-selective-recaptures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 56,
+        "draws": 0,
+        "losses": 44,
+        "win_rate": 0.56,
+        "score": 0.56,
+        "node_violations": 1595,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.46,
+          0.66
+        ]
+      },
+      {
+        "name": "q2-selective-recaptures",
+        "config": {
+          "name": "q2-selective-recaptures",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 2,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": true
+        },
+        "record": "runs/strength/v3/screen/q2-selective-recaptures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 63,
+        "draws": 1,
+        "losses": 36,
+        "win_rate": 0.63,
+        "score": 0.635,
+        "node_violations": 1609,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.53,
+          0.73
+        ]
+      }
+    ],
+    "features": [
+      {
+        "name": "q3-root",
+        "config": {
+          "name": "q3-root",
+          "policy": "ordered",
+          "quiescence_depth": 3,
+          "root_reductions": true,
+          "quiescence_history": false,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/features/q3-root.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 59,
+        "draws": 0,
+        "losses": 41,
+        "win_rate": 0.59,
+        "score": 0.59,
+        "node_violations": 1836,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.49,
+          0.68
+        ]
+      },
+      {
+        "name": "q3-history",
+        "config": {
+          "name": "q3-history",
+          "policy": "ordered",
+          "quiescence_depth": 3,
+          "root_reductions": false,
+          "quiescence_history": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/features/q3-history.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 60,
+        "draws": 0,
+        "losses": 40,
+        "win_rate": 0.6,
+        "score": 0.6,
+        "node_violations": 1848,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.5,
+          0.7
+        ]
+      },
+      {
+        "name": "q3-both",
+        "config": {
+          "name": "q3-both",
+          "policy": "ordered",
+          "quiescence_depth": 3,
+          "root_reductions": true,
+          "quiescence_history": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/features/q3-both.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 61,
+        "draws": 0,
+        "losses": 39,
+        "win_rate": 0.61,
+        "score": 0.61,
+        "node_violations": 1853,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.51,
+          0.7
+        ]
+      },
+      {
+        "name": "q2-both",
+        "config": {
+          "name": "q2-both",
+          "policy": "ordered",
+          "quiescence_depth": 2,
+          "root_reductions": true,
+          "quiescence_history": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/features/q2-both.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 51,
+        "draws": 0,
+        "losses": 49,
+        "win_rate": 0.51,
+        "score": 0.51,
+        "node_violations": 1814,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.41,
+          0.61
+        ]
+      }
+    ],
+    "margins": [
+      {
+        "name": "q3-margin100",
+        "config": {
+          "name": "q3-margin100",
+          "policy": "ordered",
+          "quiescence_depth": 3,
+          "quiescence_margin": 100,
+          "aspiration_window": 2000,
+          "quiescence_checks": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false,
+          "root_reductions": false,
+          "quiescence_history": false
+        },
+        "record": "runs/strength/v3/margins/q3-margin100.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 63,
+        "draws": 0,
+        "losses": 37,
+        "win_rate": 0.63,
+        "score": 0.63,
+        "node_violations": 1830,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.52,
+          0.73
+        ]
+      },
+      {
+        "name": "q3-margin300",
+        "config": {
+          "name": "q3-margin300",
+          "policy": "ordered",
+          "quiescence_depth": 3,
+          "quiescence_margin": 300,
+          "aspiration_window": 2000,
+          "quiescence_checks": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false,
+          "root_reductions": false,
+          "quiescence_history": false
+        },
+        "record": "runs/strength/v3/margins/q3-margin300.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 65,
+        "draws": 0,
+        "losses": 35,
+        "win_rate": 0.65,
+        "score": 0.65,
+        "node_violations": 1790,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.54,
+          0.76
+        ]
+      },
+      {
+        "name": "q4-margin300",
+        "config": {
+          "name": "q4-margin300",
+          "policy": "ordered",
+          "quiescence_depth": 4,
+          "quiescence_margin": 300,
+          "aspiration_window": 2000,
+          "quiescence_checks": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false,
+          "root_reductions": false,
+          "quiescence_history": false
+        },
+        "record": "runs/strength/v3/margins/q4-margin300.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 63,
+        "draws": 0,
+        "losses": 37,
+        "win_rate": 0.63,
+        "score": 0.63,
+        "node_violations": 1873,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.52,
+          0.73
+        ]
+      },
+      {
+        "name": "q4-margin600",
+        "config": {
+          "name": "q4-margin600",
+          "policy": "ordered",
+          "quiescence_depth": 4,
+          "quiescence_margin": 600,
+          "aspiration_window": 2000,
+          "quiescence_checks": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false,
+          "root_reductions": false,
+          "quiescence_history": false
+        },
+        "record": "runs/strength/v3/margins/q4-margin600.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 63,
+        "draws": 0,
+        "losses": 37,
+        "win_rate": 0.63,
+        "score": 0.63,
+        "node_violations": 1794,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.54,
+          0.72
+        ]
+      },
+      {
+        "name": "q4-asp256",
+        "config": {
+          "name": "q4-asp256",
+          "policy": "ordered",
+          "quiescence_depth": 4,
+          "quiescence_margin": 0,
+          "aspiration_window": 256,
+          "quiescence_checks": true,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false,
+          "root_reductions": false,
+          "quiescence_history": false
+        },
+        "record": "runs/strength/v3/margins/q4-asp256.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 64,
+        "draws": 0,
+        "losses": 36,
+        "win_rate": 0.64,
+        "score": 0.64,
+        "node_violations": 1924,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.53,
+          0.74
+        ]
+      },
+      {
+        "name": "q3-captures",
+        "config": {
+          "name": "q3-captures",
+          "policy": "ordered",
+          "quiescence_depth": 3,
+          "quiescence_margin": 0,
+          "aspiration_window": 2000,
+          "quiescence_checks": false,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false,
+          "root_reductions": false,
+          "quiescence_history": false
+        },
+        "record": "runs/strength/v3/margins/q3-captures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 65,
+        "draws": 0,
+        "losses": 35,
+        "win_rate": 0.65,
+        "score": 0.65,
+        "node_violations": 1691,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.56,
+          0.74
+        ]
+      }
+    ],
+    "pruning-safe": [
+      {
+        "name": "q4-selective-pruning",
+        "config": {
+          "name": "q4-selective-pruning",
+          "policy": "selective",
+          "quiescence_depth": 4,
+          "transposition_history": "shallow",
+          "quiescence_pruning": true,
+          "quiescence_history": false,
+          "root_reductions": false,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/pruning-safe/q4-selective-pruning.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 61,
+        "draws": 0,
+        "losses": 39,
+        "win_rate": 0.61,
+        "score": 0.61,
+        "node_violations": 1626,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.53,
+          0.69
+        ]
+      },
+      {
+        "name": "q4-selective-pruning-history",
+        "config": {
+          "name": "q4-selective-pruning-history",
+          "policy": "selective",
+          "quiescence_depth": 4,
+          "transposition_history": "shallow",
+          "quiescence_pruning": true,
+          "quiescence_history": true,
+          "root_reductions": false,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/pruning-safe/q4-selective-pruning-history.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 70,
+        "draws": 0,
+        "losses": 30,
+        "win_rate": 0.7,
+        "score": 0.7,
+        "node_violations": 1745,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.6,
+          0.8
+        ]
+      },
+      {
+        "name": "q4-ordered-pruning",
+        "config": {
+          "name": "q4-ordered-pruning",
+          "policy": "ordered",
+          "quiescence_depth": 4,
+          "transposition_history": "exact",
+          "quiescence_pruning": true,
+          "quiescence_history": false,
+          "root_reductions": false,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/pruning-safe/q4-ordered-pruning.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 58,
+        "draws": 0,
+        "losses": 42,
+        "win_rate": 0.58,
+        "score": 0.58,
+        "node_violations": 1766,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.49,
+          0.67
+        ]
+      },
+      {
+        "name": "q3-selective-pruning",
+        "config": {
+          "name": "q3-selective-pruning",
+          "policy": "selective",
+          "quiescence_depth": 3,
+          "transposition_history": "shallow",
+          "quiescence_pruning": true,
+          "quiescence_history": false,
+          "root_reductions": false,
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/pruning-safe/q3-selective-pruning.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 64,
+        "draws": 0,
+        "losses": 36,
+        "win_rate": 0.64,
+        "score": 0.64,
+        "node_violations": 1558,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.56,
+          0.72
+        ]
+      }
+    ],
+    "final-screen": [
+      {
+        "name": "q3-selective-margin300",
+        "config": {
+          "name": "q3-selective-margin300",
+          "policy": "selective",
+          "quiescence_depth": 3,
+          "quiescence_margin": 300,
+          "transposition_history": "shallow",
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/final-screen/q3-selective-margin300.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 54,
+        "draws": 0,
+        "losses": 46,
+        "win_rate": 0.54,
+        "score": 0.54,
+        "node_violations": 1738,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.45,
+          0.63
+        ]
+      },
+      {
+        "name": "q4-selective-margin300",
+        "config": {
+          "name": "q4-selective-margin300",
+          "policy": "selective",
+          "quiescence_depth": 4,
+          "quiescence_margin": 300,
+          "transposition_history": "shallow",
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/final-screen/q4-selective-margin300.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 67,
+        "draws": 0,
+        "losses": 33,
+        "win_rate": 0.67,
+        "score": 0.67,
+        "node_violations": 1765,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.58,
+          0.76
+        ]
+      },
+      {
+        "name": "q5-selective-margin0",
+        "config": {
+          "name": "q5-selective-margin0",
+          "policy": "selective",
+          "quiescence_depth": 5,
+          "quiescence_margin": 0,
+          "transposition_history": "shallow",
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/final-screen/q5-selective-margin0.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 58,
+        "draws": 0,
+        "losses": 42,
+        "win_rate": 0.58,
+        "score": 0.58,
+        "node_violations": 1770,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.48,
+          0.67
+        ]
+      },
+      {
+        "name": "q5-selective-margin300",
+        "config": {
+          "name": "q5-selective-margin300",
+          "policy": "selective",
+          "quiescence_depth": 5,
+          "quiescence_margin": 300,
+          "transposition_history": "shallow",
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v3/final-screen/q5-selective-margin300.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 56,
+        "draws": 0,
+        "losses": 44,
+        "win_rate": 0.56,
+        "score": 0.56,
+        "node_violations": 1866,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.46,
+          0.66
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "final-eval": {
+      "positions": 1000,
+      "exact_match": true,
+      "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782",
+      "fv_scale": 20,
+      "engine_sha256": [
+        "2262842960cab47326277eb0ca3396adc530a4ad1296c30a7e3fcc079de5de41",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "plugin_sha256": "b8cf047553ee45e6d9668c4fd703baaf3577ad04b4744650df517d9a89f0c027",
+      "examples": [
+        {
+          "sfen": "ln2k1snl/1rsg5/p3ppgp1/2pp2p1p/1p5P1/2P3P1P/PPSPPP3/3KGS1R1/LN1G3NL w Bb 24",
+          "score": -7
+        },
+        {
+          "sfen": "ln2k1snl/1rsg5/p3ppgp1/2pp2pbp/1p5P1/2P3P1P/PPSPPP3/3KGS1R1/LN1G3NL b B 25",
+          "score": 475
+        },
+        {
+          "sfen": "ln2k1snl/1rsg5/p3ppgp1/2pp2pbp/1p5P1/2P3P1P/PPSPPP3/4GS1R1/LNKG3NL w B 26",
+          "score": -239
+        },
+        {
+          "sfen": "ln2k1snl/1rs6/p1g1ppgp1/2pp2pbp/1p5P1/2P3P1P/PPSPPP3/4GS1R1/LNKG3NL b B 27",
+          "score": 491
+        }
+      ]
+    },
+    "final-rules": {
+      "positions": 5000,
+      "exact_match": true,
+      "oracle": "python-shogi",
+      "oracle_version": "1.1.1",
+      "engine_sha256": "2262842960cab47326277eb0ca3396adc530a4ad1296c30a7e3fcc079de5de41",
+      "openings_sha256": "6a2736df2130e5a384f186557111a2e919ff31d94de5ea66c78361c45bef929f",
+      "seed": 7
+    },
+    "promoted-eval": {
+      "positions": 1000,
+      "exact_match": true,
+      "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782",
+      "fv_scale": 20,
+      "engine_sha256": [
+        "798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "plugin_sha256": "b8cf047553ee45e6d9668c4fd703baaf3577ad04b4744650df517d9a89f0c027",
+      "examples": [
+        {
+          "sfen": "ln2k1snl/1rsg5/p3ppgp1/2pp2p1p/1p5P1/2P3P1P/PPSPPP3/3KGS1R1/LN1G3NL w Bb 24",
+          "score": -7
+        },
+        {
+          "sfen": "ln2k1snl/1rsg5/p3ppgp1/2pp2pbp/1p5P1/2P3P1P/PPSPPP3/3KGS1R1/LN1G3NL b B 25",
+          "score": 475
+        },
+        {
+          "sfen": "ln2k1snl/1rsg5/p3ppgp1/2pp2pbp/1p5P1/2P3P1P/PPSPPP3/4GS1R1/LNKG3NL w B 26",
+          "score": -239
+        },
+        {
+          "sfen": "ln2k1snl/1rs6/p1g1ppgp1/2pp2pbp/1p5P1/2P3P1P/PPSPPP3/4GS1R1/LNKG3NL b B 27",
+          "score": 491
+        }
+      ]
+    },
+    "promoted-rules": {
+      "positions": 5000,
+      "exact_match": true,
+      "oracle": "python-shogi",
+      "oracle_version": "1.1.1",
+      "engine_sha256": "798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b",
+      "openings_sha256": "6a2736df2130e5a384f186557111a2e919ff31d94de5ea66c78361c45bef929f",
+      "seed": 7
+    },
+    "promoted-search-equivalence": {
+      "positions": 100,
+      "nodes": 2000,
+      "exact_match": true,
+      "engine_sha256": [
+        "2262842960cab47326277eb0ca3396adc530a4ad1296c30a7e3fcc079de5de41",
+        "798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b"
+      ],
+      "checked": [
+        "move",
+        "nodes",
+        "completed_depth",
+        "score"
+      ],
+      "options": {
+        "Threads": 1,
+        "Seed": 1,
+        "SearchMode": "alphabeta",
+        "MCTSMode": "auto",
+        "UCTExploration": 1414,
+        "RolloutDepth": 256,
+        "AspirationWindow": 2000,
+        "QuiescenceMargin": 0,
+        "QuiescenceDepth": 4,
+        "USI_Hash": 64,
+        "RootPrepass": "true",
+        "NullMove": "true",
+        "NodeOverrun": 0,
+        "MultiPV": 1,
+        "PerpetualCheck": "on",
+        "EvalPlugin": "/home/syoyo/work/tinyshogi/build/strength-v3-final/tinyshogi-yaneuraou-nnue-direct.so",
+        "AlphaBetaPolicy": "selective",
+        "TranspositionHistory": "shallow",
+        "CompletedResults": "true",
+        "BucketHash": "true",
+        "QuiescenceRecaptures": "false",
+        "RootReductions": "false",
+        "QuiescenceHistory": "true",
+        "QuiescencePruning": "true"
+      }
+    },
+    "baseline-equivalence": {
+      "positions": 100,
+      "nodes": 2000,
+      "exact_match": true,
+      "engine_sha256": [
+        "6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8",
+        "d98ba9b74dade87af68d7bbb98493cbddcb068563ea634eeb61e982642da3297"
+      ],
+      "features": "RootReductions=false, QuiescenceHistory=false"
+    },
+    "screen-search-diagnostics": {
+      "q3": {
+        "games": 100,
+        "mean_completed_depth": 1.7444041782136006,
+        "totals": {
+          "nodes": 9382000,
+          "mainnodes": 1149002,
+          "qnodes": 7759312,
+          "rootnodes": 473686,
+          "ttcutoffs": 557810,
+          "transcutoffs": 0,
+          "qpruned": 0,
+          "iterations": 8183
+        }
+      },
+      "q4": {
+        "games": 100,
+        "mean_completed_depth": 1.9270962412226353,
+        "totals": {
+          "nodes": 9684000,
+          "mainnodes": 1261542,
+          "qnodes": 7936831,
+          "rootnodes": 485627,
+          "ttcutoffs": 780486,
+          "transcutoffs": 313287,
+          "qpruned": 0,
+          "iterations": 9331
+        }
+      },
+      "q4-pruning-history": {
+        "games": 100,
+        "mean_completed_depth": 2.0943355119825706,
+        "totals": {
+          "nodes": 9180000,
+          "mainnodes": 1392572,
+          "qnodes": 7332937,
+          "rootnodes": 454491,
+          "ttcutoffs": 713209,
+          "transcutoffs": 251012,
+          "qpruned": 1643930,
+          "iterations": 9613
+        }
+      }
+    },
+    "promoted-wasm-smoke": {
+      "passed": true,
+      "nnue_active": true,
+      "runtime": "Emscripten WASM in Node, same web API/NNUE source; ENVIRONMENT=web,node",
+      "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782",
+      "results": [
+        {
+          "budget": 1,
+          "move": "9g9f",
+          "nodes": 1,
+          "score": 42,
+          "depth": 0
+        },
+        {
+          "budget": 7,
+          "move": "7g7f",
+          "nodes": 7,
+          "score": 69,
+          "depth": 0
+        },
+        {
+          "budget": 64,
+          "move": "7g7f",
+          "nodes": 64,
+          "score": 69,
+          "depth": 1
+        },
+        {
+          "budget": 1000,
+          "move": "5i6h",
+          "nodes": 1000,
+          "score": 46,
+          "depth": 3
+        },
+        {
+          "budget": 2000,
+          "move": "2g2f",
+          "nodes": 2000,
+          "score": 62,
+          "depth": 4
+        }
+      ]
+    },
+    "promoted-wasm-native-equivalence": {
+      "exact_match": true,
+      "budgets": [
+        1,
+        7,
+        64,
+        1000,
+        2000
+      ],
+      "checked": [
+        "move",
+        "nodes",
+        "completed_depth",
+        "score"
+      ],
+      "native_sha256": "798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b",
+      "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782"
+    },
+    "validation-audit": {
+      "candidate_frozen_before_validation": true,
+      "candidate_options_match_selection": true,
+      "candidate_and_baseline_nnue_and_rules_reports_valid": true,
+      "protocol_and_per_move_node_audits_passed": true,
+      "acceptance_games": 0
+    },
+    "verification": {
+      "passed": true,
+      "promoted_engine_sha256": "798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b",
+      "native_make": "passed",
+      "python_tests": 30,
+      "cmake_tests": 11,
+      "meson_tests": 10,
+      "asan_ubsan": "passed; ASAN_OPTIONS=detect_leaks=0",
+      "browser": [
+        "npm test passed",
+        "production WASM/Vite build passed",
+        "native single-thread web API with NNUE: legal moves, node cap, undo/redo passed",
+        "actual WASM web API with /nn.bin loaded in MEMFS passed; Node runtime enabled for test",
+        "WASM/native move, score, nodes and depth agree at 1, 7, 64, 1000 and 2000 nodes"
+      ],
+      "nnue_exact_positions": 1000,
+      "rules_exact_positions": 5000,
+      "promoted_profile_equivalence_positions": 100,
+      "alpha_beta_node_budget_option_cases": 1344,
+      "resolved_test_harness_issues": [
+        "Expanded search matrix exceeded Meson default 30 seconds during concurrent checks; test timeout is now 120 seconds and the default suite passes.",
+        "Initial host web-API smoke used the browser-only /nn.bin path without a virtual filesystem. Corrected host environment test and real WASM MEMFS test both pass."
+      ],
+      "logs": {
+        "runs/strength/v3/verification-logs/make.log": "9a9082674038e40a95f48eaa3b83c1f24375ae79650662425ec662710dd85441",
+        "runs/strength/v3/verification-logs/cmake.log": "11c0ddbd76791b9067bd4ba8beed694fef8a837fdbd0c7f4026dfac350459b36",
+        "runs/strength/v3/verification-logs/meson.log": "30862f5ffa54f0b5a54d08cdbe2cbf2ab292edc9af5b2a16b0a25b8fcbd9715b",
+        "runs/strength/v3/verification-logs/meson-initial-timeout.log": "c60b2a8e42a20398463dc63e854335a47442b2732394fa24a8550848b0ea9dcf",
+        "runs/strength/v3/verification-logs/asan-ubsan.log": "a26431f4a2f4622a311d2485562a5c76b4ab15f0d42dea4b1f1ab63d68fc4703",
+        "runs/strength/v3/verification-logs/web-tests.log": "88950f9252c45262abd3e5e5671582ae98176bbd72307c249159436a9641df9d",
+        "runs/strength/v3/verification-logs/web-build.log": "26507dccd95c4bec20f5947a4cc8161bdfebe343c617b926dc1f842617be9510",
+        "runs/strength/v3/verification-logs/web-native-smoke.log": "262ec87eb6ea81a75d53ab2fa7613260e5ff5fbc925494214531fc683bc952e6",
+        "runs/strength/v3/verification-logs/web-native-harness-initial-failure.log": "d2d55f91fbedc48cb2aeaa96daa693b0b73c191c6fc81b4c3966952cd48cfa6c"
+      }
+    }
+  },
+  "artifacts": {
+    "runs/strength/v3/baseline-development-1000.jsonl": "7ecb5438ad4bcb373c4ca6a4fa4440d481c078e359aa2ecf077c959f45f995d1",
+    "runs/strength/v3/baseline-development-1000.jsonl.games.jsonl": "55e2bdedef58c40808ac754d1c3a10d47446c03cf06644a556e2f18300cbe1b7",
+    "runs/strength/v3/baseline-development-1000.jsonl.manifest.json": "1429f36eff08abb9abfb355ca50a78dc7d1c199e0ade33b3ff5a4f94d0bd0529",
+    "runs/strength/v3/baseline-development-report.json": "8af9974921e36e369aafe8e38af1ad235a893644a2f99071749a2c8600b32f8a",
+    "runs/strength/v3/baseline-development-search.json": "2e87a6563dc6d483db7892aa048e34375495cf401dc7c6e0e99ce2afbc4a60b1",
+    "runs/strength/v3/baseline-equivalence.json": "afe7d6507afda0067451dec039e5cea74a2781294ac05502dabf903b60c69703",
+    "runs/strength/v3/baseline-validation-1000.jsonl": "d170c0d998081b327863d25026f30863119bb797ff0ced354bfb5adca04dceb5",
+    "runs/strength/v3/baseline-validation-1000.jsonl.games.jsonl": "517b29e3c0b1174ff994263e8c17cbac38cbf17e032ec570b910aba8303e429c",
+    "runs/strength/v3/baseline-validation-1000.jsonl.manifest.json": "8486109abc30f87daaaa7850f2921bc67060a7536d9b70a1cb079385744173a3",
+    "runs/strength/v3/baseline-validation-report.json": "c150d55493d6bbf171fd22dbad7a844b942d9312c56417acfd3c3063a2ddc48e",
+    "runs/strength/v3/candidate-eval.json": "200902eb3c36120ecaf16e4b356bfe6fa8493134910820f65e31d91d7a961bef",
+    "runs/strength/v3/candidate-rules.json": "9b95c429dfb92172a5a17780b8e4841cbd9afddcc17c803c5bff54cd9a679937",
+    "runs/strength/v3/experimental-source.tar.gz": "c8c0b883f3776d24a7079e93fe3da4d057cdbd6d640f39948d7e7173f3951dd3",
+    "runs/strength/v3/features/q2-both.jsonl": "b07d5db65d68a7f9fc90ac58499011406f49e6941d518f2e204450c049ab8034",
+    "runs/strength/v3/features/q2-both.jsonl.games.jsonl": "7677d7edf745c1f3b438f7f5e4b18b94ff5854657e0dcc33ee5a408b90b99f27",
+    "runs/strength/v3/features/q2-both.jsonl.manifest.json": "8dc1a088007974c56321277ce6d12f177071c9e963c4609c4d529aa7bff76a7e",
+    "runs/strength/v3/features/q3-both.jsonl": "48de21881ae68a9d2fed42624b0d39d163c6814d2b2c29eab892621196dd111c",
+    "runs/strength/v3/features/q3-both.jsonl.games.jsonl": "8e0e73e9307932dd3555c1b1a3d7e4387579021d6ca43ebbeeac8a7568053e34",
+    "runs/strength/v3/features/q3-both.jsonl.manifest.json": "5503dafd523220d8f8122d19699789fb4da437d88b43a74f3c43d166b6573489",
+    "runs/strength/v3/features/q3-history.jsonl": "e877d091e4b03678c948c28b171436d3dec3114c4db169e257c22cc216129f58",
+    "runs/strength/v3/features/q3-history.jsonl.games.jsonl": "c972b88752211f4163b50ae8e5ddc5c45a27c3e6acd39d10e483f9424a994f52",
+    "runs/strength/v3/features/q3-history.jsonl.manifest.json": "00046e2d84a3b9a4c9930c40546a3095613b28d60ab16fd6bdf0306e1f5094c3",
+    "runs/strength/v3/features/q3-root.jsonl": "26d2b741d5151b3a34981a280570e59576cffb99ef41baf52a7e4784907060e6",
+    "runs/strength/v3/features/q3-root.jsonl.games.jsonl": "bae53f6732aeba0304a09f7a83de4e89c4140792e90e6cf1ca3a97875e2d03e6",
+    "runs/strength/v3/features/q3-root.jsonl.manifest.json": "ccc29b74e2d7d74c2d9fd40d9cdac213ca4bea1b712d9eec3370c35676125c95",
+    "runs/strength/v3/features/results.json": "a01d0901b2312a9f6aa9327fdbf63aeb603df9cdbbe13a1fe1b9e7fadc23e018",
+    "runs/strength/v3/features-config.json": "16e17b8ce05431cb454732fc7242264c8e8a2b4c11d33d69bf109d33771fbf8f",
+    "runs/strength/v3/final-eval.json": "ba00128ef99533dd5fc808eecd538552d0c2e674eb33ed3f1599deb507fff6ce",
+    "runs/strength/v3/final-rules.json": "e2c43e889a6bd40739a8806dfcbb17ef62cbd4dddd13399dcb855b900b5fb3af",
+    "runs/strength/v3/final-screen/q3-selective-margin300.jsonl": "720e77eff618a19269616ecd51e73aa87500f1fff14c48e0a260032b8906355e",
+    "runs/strength/v3/final-screen/q3-selective-margin300.jsonl.games.jsonl": "3cde9fa2b1aa8f123ae51fefc766bad4b5ef4236097e640591d424b2e1f72db5",
+    "runs/strength/v3/final-screen/q3-selective-margin300.jsonl.manifest.json": "d2b5d539b4076422f922c71d9f8da998a24ee7ab9c0583ea1088248006afb234",
+    "runs/strength/v3/final-screen/q4-selective-margin300.jsonl": "f603059a9842a9cab9e348289bd5843152f559f8cfa74a8912aea020fa981fbc",
+    "runs/strength/v3/final-screen/q4-selective-margin300.jsonl.games.jsonl": "d5e6f6054d06ecc892d90e357b25f9c328d28fffd913c4512f68d45d5f43e918",
+    "runs/strength/v3/final-screen/q4-selective-margin300.jsonl.manifest.json": "a810dd5229c072f68c5b52ad106f069159c36528048a12123c465cf532cb22ce",
+    "runs/strength/v3/final-screen/q5-selective-margin0.jsonl": "be59c8af7c614250b17e01cedae52e9c5214d01313aca5873cfcfc02cab7a0d3",
+    "runs/strength/v3/final-screen/q5-selective-margin0.jsonl.games.jsonl": "8bbd52a1f43c7a964159c4ed4cf91956cb44c5c74ef3d4a049361a28c16edd36",
+    "runs/strength/v3/final-screen/q5-selective-margin0.jsonl.manifest.json": "17a6242909dbc6bd93a44915db3c995be459ba81864226c2562bf1166d6f4bd4",
+    "runs/strength/v3/final-screen/q5-selective-margin300.jsonl": "b8bb5325ca5b59c9cbda1ecf3b5df26c2abfdb6072a67d72735e6d2f517e4697",
+    "runs/strength/v3/final-screen/q5-selective-margin300.jsonl.games.jsonl": "a578cbad37577afbeeab309a7306e0b95c333bb5ed26ea91f51f34c84feeea8f",
+    "runs/strength/v3/final-screen/q5-selective-margin300.jsonl.manifest.json": "bbed3774bbf6a97d738129a3a4fc28e675987c723464ae6376c3bfff2e19c6df",
+    "runs/strength/v3/final-screen/results.json": "498615e2fcbc5b28ed7ebdf08acb7115690fec5ae25990a39ca187398a8862b7",
+    "runs/strength/v3/final-screen-config.json": "97313bb33f562ace9614ecd9ee0385c9721a001d29272baac470c17b744a47fb",
+    "runs/strength/v3/final-source.tar.gz": "3f63066399b4952b3bd19a4b6645035d572f87c965f77d9c5ed374f03c93c5c3",
+    "runs/strength/v3/margins/q3-captures.jsonl": "71ff962165bfdd05c915d8f83300b1bf888ef55e0950a87203d5d02418788566",
+    "runs/strength/v3/margins/q3-captures.jsonl.games.jsonl": "52913e0d98913173da955f7f6f73813c5d4a8b788e50b0e0b78830823b965914",
+    "runs/strength/v3/margins/q3-captures.jsonl.manifest.json": "fabc1c5f986e80bbb011d08b6bd5229066dc9f748982e7a9050dcb7b97573b45",
+    "runs/strength/v3/margins/q3-margin100.jsonl": "7ab6213bccc8abdce3f4b6b8b71f79d688b3654e2e08701487c0aba74dfc306b",
+    "runs/strength/v3/margins/q3-margin100.jsonl.games.jsonl": "22ec68ee1a7b5bbe9d1e9ae8ebe4fc677c0e0b6493bcc5e8cea1abb91fb5c6e9",
+    "runs/strength/v3/margins/q3-margin100.jsonl.manifest.json": "b07554df865fc2fd86728f89b199a6acae370f64b3ac701d0f40336edec3af79",
+    "runs/strength/v3/margins/q3-margin300.jsonl": "3d1765616d2793bbffffdbbb08e097efd28131864bfa5b6dfd75c02cdcf26412",
+    "runs/strength/v3/margins/q3-margin300.jsonl.games.jsonl": "b56961f1276bd77bda5155238d1f1c65daba64ac7ec578da26cf283280155ea0",
+    "runs/strength/v3/margins/q3-margin300.jsonl.manifest.json": "11595e244fb516afceba7994952d865433565766d81dd29b9689beb6ad63fdde",
+    "runs/strength/v3/margins/q4-asp256.jsonl": "c0cc4bbfb04a79df8205b3dc1940cdddcbeec574e951c03b25fef6aabc7c42b3",
+    "runs/strength/v3/margins/q4-asp256.jsonl.games.jsonl": "386fe8a314c0028f640af681b35ae453a84f497cf1f1658e77a0e96209c32a28",
+    "runs/strength/v3/margins/q4-asp256.jsonl.manifest.json": "41e2bba29ac72301ce59ee032ff06e66e873f97c68e472fa09fe5a06789128e2",
+    "runs/strength/v3/margins/q4-margin300.jsonl": "047fd333bce700111110ecbd6f8cb603e618b73879f85812aa7f4a4502769798",
+    "runs/strength/v3/margins/q4-margin300.jsonl.games.jsonl": "3b05390fa44b2c8b0fb7fd5866744c64f0aecf307bacacf1b5f3c1567d27acf2",
+    "runs/strength/v3/margins/q4-margin300.jsonl.manifest.json": "66f034ca6db0e54a571c762437aafbd383830b1b88400309f2ad0604f0989887",
+    "runs/strength/v3/margins/q4-margin600.jsonl": "e95b37f3775522ebdf925dc622a187d25fd0616fa996ae2c96d288adce44595f",
+    "runs/strength/v3/margins/q4-margin600.jsonl.games.jsonl": "23a2f1c9fb14d0f2e067b16ffb72b6c067727f4b8c8f832cec402a47e36d9a7d",
+    "runs/strength/v3/margins/q4-margin600.jsonl.manifest.json": "79f641f30d6086e6dae267de5d953774e27532e8f3fac5b9b0d7e27675374931",
+    "runs/strength/v3/margins/results.json": "a110958c208a85c8b4cd8d48e8a0cb0c857e934c9e1804b08509d120ef1cf9b1",
+    "runs/strength/v3/margins-config.json": "628a9c0eca8e4f695093b0e1954c406d7c2add6fa5ca390c9dbd9a713d0f12df",
+    "runs/strength/v3/openings/acceptance.sfens": "16ce484ac4d6de61e4d2e62c306acfce3089ea0f596473efee51a9856556abcc",
+    "runs/strength/v3/openings/development.sfens": "6a2736df2130e5a384f186557111a2e919ff31d94de5ea66c78361c45bef929f",
+    "runs/strength/v3/openings/protocol.json": "a2d2648eff973ed0f1cfc275c93f68d8da8f2b57dd0192b1088d1e8bf8e06721",
+    "runs/strength/v3/openings/validation.sfens": "9b4e18a034d9c3e69827c6e99d5082c3330f554f3f74d1610b2c541300a6e89c",
+    "runs/strength/v3/promoted-eval.json": "db0fef66ac033d4ea64ea2384f34fc5087ec8018d140126d2533a6b965498398",
+    "runs/strength/v3/promoted-rules.json": "860cbd4fc18bd108c9501e28eec159735e7182f5de9c291309f6539da05310f0",
+    "runs/strength/v3/promoted-search-equivalence.json": "7cdb15a0ac4d3be6608637ef9361c0a3aba8c818aa9224f9fd52a479d259bc97",
+    "runs/strength/v3/promoted-wasm-native-equivalence.json": "d638975ef0ae139e51fc5703e4abf87903ded771eedaf55acb948cb2ffd484c5",
+    "runs/strength/v3/promoted-wasm-smoke.json": "0bd04bd2e8e6401c7c051c1510451a6caad3b2b47090c597a705470d7d6cb002",
+    "runs/strength/v3/pruning/INVALIDATED.json": "9d185cf94482e801c0b25fab932dccfe83ce06f23eca16ec97a1a24476df9923",
+    "runs/strength/v3/pruning-config.json": "ad4b61754c223a9b1bde9ae037288a013979ae21827f25195a35629fc8b5adb9",
+    "runs/strength/v3/pruning-development-change.json": "a8cb1735ac2a6229d06bd6597ec63c4aaecf966f7bc517fe857b1b6a3e7267d4",
+    "runs/strength/v3/pruning-development-invalidated.json": "933e38877c72318799f5d9eda0e488842f1823ca105faac56bb651d48bdb3c96",
+    "runs/strength/v3/pruning-development-report.json": "d0e38a4969dc9ff7c12be2bedd660ffba10c7638814584862e783c780c181487",
+    "runs/strength/v3/pruning-final-development-1000.jsonl": "cf8b33e8aab46145475d26c3c47622812ae543f6ff51d4c2a6626724bea38a0a",
+    "runs/strength/v3/pruning-final-development-1000.jsonl.games.jsonl": "340cf3f6a4d48bd03bbc2dabc42f57b6d17acab2ddc73ff4b18730af564c8ece",
+    "runs/strength/v3/pruning-final-development-1000.jsonl.manifest.json": "e03e83fe0a6bb2634d409f4e6bc398074f913a0cf858588c8e2040a1edac98c6",
+    "runs/strength/v3/pruning-safe/q3-selective-pruning.jsonl": "eee9568d821870cf703a87114bc3e2a17f40197b2eb51bb2012b34dad2ed1579",
+    "runs/strength/v3/pruning-safe/q3-selective-pruning.jsonl.games.jsonl": "a672bc37e633ede2517070e1eb03d37347c1bc53b11704571c55a19bd01f41c9",
+    "runs/strength/v3/pruning-safe/q3-selective-pruning.jsonl.manifest.json": "bb4a6dde01319100272afcde15b30088be944b8bea05fb68b717cc8a36722fa0",
+    "runs/strength/v3/pruning-safe/q4-ordered-pruning.jsonl": "841b339dd59866b18ea07e2508d2ed49fefec94ea823500395990dfbf86d3ce0",
+    "runs/strength/v3/pruning-safe/q4-ordered-pruning.jsonl.games.jsonl": "0d187df3b9943fa7da02788910350037973670d55df434786709e4072eef6530",
+    "runs/strength/v3/pruning-safe/q4-ordered-pruning.jsonl.manifest.json": "9e8f0dcd7ce79aeb2a43c91057d9231a804134c123493f8aadae72e2960279c1",
+    "runs/strength/v3/pruning-safe/q4-selective-pruning-history.jsonl": "187f5e78bc49f7809c05af7c909a6a181b0bab72c9c14a23f3275076d8a3ceae",
+    "runs/strength/v3/pruning-safe/q4-selective-pruning-history.jsonl.games.jsonl": "140e9a59088f662060e218fcf1d325fd9409a4ac7d68d25e1e976b36104dd4f5",
+    "runs/strength/v3/pruning-safe/q4-selective-pruning-history.jsonl.manifest.json": "e95686c625b91c560236d5279d9800caaafdb0799699a6b304099d8358c746d1",
+    "runs/strength/v3/pruning-safe/q4-selective-pruning.jsonl": "046757129d3ea004a3527b144df70c8201b88e0edeb6dbef08895efa28d1c418",
+    "runs/strength/v3/pruning-safe/q4-selective-pruning.jsonl.games.jsonl": "64ba7890790bd2b31e92d7096dee88fe60bc70c4614500f32a9107c5d1e2417b",
+    "runs/strength/v3/pruning-safe/q4-selective-pruning.jsonl.manifest.json": "651e07b8c273cc1d2c7cbe5069751e38311de1fd0f6f44d67f5572b52743949a",
+    "runs/strength/v3/pruning-safe/results.json": "6cb76f1c20128241030b9a0f4ee3360bb5fe2fcbf2d76d08c3053e5113898575",
+    "runs/strength/v3/q4-development-1000.jsonl": "ba34c98d4b93c7665b7beaf18dc093bd8828227d64d8208f90a4812393682c94",
+    "runs/strength/v3/q4-development-1000.jsonl.games.jsonl": "30373e868497b1dff31fed1d4f89ebc94c2a8bbdcd9cf98b2e477ce92b30f7d6",
+    "runs/strength/v3/q4-development-1000.jsonl.manifest.json": "e8b14afd8b78ef707c40bb259af3587e32b5b15c36016c5995364a7868e11634",
+    "runs/strength/v3/q4-development-change.json": "9958562481603d0d788284d4cd34a1a8a1b2b7ca2d9e8094eb7480202a6b727d",
+    "runs/strength/v3/q4-development-report.json": "b7435c19169c6a43f381db885d6f68201c963b391b088870c52f87f0ab018ff1",
+    "runs/strength/v3/screen/q1-selective-recaptures.jsonl": "4e1154b8c1682846df2d7e645801e338e6a42f2b2865673230c88b3a2c974e27",
+    "runs/strength/v3/screen/q1-selective-recaptures.jsonl.games.jsonl": "cd9f817f1eac15b569493b1935847131b7c993dba68dbf8d3c532a2352120d29",
+    "runs/strength/v3/screen/q1-selective-recaptures.jsonl.manifest.json": "821d18ab2c3ce37be4854ca4d524592ea5c1351d9e95f49d2831ebcfb5f65c89",
+    "runs/strength/v3/screen/q2-ordered-exact.jsonl": "7dd6c566b70bab703defe36c7162e2cd84ba1e7a9fa4ff1e861eb5b091e750c1",
+    "runs/strength/v3/screen/q2-ordered-exact.jsonl.games.jsonl": "88eaac6be092a5fae1eb273cebc1dd9b6bfc7556e9d447d8d14a11fd2241692a",
+    "runs/strength/v3/screen/q2-ordered-exact.jsonl.manifest.json": "122ae7b63868d6ac2a3896c7ea48cdba6731c9300510dce5f0564ea97b760e36",
+    "runs/strength/v3/screen/q2-selective-recaptures.jsonl": "f7021e93fcdd5453a766f171077b34589e2cf1a5938f0e10bd98ac64f6882df1",
+    "runs/strength/v3/screen/q2-selective-recaptures.jsonl.games.jsonl": "d193f6260054a200b8636b3f6031a3c7e5e4e026d8236ed4033384d36c42170c",
+    "runs/strength/v3/screen/q2-selective-recaptures.jsonl.manifest.json": "096866695d3a109a59eb44cb6aea9ea6b43f537c0b1495bb3e9734c836b49567",
+    "runs/strength/v3/screen/q2-selective-shallow.jsonl": "700557beb41c905af60699e1cdcd53b99a5922b553e80270826a264e071f2f23",
+    "runs/strength/v3/screen/q2-selective-shallow.jsonl.games.jsonl": "4bf3e1f5609acb52ee0b872f049391d961411d545ca1df2cf6d64356ed3d8309",
+    "runs/strength/v3/screen/q2-selective-shallow.jsonl.manifest.json": "a1f752030fb70b11e77f6121974003f2a187cf41ec86778c82c690d92e52014c",
+    "runs/strength/v3/screen/q3-ordered-exact.jsonl": "313b019592805cd23b6b42ade486e201d96b8faa97e67ceb84066358daacf51b",
+    "runs/strength/v3/screen/q3-ordered-exact.jsonl.games.jsonl": "f7686ed3f084ec42690bb32ec8e078dc25719f57e210d21db95ec07cf786e48f",
+    "runs/strength/v3/screen/q3-ordered-exact.jsonl.manifest.json": "1163fd79a781565334ba9227efcf708ccad7285a15100ea9d49e2e01d6871904",
+    "runs/strength/v3/screen/q3-selective-shallow.jsonl": "ceb3331d98b6984392e6643904ba3344847886d4cdf1c8deb719c33fe709ff71",
+    "runs/strength/v3/screen/q3-selective-shallow.jsonl.games.jsonl": "5f925ec94f9cbc556ccf2787ef6e352c311fadfc063078c42b69e74d67edb60c",
+    "runs/strength/v3/screen/q3-selective-shallow.jsonl.manifest.json": "f7d2c65d307f77f05d96a4247c66df2ca4968b6df67f5f45e892f9d71a884af4",
+    "runs/strength/v3/screen/q4-ordered-exact.jsonl": "698e1882d20a36bd55ea91e60006df9bb1b52932484a651737194953a59d3a9b",
+    "runs/strength/v3/screen/q4-ordered-exact.jsonl.games.jsonl": "bf3473de5152a8595402bfd6788cd4b032812cfea45be7054d95c51f0a306ae9",
+    "runs/strength/v3/screen/q4-ordered-exact.jsonl.manifest.json": "ff9622af71ba0e1f1327fe2e44facd11ae9f17ecb1eb9c28228c749535c86c71",
+    "runs/strength/v3/screen/q4-selective-shallow.jsonl": "103213dfbfe59b0dee499ffabb84efc2cf0cadd95f82e08c246002fbc1ede730",
+    "runs/strength/v3/screen/q4-selective-shallow.jsonl.games.jsonl": "0ea1bf4f1d0969e47443cb7377fb10a6f0b35023c4ec9b6c68b41adf2229d21e",
+    "runs/strength/v3/screen/q4-selective-shallow.jsonl.manifest.json": "a5532c82f9dcf6a9e7abab1ecee798c5536c9699dd0f7069190f3fe4df9ca92a",
+    "runs/strength/v3/screen/results.json": "4d2e7eedd5b824f9b70167fef336ba43da81dc40714b205070c5372646c97f97",
+    "runs/strength/v3/screen-config.json": "e2690fa08c45acdbb60c2b873e971f46e91b94986455bc6874c15da4b2232e67",
+    "runs/strength/v3/screen-search-diagnostics.json": "f219d80c09cc18d2188094e0d39e9300a1b1777e077094c00c1cb5838a05a3ac",
+    "runs/strength/v3/selected-direct-1000.jsonl": "f409ae62a9b9f1475b7ebd6ccc70edd3924c59ca14841eef15eee8e4e196b22f",
+    "runs/strength/v3/selected-direct-1000.jsonl.games.jsonl": "88903ce03fbeb044e41521fe1b7d333f3421bead5057e462062deb29750fe465",
+    "runs/strength/v3/selected-direct-1000.jsonl.manifest.json": "0c54bb2edc7a54051266a2c10aa1242fb84834877875931974fa01026c1b363a",
+    "runs/strength/v3/selected-direct-report.json": "1de264a8ee2b49a401374408009c585cf0003dd7055b3bee6aea79b8d4638728",
+    "runs/strength/v3/selected-validation-1000.jsonl": "547e3eb4c25ac161fc98d389b557394468f731325277130b9cf3760ea8a31825",
+    "runs/strength/v3/selected-validation-1000.jsonl.games.jsonl": "ef681bd28145413b9194c996e6ea0992026dc683a607e68dbddb9db37a831d49",
+    "runs/strength/v3/selected-validation-1000.jsonl.manifest.json": "c3d29ed337ca32f432ee7096667f1142f093e0a0b0cd2e2a715a0bc7d0cd9a22",
+    "runs/strength/v3/selected-validation-report.json": "2e30695dcaa32af730804d3caeaa8e6d8d54b64e3b8f78642c1a9c0ba38623b4",
+    "runs/strength/v3/selected.json": "686fd292359e88d0055846b45d002f9246a3ffd4aabd949134275a88e8319334",
+    "runs/strength/v3/validation-audit.json": "7fec8247c1736491e9b85968a8746b8b8ce86307419922d2ba8b5765f065182b",
+    "runs/strength/v3/validation-comparison.json": "faa65f498d5f4846d79729edb961784ccd34bceafd3b0beee805969c9e9fb012",
+    "runs/strength/v3/verification.json": "689966544a9658b5773fc5b5f5fa253b47ccec576ec52ff2821d5f24f56b8a8f"
+  },
+  "total_complete_experiment_games": 8600,
+  "excluded_incomplete_attempts": {
+    "pruning/q4-selective-pruning": {
+      "completed_games": 42,
+      "reason": "Stopped during first screen: quiescence pruning needs the previous move destination in cached shallow bounds. Fixed before the replacement pruning-safe experiment. No results from this attempt may select a candidate."
+    },
+    "pruning-development-1000": {
+      "completed_games": 379,
+      "reason": "Stopped to clear the previous destination for hypothetical null moves; otherwise capture-pruning exemptions could inherit an unrelated prior branch. Replacement full run uses strength-v3-final binary. No outcomes from this partial run select the candidate."
+    }
+  },
+  "promoted_engine_sha256": "798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b",
+  "promoted_defaults": {
+    "SearchMode": "alphabeta",
+    "QuiescenceDepth": 4,
+    "AlphaBetaPolicy": "selective",
+    "TranspositionHistory": "shallow",
+    "QuiescenceHistory": true,
+    "QuiescencePruning": true,
+    "RootReductions": false,
+    "CompletedResults": true,
+    "BucketHash": true,
+    "QuiescenceRecaptures": false,
+    "NodeOverrun": 0
+  }
+}

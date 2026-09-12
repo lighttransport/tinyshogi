@@ -44,6 +44,9 @@ if(BUILD_TESTING)
                    tests/test_search.c src/search.c src/shogi.c src/eval.c
                    src/thread_posix.c)
   add_test(NAME search COMMAND tinyshogi-search-test)
+  tinyshogi_target(tinyshogi-search-hash-test
+                   tests/test_search_hash.c src/shogi.c src/eval.c src/thread_posix.c)
+  add_test(NAME search-hash COMMAND tinyshogi-search-hash-test)
 
   tinyshogi_target(tinyshogi-nnue-test tests/test_nnue.c src/nnue.c src/simd.c src/shogi.c)
   add_test(NAME nnue COMMAND tinyshogi-nnue-test)

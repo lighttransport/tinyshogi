@@ -182,17 +182,11 @@ int web_set_sfen(const char *sfen) {
 const char *web_engine_move(unsigned nodes) {
     static char move_text[16];
     SearchLimits limits = {0};
-    SearchOptions options = {
-        .mode = SEARCH_MODE_ALPHABETA,
-        .threads = 1,
-        .seed = 1,
-        .max_tree_nodes = 50000,
-        .rollout_depth = 64,
-        .quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH,
-        .exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI,
-        .multi_pv = 1,
-        .evaluator = web_nnue_model_loaded ? &web_nnue_evaluator : NULL
-    };
+    SearchOptions options = search_default_options();
+    options.seed_auto = false;
+    options.seed = 1;
+    options.max_tree_nodes = 50000;
+    options.evaluator = web_nnue_model_loaded ? &web_nnue_evaluator : NULL;
     limits.nodes = nodes == 0 ? 64 : nodes;
     SearchJob *job = search_start(&position, &limits, &options);
     if (job == NULL) return "";

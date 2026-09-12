@@ -115,7 +115,9 @@ class Engine:
                 self.advertised.add(option[1])
                 self.option_specs[option[1]] = (option[2], option[3] or "")
             for field in ("nodes", "depth", "seldepth", "time", "nps", "mainnodes", "qnodes",
-                          "rootnodes", "ttcutoffs", "transcutoffs", "evaluations", "evalhits"):
+                          "rootnodes", "ttcutoffs", "transcutoffs", "evaluations", "evalhits",
+                          "iterations", "interrupted", "recaptures", "ttreplacements", "ttretained",
+                          "rootreductions", "rootresearches", "qpruned"):
                 value = re.search(r"(?:^| )" + field + r" (\d+)(?: |$)", line)
                 if value:
                     self.last_info[field] = int(value[1])

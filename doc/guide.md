@@ -152,8 +152,9 @@ nonzero `Seed` for reproducible searches.
 `RolloutDepth` controls the heuristic rollout horizon (default 256 plies), and
 `UCTExploration` is the UCT exploration constant in thousandths (default 1414).
 `QuiescenceDepth` adds a tactical capture/promotion/check search at rollout and
-alpha-beta leaves (default 2 plies; set it to 0 to disable it). Depth 3 or
-more is useful for analysis but is slower at the 1,000-node match budget.
+alpha-beta leaves (default 4 plies in native/browser play, 2 in training
+self-play; set it to 0 to disable the normal tactical horizon). Alpha-beta
+still searches legal check evasions at depth zero.
 The match harness also exposes `MCTSMode`, `UCTExploration`, and `RolloutDepth`
 for reproducible black-box tuning.
 The default alpha-beta aspiration window is 2000cp, which avoids spending the
@@ -164,21 +165,22 @@ lines; `bestmove` remains the top-ranked candidate.
 0cp; zero disables that margin).
 `USI_Hash` reserves up to the requested MiB for the alpha-beta transposition
 table (default 64), retained between moves and cleared on `usinewgame` or
-option changes. `AlphaBetaPolicy` selects `classic`, `ordered` (default; exchange,
-capture/quiet/continuation histories), or experimental `selective` pruning.
+option changes. `AlphaBetaPolicy` selects `classic`, `ordered` (exchange,
+capture/quiet/continuation histories), or `selective` pruning (default).
 `QuiescenceChecks` enables quiet checking moves in alpha-beta quiescence;
 all legal check evasions remain searched even when it is disabled.
 `QuiescenceHash` (default `true`) caches tactical continuations with depth-qualified
 bounds. `RootUpdates=partial` (default) retains a fully searched, exact root
 improvement when a later sibling exhausts the budget; reported depth still
 means a completed iteration. Use `complete` for the previous behavior.
-`TranspositionHistory=exact` (default) requires identical histories for cached
-scores. Experimental `shallow` also permits repetition-free histories when a
-tracked dependency-height bound proves fourfold repetition unreachable.
+`TranspositionHistory=exact` requires identical histories for cached scores.
+The default `shallow` also permits repetition-free histories when a tracked
+dependency-height bound proves fourfold repetition unreachable. Selectively
+pruned quiescence bounds also require a matching previous move destination.
 `NodeOverrun` (default `0`) optionally permits up to 10% extra nodes to finish
 an in-progress root iteration; the match harness exposes this as
-`--tinyshogi-node-overrun`. A 5% setting is useful for the asymmetric strength
-profile while retaining an exact cap by default.
+`--tinyshogi-node-overrun`. The current strength campaign requires zero
+overrun and caps tinyshogi at 2,000 nodes against YaneuraOu's 1,000-node request.
 Final `info string searchstats` reports main, quiescence and root node counts
 (which sum to `nodes`), cache cutoffs and evaluation counts.
 `PerpetualCheck` (default `on`) records check state in the incremental search
@@ -262,18 +264,13 @@ Use `--tinyshogi-nodes` and `--opponent-nodes` to measure engines at different
 node budgets; when omitted, both use the common `--nodes` limit.
 Add `--random-openings` with `--openings` to deterministically sample a fresh
 opening subset from the file using `--seed`, avoiding contiguous-block tuning.
-For the current asymmetric strength profile, use 4,000 tinyshogi nodes versus
-1,000 YaneuraOu nodes with `--tinyshogi-node-overrun 5`,
-`--tinyshogi-quiescence-depth 3`,
-`--tinyshogi-option AlphaBetaPolicy=selective`, and
-`--tinyshogi-option TranspositionHistory=shallow`.
-For the reduced 1,200-node budget, set
-`--tinyshogi-quiescence-depth 2` and
-`--tinyshogi-option NullMove=false`, with
-`--tinyshogi-option QuiescenceMargin=300` and
-`--tinyshogi-node-overrun 10`; this low-budget profile avoids the verified-null
-overhead and prunes low-impact tactical branches while reserving nodes for the
-main search.
+The current asymmetric campaign uses `--tinyshogi-nodes 2000
+--opponent-nodes 1000 --tinyshogi-node-overrun 0` with the same `nn.bin` and
+`FV_SCALE=20`. Register it with `prepare_strength.py --campaign --budget
+tiny-2000-yane-1000`; pass the resulting `--protocol` to the runner and gate.
+Its opening files are already seeded and paired, so omit `--random-openings`.
+Direct matches between candidate and baseline tinyshogi give both 2,000 nodes.
+See [the strength report](strength.md) for measured profiles and results.
 
 For another YaneuraOu-compatible NNUE, such as AobaNNUE, pass its Linux build
 and evaluation directory explicitly:
@@ -404,9 +401,26 @@ ARM64 NEON, A64FX SVE/SDOT, and a portable scalar fallback. Its output is
 deterministic for a fixed model and feature buffer. NNUE accumulation uses the
 same backend.
 
-The search mode defaults to shared-tree MCTS. Alpha-beta/PVS can be selected
-through USI with `setoption name SearchMode value alphabeta`; use `mcts` to
-restore the default.
+The search mode defaults to alpha-beta/PVS. Shared-tree MCTS remains available
+through `setoption name SearchMode value mcts`; training self-play continues
+to select MCTS explicitly. Native and browser play use `search_default_options()`
+for common search settings.
+
+Alpha-beta defaults to quiescence depth 4, `CompletedResults=true`, and
+`BucketHash=true`. These preserve searches completed on the final allowed
+node and use four-entry transposition buckets. `QuiescenceRecaptures` extends
+quiescence with recaptures on the previous capture square; it remains
+experimental and defaults to false. `RootReductions` (also off by default) probes late quiet root
+moves one ply shallower, then verifies improvements at full depth.
+`QuiescenceHistory=true` uses exchange and history scores to order tactical moves.
+`QuiescencePruning=true` limits late unrelated captures while retaining checks,
+evasions, promotions and captures of the piece that just moved. Its cached
+quiescence bounds include that previous destination when histories differ.
+The ordering and pruning options are enabled by default after independent
+validation at 2,000 versus 1,000 requested nodes with shared NNUE. With
+`NodeOverrun=0`, all search policies preserve the node limit. The selected
+profile achieved 68.3% wins in 1,000 validation games versus YaneuraOu;
+the 85% target remains unmet. See the strength report for complete results.
 
 ## ARM64 and A64FX
 

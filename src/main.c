@@ -351,14 +351,24 @@ static void finish_job(Application *application, bool emit_bestmove) {
         SearchDiagnostics diagnostics;
         if (search_get_diagnostics(application->job, &diagnostics))
             printf("info string searchstats mainnodes %llu qnodes %llu rootnodes %llu "
-                   "ttcutoffs %llu transcutoffs %llu evaluations %llu evalhits %llu\n",
+                   "ttcutoffs %llu transcutoffs %llu evaluations %llu evalhits %llu "
+                   "iterations %llu interrupted %llu recaptures %llu ttreplacements %llu ttretained %llu "
+                   "rootreductions %llu rootresearches %llu qpruned %llu\n",
                    (unsigned long long)diagnostics.main_nodes,
                    (unsigned long long)diagnostics.quiescence_nodes,
                    (unsigned long long)diagnostics.root_nodes,
                    (unsigned long long)diagnostics.tt_cutoffs,
                    (unsigned long long)diagnostics.transposition_cutoffs,
                    (unsigned long long)diagnostics.evaluations,
-                   (unsigned long long)diagnostics.evaluation_cache_hits);
+                   (unsigned long long)diagnostics.evaluation_cache_hits,
+                   (unsigned long long)diagnostics.completed_iterations,
+                   (unsigned long long)diagnostics.interrupted_children,
+                   (unsigned long long)diagnostics.recapture_nodes,
+                   (unsigned long long)diagnostics.tt_replacements,
+                   (unsigned long long)diagnostics.tt_retained,
+                   (unsigned long long)diagnostics.root_reductions,
+                   (unsigned long long)diagnostics.root_researches,
+                   (unsigned long long)diagnostics.quiescence_pruned);
         print_bestmove(&result);
     }
     search_destroy(application->job);
@@ -493,28 +503,37 @@ static bool parse_go(char *line, SearchLimits *limits) {
 }
 
 static void print_usi(void) {
-    printf("id name tinyshogi-c11-mcts\n");
+    SearchOptions defaults = search_default_options();
+    printf("id name tinyshogi-c11\n");
     printf("id author tinyshogi\n");
     printf("option name Threads type spin default %u min 1 max 64\n", detected_threads());
     printf("option name Seed type spin default 0 min 0 max 2147483647\n");
     printf("option name MaxTreeNodes type spin default 1000000 min 1000 max 10000000\n");
     printf("option name RolloutDepth type spin default %u min 1 max 512\n", SEARCH_DEFAULT_ROLLOUT_DEPTH);
-    printf("option name QuiescenceDepth type spin default %u min 0 max 8\n", SEARCH_DEFAULT_QUIESCENCE_DEPTH);
+    printf("option name QuiescenceDepth type spin default %u min 0 max 8\n", defaults.quiescence_depth);
     printf("option name UCTExploration type spin default %u min 1 max 3000\n", SEARCH_DEFAULT_EXPLORATION_MILLI);
     printf("option name AspirationWindow type spin default %u min 16 max 8000\n", SEARCH_DEFAULT_ASPIRATION_WINDOW);
     printf("option name QuiescenceMargin type spin default %u min 0 max 1000\n", SEARCH_DEFAULT_QUIESCENCE_MARGIN);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
-    puts("option name SearchMode type combo default mcts var mcts var alphabeta");
+    puts("option name SearchMode type combo default alphabeta var mcts var alphabeta");
     puts("option name USI_Hash type spin default 64 min 1 max 4096");
-    puts("option name AlphaBetaPolicy type combo default ordered var classic var ordered var selective");
+    printf("option name AlphaBetaPolicy type combo default %s var classic var ordered var selective\n",
+           defaults.ab_policy == 2 ? "selective" : defaults.ab_policy == 1 ? "ordered" : "classic");
     puts("option name QuiescenceChecks type check default true");
     puts("option name RootUpdates type combo default partial var complete var partial");
     puts("option name QuiescenceHash type check default true");
+    printf("option name QuiescenceRecaptures type check default %s\n", defaults.ab_recaptures ? "true" : "false");
+    printf("option name BucketHash type check default %s\n", defaults.ab_bucket_hash ? "true" : "false");
+    printf("option name CompletedResults type check default %s\n", defaults.ab_completed_results ? "true" : "false");
+    printf("option name RootReductions type check default %s\n", defaults.ab_root_reductions ? "true" : "false");
+    printf("option name QuiescenceHistory type check default %s\n", defaults.ab_quiescence_history ? "true" : "false");
+    printf("option name QuiescencePruning type check default %s\n", defaults.ab_quiescence_pruning ? "true" : "false");
     puts("option name RootPrepass type check default true");
     puts("option name NullMove type check default true");
     puts("option name NodeOverrun type spin default 0 min 0 max 10");
     puts("option name RootMoveLimit type spin default 0 min 0 max 32");
-    puts("option name TranspositionHistory type combo default exact var exact var shallow");
+    printf("option name TranspositionHistory type combo default %s var exact var shallow\n",
+           defaults.ab_shallow_transpositions ? "shallow" : "exact");
     puts("option name MCTSMode type combo default auto var auto var neural var rollout");
     puts("option name LeafBatch type spin default 5 min 1 max 12");
     puts("option name A64FXMode type combo default auto var auto var off");
@@ -577,6 +596,24 @@ static void set_option(Application *application, char *line) {
     } else if (strcmp(tokens[2], "QuiescenceHash") == 0) {
         if (strcmp(tokens[value_index], "true") == 0) application->options.ab_quiescence_hash = true;
         else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_quiescence_hash = false;
+    } else if (strcmp(tokens[2], "QuiescenceRecaptures") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_recaptures = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_recaptures = false;
+    } else if (strcmp(tokens[2], "BucketHash") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_bucket_hash = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_bucket_hash = false;
+    } else if (strcmp(tokens[2], "CompletedResults") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_completed_results = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_completed_results = false;
+    } else if (strcmp(tokens[2], "RootReductions") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_root_reductions = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_root_reductions = false;
+    } else if (strcmp(tokens[2], "QuiescenceHistory") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_quiescence_history = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_quiescence_history = false;
+    } else if (strcmp(tokens[2], "QuiescencePruning") == 0) {
+        if (strcmp(tokens[value_index], "true") == 0) application->options.ab_quiescence_pruning = true;
+        else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_quiescence_pruning = false;
     } else if (strcmp(tokens[2], "RootPrepass") == 0) {
         if (strcmp(tokens[value_index], "true") == 0) application->options.ab_root_prepass = true;
         else if (strcmp(tokens[value_index], "false") == 0) application->options.ab_root_prepass = false;
@@ -1027,21 +1064,8 @@ int main(int argc, char **argv) {
         shogi_nnue_model_init(&application.nnue_replicas[index]);
     }
     shogi_position_start(&application.position);
+    application.options = search_default_options();
     application.options.threads = detected_threads();
-    application.options.mode = SEARCH_MODE_MCTS;
-    application.options.ab_policy = 1;
-    application.options.ab_partial_root = true;
-    application.options.ab_quiescence_hash = true;
-    application.options.ab_root_prepass = true;
-    application.options.ab_null_move = true;
-    application.options.seed_auto = true;
-    application.options.max_tree_nodes = 1000000;
-    application.options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
-    application.options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
-    application.options.quiescence_margin = SEARCH_DEFAULT_QUIESCENCE_MARGIN;
-    application.options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
-    application.options.multi_pv = SEARCH_DEFAULT_MULTIPV;
-    application.options.perpetual_check = true;
     application.options.evaluator = &application.evaluator;
 #if defined(TINYSHOGI_A64FX_NUMA)
     application.options.a64fx_uct = true;

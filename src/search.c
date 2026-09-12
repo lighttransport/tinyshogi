@@ -24,6 +24,33 @@
 #define SEARCH_NEURAL_MAX_BATCH 12U
 #define SEARCH_NEURAL_MAX_DEPTH 8
 
+SearchOptions search_default_options(void) {
+    SearchOptions options = {0};
+    options.mode = SEARCH_MODE_ALPHABETA;
+    options.threads = 1;
+    options.seed_auto = true;
+    options.max_tree_nodes = DEFAULT_MAX_TREE_NODES;
+    options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
+    options.quiescence_depth = SEARCH_DEFAULT_AB_QUIESCENCE_DEPTH;
+    options.quiescence_margin = SEARCH_DEFAULT_QUIESCENCE_MARGIN;
+    options.aspiration_window = SEARCH_DEFAULT_ASPIRATION_WINDOW;
+    options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
+    options.multi_pv = SEARCH_DEFAULT_MULTIPV;
+    options.hash_mb = 64;
+    options.ab_policy = 2;
+    options.ab_partial_root = true;
+    options.ab_quiescence_hash = true;
+    options.ab_root_prepass = true;
+    options.ab_null_move = true;
+    options.ab_bucket_hash = true;
+    options.ab_completed_results = true;
+    options.ab_shallow_transpositions = true;
+    options.ab_quiescence_history = true;
+    options.ab_quiescence_pruning = true;
+    options.perpetual_check = true;
+    return options;
+}
+
 typedef struct TreeNode TreeNode;
 
 typedef struct TreeArenaChunk {
@@ -59,6 +86,7 @@ typedef struct {
     uint8_t bound;
     uint8_t generation;
     bool history_unique;
+    uint8_t previous_to;
     ShogiMove move;
 } AlphaBetaHashEntry;
 
@@ -145,6 +173,7 @@ struct SearchJob {
     bool ab_order_history_owned;
     uint8_t ab_path_piece[SEARCH_MAX_PATH];
     uint8_t ab_path_to[SEARCH_MAX_PATH];
+    bool ab_path_capture[SEARCH_MAX_PATH];
     unsigned ab_null_depth;
     int ab_static_scores[SEARCH_MAX_PATH];
     bool ab_static_valid[SEARCH_MAX_PATH];
@@ -960,9 +989,20 @@ static int ab_score_from_hash(int score, unsigned ply) {
     return score;
 }
 
-static AlphaBetaHashEntry *ab_entry(SearchJob *job, uint64_t key) {
+static AlphaBetaHashEntry *ab_bucket(SearchJob *job, uint64_t key) {
     if (job->ab_hash == NULL || job->ab_hash_capacity == 0) return NULL;
-    return &job->ab_hash[key & (job->ab_hash_capacity - 1U)];
+    size_t index = key & (job->ab_hash_capacity - 1U);
+    if (job->options.ab_bucket_hash) index &= ~(size_t)3;
+    return &job->ab_hash[index];
+}
+
+static AlphaBetaHashEntry *ab_entry(SearchJob *job, uint64_t key) {
+    AlphaBetaHashEntry *bucket = ab_bucket(job, key);
+    if (bucket == NULL) return NULL;
+    unsigned count = job->options.ab_bucket_hash ? 4 : 1;
+    for (unsigned i = 0; i < count; ++i)
+        if (bucket[i].bound != 0 && bucket[i].key == key) return &bucket[i];
+    return NULL;
 }
 
 /* In a legal shogi line, returning to the same board, hands and side requires
@@ -998,19 +1038,44 @@ static bool ab_compatible_history(const SearchJob *job, const AlphaBetaHashEntry
                                   uint64_t history_key, unsigned ply) {
     return entry->history_key == history_key ||
         (job->options.ab_shallow_transpositions && entry->height <= 8 &&
+         (!job->options.ab_quiescence_pruning || entry->depth > 0 ||
+          entry->previous_to == (ply == 0 ? SHOGI_SQ_NONE : job->ab_path_to[ply - 1])) &&
          entry->history_unique && job->ab_history_unique[ply]);
 }
 
 static void ab_store(SearchJob *job, uint64_t key, uint64_t history_key,
                      int score, int depth, uint8_t bound, ShogiMove move, unsigned ply) {
-    AlphaBetaHashEntry *entry = ab_entry(job, key);
+    AlphaBetaHashEntry *entry = ab_bucket(job, key);
     if (entry == NULL) return;
-    if (job->ab_aborted || should_stop(job)) return;
+    if (job->ab_aborted || (!job->options.ab_completed_results && should_stop(job))) return;
+    if (job->options.ab_bucket_hash) {
+        AlphaBetaHashEntry *matching = ab_entry(job, key);
+        if (matching != NULL) {
+            entry = matching;
+            if (entry->history_key == history_key && entry->generation == job->ab_generation &&
+                (entry->depth > depth ||
+                 (entry->depth == depth && entry->bound == AB_EXACT && bound != AB_EXACT))) {
+                ++job->ab_diagnostics.tt_retained;
+                return;
+            }
+        } else {
+            for (unsigned i = 1; i < 4; ++i) {
+                AlphaBetaHashEntry *candidate = &ab_bucket(job, key)[i];
+                int priority = entry->bound == 0 ? INT_MIN : entry->depth +
+                    (entry->generation == job->ab_generation ? 256 : 0);
+                int candidate_priority = candidate->bound == 0 ? INT_MIN : candidate->depth +
+                    (candidate->generation == job->ab_generation ? 256 : 0);
+                if (candidate_priority < priority) entry = candidate;
+            }
+        }
+    }
     if (entry->key != 0 && entry->key != key && entry->depth > depth &&
         entry->generation == job->ab_generation) return;
+    if (entry->bound != 0 && entry->key != key) ++job->ab_diagnostics.tt_replacements;
     *entry = (AlphaBetaHashEntry){.key = key, .history_key = history_key,
         .score = (int16_t)ab_score_to_hash(score, ply), .depth = (int16_t)depth,
         .height = job->ab_subtree_height[ply], .history_unique = job->ab_history_unique[ply],
+        .previous_to = ply == 0 ? SHOGI_SQ_NONE : job->ab_path_to[ply - 1],
         .bound = bound, .generation = job->ab_generation, .move = move};
 }
 
@@ -1089,6 +1154,8 @@ static void ab_record_path(SearchJob *job, const ShogiPosition *position,
                          shogi_piece_type(position->board[move.from]);
     job->ab_path_piece[ply] = (uint8_t)(move.promote ? ab_promoted_type(type) : type);
     job->ab_path_to[ply] = move.to;
+    job->ab_path_capture[ply] = move.from != SHOGI_SQ_NONE &&
+        position->board[move.to] != SHOGI_EMPTY;
 }
 
 static int ab_static_evaluation(WorkerContext *worker,
@@ -1166,13 +1233,15 @@ static int ab_quiescence_body(WorkerContext *worker, ShogiPosition *position,
         return ab_terminal_score(job, position, result, ply);
 
     bool in_check = shogi_is_in_check(position, position->side);
+    bool recaptures = depth == 0 && job->options.ab_recaptures && ply != 0 &&
+                      job->ab_path_capture[ply - 1];
     int best = -AB_INFINITY;
     if (!in_check) {
         int stand_pat = ab_static_evaluation(worker, position);
         best = stand_pat;
         if (stand_pat >= beta) return stand_pat;
         if (stand_pat > alpha) alpha = stand_pat;
-        if (depth == 0) return stand_pat;
+        if (depth == 0 && !recaptures) return stand_pat;
     }
 
     TacticalMove tactical[SHOGI_MAX_MOVES];
@@ -1181,10 +1250,17 @@ static int ab_quiescence_body(WorkerContext *worker, ShogiPosition *position,
         ShogiMove move = moves[index];
         bool gives_check = false;
         int score = tactical_move_score(position, move, &gives_check);
-        if (same_search_move(move, tt_move)) score += 10000000;
+        if (job->options.ab_quiescence_history) {
+            score = ab_move_order(job, position, move, tt_move, ply);
+            if (gives_check && !ab_is_capture(position, move) && !move.promote)
+                score += 300000;
+        } else if (same_search_move(move, tt_move)) score += 10000000;
         bool quiet_check = !job->options.ab_skip_quiet_checks && gives_check &&
             (job->options.ab_policy == 0 || depth == job->options.quiescence_depth);
-        if (in_check || ab_is_capture(position, move) || move.promote || quiet_check)
+        bool recapture = recaptures && ab_is_capture(position, move) &&
+                         move.to == job->ab_path_to[ply - 1];
+        if (in_check || (depth == 0 ? recapture :
+            (ab_is_capture(position, move) || move.promote || quiet_check)))
             tactical[tactical_count++] = (TacticalMove){move, score, gives_check};
     }
     if (tactical_count == 0) return best == -AB_INFINITY ?
@@ -1201,6 +1277,15 @@ static int ab_quiescence_body(WorkerContext *worker, ShogiPosition *position,
             tactical[index] = tactical[selected];
             tactical[selected] = swap;
         }
+        /* Limit branching between unrelated captures. Keep every evasion,
+         * check, promotion and capture of the piece that just moved. */
+        if (job->options.ab_quiescence_pruning && !in_check && depth != 0 && index >= 2 &&
+            !tactical[index].gives_check && !tactical[index].move.promote &&
+            (ply == 0 || tactical[index].move.to != job->ab_path_to[ply - 1]) &&
+            best > -AB_MATE + SEARCH_MAX_PATH) {
+            ++job->ab_diagnostics.quiescence_pruned;
+            continue;
+        }
         /* If even the material swing cannot raise the stand-pat score, this
          * capture cannot affect alpha.  Keep checks and all evasions: the
          * tactical move score above deliberately marks those separately. */
@@ -1215,9 +1300,12 @@ static int ab_quiescence_body(WorkerContext *worker, ShogiPosition *position,
         ShogiUndo undo;
         ab_record_path(job, position, tactical[index].move, ply);
         if (!worker_make_move(worker, position, tactical[index].move, &undo)) continue;
+        uint64_t qnodes_before = job->ab_diagnostics.quiescence_nodes;
         unsigned next_depth = depth == 0 ? 0 : depth - 1;
         int score = -ab_quiescence(worker, position, next_depth,
                                    -beta, -alpha, ply + 1, true);
+        if (recaptures && !in_check && job->ab_diagnostics.quiescence_nodes > qnodes_before)
+            ++job->ab_diagnostics.recapture_nodes;
         (void)worker_unmake_move(worker, position, &undo);
         if (job->ab_aborted) return 0;
         if (score > best) { best = score; *best_move = tactical[index].move; }
@@ -1235,7 +1323,8 @@ static int ab_quiescence(WorkerContext *worker, ShogiPosition *position,
                          unsigned depth, int alpha, int beta, unsigned ply,
                          bool count_node) {
     SearchJob *job = worker->job;
-    if (should_stop(job) || ply >= SEARCH_MAX_PATH) {
+    if (((count_node || !job->options.ab_completed_results) && should_stop(job)) ||
+        ply >= SEARCH_MAX_PATH) {
         job->ab_aborted = true;
         return 0;
     }
@@ -1247,7 +1336,10 @@ static int ab_quiescence(WorkerContext *worker, ShogiPosition *position,
     ShogiMove tt_move = {SHOGI_SQ_NONE, SHOGI_SQ_NONE, 0, 0, 0};
     uint64_t history_key = 0;
     int hash_depth = (int)depth - (int)job->options.quiescence_depth;
-    bool use_hash = job->options.ab_quiescence_hash && job->ab_null_depth == 0;
+    /* Recapture eligibility depends on the incoming move, not only the board.
+     * Until that context is represented in the TT, do not cache q0 bounds. */
+    bool use_hash = job->options.ab_quiescence_hash && job->ab_null_depth == 0 &&
+                    !(job->options.ab_recaptures && depth == 0);
     if (use_hash) {
         ShogiResult repetition;
         if (shogi_repetition_result(position, &repetition))
@@ -1301,7 +1393,8 @@ static int alpha_beta_body(WorkerContext *worker, ShogiPosition *position, int d
     ShogiMove tt_move = {SHOGI_SQ_NONE, SHOGI_SQ_NONE, 0, 0, 0};
     if (entry != NULL && entry->key == position->hash) {
         tt_move = entry->move;
-        if (job->ab_null_depth == 0 && entry->depth >= depth &&
+        if (!(depth <= 0 && job->options.ab_recaptures && job->options.quiescence_depth == 0) &&
+            job->ab_null_depth == 0 && entry->depth >= depth &&
             ab_compatible_history(job, entry, history_key, ply)) {
             int score = ab_score_from_hash(entry->score, ply);
             if (entry->bound == AB_EXACT ||
@@ -1324,7 +1417,8 @@ static int alpha_beta_body(WorkerContext *worker, ShogiPosition *position, int d
         ++job->ab_diagnostics.quiescence_nodes;
         int score = ab_quiescence(worker, position, job->options.quiescence_depth,
                                    alpha, beta, ply, false);
-        if (job->ab_null_depth == 0 && !job->options.ab_quiescence_hash) {
+        if (job->ab_null_depth == 0 && !job->options.ab_quiescence_hash &&
+            !(job->options.ab_recaptures && job->options.quiescence_depth == 0)) {
             uint8_t bound = score <= alpha_original ? AB_UPPER :
                             score >= beta_original ? AB_LOWER : AB_EXACT;
             ab_store(job, position->hash, history_key, score, 0, bound, tt_move, ply);
@@ -1359,6 +1453,8 @@ static int alpha_beta_body(WorkerContext *worker, ShogiPosition *position, int d
         shogi_search_null_move(position);
         worker->eval_state = shogi_evaluator_state_create(worker->evaluator, position, job->root_side);
         job->ab_path_piece[ply] = 0;
+        job->ab_path_to[ply] = SHOGI_SQ_NONE;
+        job->ab_path_capture[ply] = false;
         ++job->ab_null_depth;
         int reduction = 2 + depth / 4;
         int score = -alpha_beta(worker, position, depth - 1 - reduction,
@@ -1582,6 +1678,7 @@ static bool alpha_beta_root_depth(WorkerContext *worker, int depth,
         if (should_stop(job) || job->ab_aborted) return false;
         ShogiMove root_move = job->root->children[i].move;
         ShogiPosition next = job->root_position;
+        bool quiet = !ab_is_capture(&next, root_move) && !root_move.promote;
         ShogiUndo undo;
         ab_record_path(job, &next, root_move, 0);
         if (!worker_make_move(worker, &next, root_move, &undo))
@@ -1591,14 +1688,30 @@ static bool alpha_beta_root_depth(WorkerContext *worker, int depth,
             score = -alpha_beta(worker, &next, depth - 1,
                                 -beta, -alpha, 1, 0, true);
         } else {
-            score = -alpha_beta(worker, &next, depth - 1,
+            /* Probe late quiet alternatives one ply shallower. A reduced
+             * fail-high must survive a full-depth null-window search before
+             * it can replace the principal move or publish an exact score.
+             * Never reduce captures, promotions, checks or check evasions. */
+            int reduction = job->options.ab_root_reductions && depth >= 2 && i >= 4 && quiet &&
+                !shogi_is_in_check(&job->root_position, job->root_side) &&
+                !shogi_is_in_check(&next, next.side) ? 1 : 0;
+            job->ab_diagnostics.root_reductions += reduction != 0;
+            score = -alpha_beta(worker, &next, depth - 1 - reduction,
                                 -alpha - 1, -alpha, 1, 0, true);
-            if (score > alpha && score < beta)
+            if (!job->ab_aborted && reduction != 0 && score > alpha) {
+                ++job->ab_diagnostics.root_researches;
+                score = -alpha_beta(worker, &next, depth - 1,
+                                    -alpha - 1, -alpha, 1, 0, true);
+            }
+            if (!job->ab_aborted && score > alpha && score < beta)
                 score = -alpha_beta(worker, &next, depth - 1,
                                     -beta, -alpha, 1, 0, true);
         }
         (void)worker_unmake_move(worker, &next, &undo);
-        if (should_stop(job) || job->ab_aborted) return false;
+        if (job->ab_aborted || (!job->options.ab_completed_results && should_stop(job))) {
+            ++job->ab_diagnostics.interrupted_children;
+            return false;
+        }
         /* Only a completed search strictly inside its original window is
          * exact. Keep that improved root move even if a later sibling exhausts
          * the budget. Do not publish aborted children or fail-high/low bounds,
@@ -1617,7 +1730,7 @@ static bool alpha_beta_root_depth(WorkerContext *worker, int depth,
         if (score > alpha) alpha = score;
         if (alpha >= beta) break;
     }
-    if (should_stop(job)) return false;
+    if (!job->options.ab_completed_results && should_stop(job)) return false;
     *best_move = local_move;
     *best_score = local_best;
     return true;
@@ -1697,6 +1810,7 @@ static void run_alpha_beta(WorkerContext *worker) {
         job->ab_best_move = best_move;
         job->ab_best_score = best_score;
         job->ab_completed_depth = depth;
+        ++job->ab_diagnostics.completed_iterations;
         job->ab_best_valid = true;
         ab_publish(job);
     }
@@ -2307,6 +2421,12 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
                 (uint64_t)job->options.ab_shallow_transpositions << 45;
             config |= (uint64_t)job->options.node_overrun_percent << 46;
             config |= (uint64_t)job->options.root_move_limit << 50;
+            config |= (uint64_t)job->options.ab_recaptures << 56;
+            config |= (uint64_t)job->options.ab_bucket_hash << 57;
+            config |= (uint64_t)job->options.ab_completed_results << 58;
+            config |= (uint64_t)job->options.ab_root_reductions << 59;
+            config |= (uint64_t)job->options.ab_quiescence_history << 60;
+            config |= (uint64_t)job->options.ab_quiescence_pruning << 61;
             if (context->ab_config != config || context->ab_evaluator != job->options.evaluator) {
                 search_context_clear(context);
                 context->ab_config = config;

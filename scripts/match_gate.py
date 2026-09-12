@@ -10,6 +10,7 @@ import random
 import statistics
 
 from selfplay_match import sha256
+from strength_protocol import load_protocol, fatal_violations, position_key, validate_lock, node_budgets
 
 PINNED_OPPONENT = "39d8fe33c7fad313ecc2544b4705e82a77398ddd66f58982cf8a6e36976e1505"
 PINNED_MODEL = "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782"
@@ -85,6 +86,14 @@ def load_match(path):
                 raise ValueError("move budget does not match the experiment")
             if count is not None and (type(count) is not int or count < 0):
                 raise ValueError("invalid reported node count")
+            if ((manifest.get("protocol") or {}).get("version", 0) >= 3 and
+                    (expected_engine == "tinyshogi" or settings.get("opponent_eval_plugin")) and
+                    record["move"] not in ("resign", "win")):
+                info = record.get("search_info", {})
+                parts = [info.get(key) for key in ("mainnodes", "qnodes", "rootnodes")]
+                if (any(type(value) is not int or value < 0 for value in parts) or
+                        sum(parts) != count or info.get("nodes") != count):
+                    raise ValueError("search node categories do not match reported nodes")
             if count is not None:
                 nodes[expected_engine].append(count)
             duration = record["elapsed_ms"]
@@ -151,21 +160,61 @@ def summarize(games):
             "score": (wins + draws / 2) / count if count else 0}
 
 
-def protocol_errors(manifest, games, violations):
+def protocol_errors(manifest, games, violations, protocol_path=None, phase="acceptance"):
     errors = []
     args = manifest["arguments"]
+    protocol = load_protocol(protocol_path) if protocol_path else None
     if manifest.get("version", 0) < 3:
         errors.append("target acceptance requires checksummed version-3 artifacts")
-    if not manifest.get("strict"):
+    if protocol:
+        if (manifest.get("version", 0) < 4 or manifest.get("protocol") != protocol or
+                manifest.get("protocol_sha256") != sha256(protocol_path) or
+                args.get("phase") != phase or manifest.get("strict")):
+            errors.append("experiment does not match frozen protocol and phase")
+        if phase == "acceptance":
+            try:
+                lock_path = args.get("candidate_lock")
+                lock = validate_lock(lock_path, sha256(protocol_path), manifest["engine_sha256"][0],
+                                     manifest["plugin_sha256"], manifest["engine_options"][0])
+                if (sha256(lock_path) != manifest.get("candidate_lock_sha256") or
+                        lock["created_unix"] > manifest["created_unix"]):
+                    errors.append("candidate was not frozen before acceptance")
+            except (ValueError, OSError, KeyError) as error:
+                errors.append(str(error))
+        expected_openings = protocol["splits"][phase]["sha256"]
+        expected_opponent = protocol["opponent"]["sha256"]
+        if args.get("opponent_eval_plugin") and phase != "acceptance":
+            expected_opponent = protocol["baseline_sha256"]
+        if (args.get("random_openings") or manifest.get("node_tolerance") !=
+                {"tinyshogi": 0.0, "YaneuraOu": 0.0} or
+                args.get("tinyshogi_node_overrun") != 0 or
+                int(manifest["engine_options"][0].get("NodeOverrun", -1)) != 0):
+            errors.append("incorrect requested-node accounting or sampling")
+        source = Path(protocol_path).parent / protocol["splits"][phase]["file"]
+        positions = source.read_text().splitlines()
+        for game in games:
+            index = args["opening_offset"] + game["game"] // 2
+            if index >= len(positions) or position_key(game["initial_sfen"]) != position_key(positions[index]):
+                errors.append("game did not use its registered opening")
+                break
+    else:
+        expected_openings, expected_opponent = HELDOUT_OPENINGS, PINNED_OPPONENT
+        tolerance = manifest.get("node_tolerance", 0.05)
+        values = tolerance.values() if isinstance(tolerance, dict) else [tolerance]
+        if any(float(value) > 0.05 for value in values):
+            errors.append("legacy strict tolerance exceeds 5%")
+    if not protocol and not manifest.get("strict"):
         errors.append("experiment was not run in strict mode")
-    if manifest["engine_sha256"][1] != PINNED_OPPONENT:
+    if manifest["engine_sha256"][1] != expected_opponent:
         errors.append("opponent does not match the pinned binary")
     if manifest.get("model_sha256") != PINNED_MODEL or manifest.get("opponent_model_sha256") != PINNED_MODEL:
         errors.append("models do not match the pinned shared weights")
-    if manifest.get("openings_sha256") != HELDOUT_OPENINGS or args["opening_offset"] != 0:
+    if manifest.get("openings_sha256") != expected_openings or (phase == "acceptance" and args["opening_offset"] != 0):
         errors.append("experiment did not use the frozen held-out split")
-    if ((args.get("tinyshogi_nodes") or args["nodes"]) != 1000 or
-            (args.get("opponent_nodes") or args["nodes"]) != 1000 or
+    direct = protocol and args.get("opponent_eval_plugin") and phase != "acceptance"
+    tiny_nodes, opponent_nodes = node_budgets(protocol, bool(direct)) if protocol else (1000, 1000)
+    if ((args.get("tinyshogi_nodes") or args["nodes"]) != tiny_nodes or
+            (args.get("opponent_nodes") or args["nodes"]) != opponent_nodes or
             args.get("movetime_ms") is not None or args["max_plies"] != 512):
         errors.append("incorrect search or game limits")
     options = manifest["engine_options"]
@@ -174,14 +223,15 @@ def protocol_errors(manifest, games, violations):
             errors.append("incorrect thread, hash, or MultiPV setting")
     if (options[0].get("SearchMode") != "alphabeta" or
             options[0].get("PerpetualCheck") != "on" or
-            options[1].get("USI_OwnBook") != "false" or
+            (not direct and (options[1].get("USI_OwnBook") != "false" or
             options[1].get("BookFile") != "no_book" or
             options[1].get("USI_Ponder") != "false" or
             options[1].get("EnteringKingRule") != "CSARule27" or
-            int(options[1].get("FV_SCALE", 0)) != 20 or args["fv_scale"] != 20):
+            int(options[1].get("FV_SCALE", 0)) != 20)) or args["fv_scale"] != 20):
         errors.append("incorrect search, book, pondering, rules, or evaluation settings")
-    if violations or not manifest.get("node_audit_passed"):
-        errors.append(f"node audit failed ({len(violations)} violations)")
+    fatal = fatal_violations(violations, bool(protocol) and not direct)
+    if fatal:
+        errors.append(f"node audit failed ({len(fatal)} violations)")
     paired_counts(games)
     return errors
 
@@ -193,7 +243,8 @@ def validation_errors(manifest, parity_path, rules_path):
             errors.append(f"missing {kind} report")
             continue
         report = json.loads(Path(path).read_text())
-        if not report.get("exact_match") or report.get("positions", 0) < 1000:
+        minimum_positions = 5000 if kind == "rules parity" and manifest.get("protocol") else 1000
+        if not report.get("exact_match") or report.get("positions", 0) < minimum_positions:
             errors.append(f"insufficient {kind} validation")
         if kind == "NNUE parity":
             if (report.get("engine_sha256") != manifest["engine_sha256"] or
@@ -216,6 +267,7 @@ def main(argv=None):
                         help="Describe a diagnostic/development match without accepting the target")
     parser.add_argument("--parity-report", type=Path, help="Exact NNUE comparison for these binaries")
     parser.add_argument("--rules-report", type=Path, help="Independent legal-move comparison for this referee")
+    parser.add_argument("--protocol", type=Path, help="Explicit frozen node-request protocol; never inferred")
     parser.add_argument("--output", type=Path, help="Write the audit report without replacing an existing file")
     args = parser.parse_args(argv)
     if args.output and args.output.exists():
@@ -231,7 +283,12 @@ def main(argv=None):
             raise
         report["win_rate_95_interval"] = None
     report["node_violations"] = len(violations)
-    report["nodes"] = {name: {"median": statistics.median(values), "maximum": max(values)}
+    report["budget_semantics"] = manifest.get("budget_semantics", "legacy")
+    limits = {name: manifest["arguments"].get(key) or manifest["arguments"]["nodes"]
+              for name, key in (("tinyshogi", "tinyshogi_nodes"), ("YaneuraOu", "opponent_nodes"))}
+    report["nodes"] = {name: {"mean": statistics.mean(values), "median": statistics.median(values),
+                              "maximum": max(values), "over_1000": sum(n > 1000 for n in values),
+                              "requested": limits[name], "over_request": sum(n > limits[name] for n in values)}
                        for name, values in nodes.items() if values}
     report["elapsed_ms"] = {name: {"median": statistics.median(values), "maximum": max(values)}
                             for name, values in elapsed.items() if values}
@@ -239,7 +296,7 @@ def main(argv=None):
         report["target_accepted"] = False
         report["diagnostic_only"] = True
     else:
-        errors = protocol_errors(manifest, games, violations)
+        errors = protocol_errors(manifest, games, violations, args.protocol)
         errors.extend(validation_errors(manifest, args.parity_report, args.rules_report))
         if args.games != 1000 or args.minimum_wins < 850:
             errors.append("the fixed target cannot be relaxed below 850 wins in 1000 games")

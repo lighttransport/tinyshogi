@@ -1,0 +1,1235 @@
+{
+  "date": "2026-09-12",
+  "target_accepted": false,
+  "acceptance_games": 0,
+  "total_experiment_games": 9100,
+  "protocol": {
+    "version": 2,
+    "budget": "equal-request-1000",
+    "seed": 20260912,
+    "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782",
+    "baseline_sha256": "b676b488039da3463724ca51c0cb66c033d2d397941418d09c7e82410246612a",
+    "opponent": {
+      "commit": "33ccf1f907eb7184889fa23051243f81ab0bf973",
+      "sha256": "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc",
+      "compiler": "Ubuntu clang version 21.1.8 (++20251221032922+2078da43e25a-1~exp1~20251221153059.70)",
+      "build": "normal YANEURAOU_EDITION=YANEURAOU_ENGINE_NNUE TARGET_CPU=AVX2 COMPILER=clang++"
+    },
+    "source_sha256": {
+      "start_sfens_ply24.txt": "f93098ab6c0cf5eab5f55aaffd48da4421934e08d4c2fcfba68f7b60853ac0a2",
+      "start_sfens_ply32.txt": "b54a3f87b14b1b2c5815767d23a47ea7e78a20286f2d78e36bdc44a431db7252"
+    },
+    "excluded": "both historical 500-pair splits, seed 20260910",
+    "splits": {
+      "development": {
+        "file": "development.sfens",
+        "sha256": "c92306ee3eb08c38bfba99bb3bc9fc61072abd35940010a1a10eccb104c052b7"
+      },
+      "validation": {
+        "file": "validation.sfens",
+        "sha256": "e079d130335571765fe959073b66460081aa2b70c6e52ee942b1c8241dd8484a"
+      },
+      "acceptance": {
+        "file": "acceptance.sfens",
+        "sha256": "d239d582a9081653835b04e8bc614c54e44925e6d6ac6532db9df11da7323999"
+      }
+    }
+  },
+  "protocol_sha256": "054eeac41b605b3d174c0346394254bc95a39bb869090627b3fbb72ec5c7a96b",
+  "promoted_engine_sha256": "6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8",
+  "promoted_defaults": {
+    "SearchMode": "alphabeta",
+    "AlphaBetaPolicy": "ordered",
+    "QuiescenceDepth": 3,
+    "CompletedResults": true,
+    "BucketHash": true,
+    "QuiescenceRecaptures": false,
+    "TranspositionHistory": "exact"
+  },
+  "validation": {
+    "candidate": {
+      "games": 1000,
+      "wins": 382,
+      "draws": 1,
+      "losses": 617,
+      "win_rate": 0.382,
+      "score": 0.3825
+    },
+    "baseline": {
+      "games": 1000,
+      "wins": 316,
+      "draws": 2,
+      "losses": 682,
+      "win_rate": 0.316,
+      "score": 0.317
+    },
+    "direct": {
+      "games": 1000,
+      "wins": 538,
+      "draws": 2,
+      "losses": 460,
+      "win_rate": 0.538,
+      "score": 0.539
+    },
+    "paired_win_rate_change": 0.066,
+    "paired_change_95_interval": [
+      0.029,
+      0.103
+    ],
+    "direct_score_95_interval": [
+      0.507,
+      0.571
+    ],
+    "promotion_supported": true,
+    "acceptance_eligible": false,
+    "target_accepted": false
+  },
+  "reports": {
+    "baseline-development": {
+      "games": 1000,
+      "wins": 304,
+      "draws": 4,
+      "losses": 692,
+      "win_rate": 0.304,
+      "score": 0.306,
+      "win_rate_95_interval": [
+        0.275,
+        0.334
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 16427,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 1006.4386161715876,
+          "median": 1000.0,
+          "maximum": 23520,
+          "over_1000": 16427
+        },
+        "tinyshogi": {
+          "mean": 1000,
+          "median": 1000,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 4.605700509273447,
+          "maximum": 107.60460700839758
+        },
+        "tinyshogi": {
+          "median": 44.97160000028089,
+          "maximum": 361.56031099380925
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "completed-buckets-development": {
+      "games": 1000,
+      "wins": 307,
+      "draws": 5,
+      "losses": 688,
+      "win_rate": 0.307,
+      "score": 0.3095,
+      "win_rate_95_interval": [
+        0.278,
+        0.337
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 16540,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 1006.4803626052203,
+          "median": 1000,
+          "maximum": 23520,
+          "over_1000": 16540
+        },
+        "tinyshogi": {
+          "mean": 1000,
+          "median": 1000.0,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 4.156659997534007,
+          "maximum": 136.24282300588675
+        },
+        "tinyshogi": {
+          "median": 43.25237400189508,
+          "maximum": 342.46978000737727
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "q3-development": {
+      "games": 1000,
+      "wins": 372,
+      "draws": 0,
+      "losses": 628,
+      "win_rate": 0.372,
+      "score": 0.372,
+      "win_rate_95_interval": [
+        0.342,
+        0.402
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 18179,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 1000.2216995665838,
+          "median": 1000,
+          "maximum": 7088,
+          "over_1000": 18179
+        },
+        "tinyshogi": {
+          "mean": 1000,
+          "median": 1000,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 3.729657008079812,
+          "maximum": 269.2578690184746
+        },
+        "tinyshogi": {
+          "median": 43.44651199062355,
+          "maximum": 787.8040850046091
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "q1-development": {
+      "games": 1000,
+      "wins": 330,
+      "draws": 4,
+      "losses": 666,
+      "win_rate": 0.33,
+      "score": 0.332,
+      "win_rate_95_interval": [
+        0.3,
+        0.361
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17007,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 999.886333870102,
+          "median": 1000,
+          "maximum": 3766,
+          "over_1000": 17007
+        },
+        "tinyshogi": {
+          "mean": 999.9798526116186,
+          "median": 1000.0,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 3.338263020850718,
+          "maximum": 174.68568799085915
+        },
+        "tinyshogi": {
+          "median": 42.81837650341913,
+          "maximum": 332.0053920033388
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "baseline-validation": {
+      "games": 1000,
+      "wins": 316,
+      "draws": 2,
+      "losses": 682,
+      "win_rate": 0.316,
+      "score": 0.317,
+      "win_rate_95_interval": [
+        0.286,
+        0.345
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 16323,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 1002.5826015245398,
+          "median": 1000.0,
+          "maximum": 13421,
+          "over_1000": 16323
+        },
+        "tinyshogi": {
+          "mean": 1000,
+          "median": 1000,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 4.3533300049602985,
+          "maximum": 170.83036198164336
+        },
+        "tinyshogi": {
+          "median": 44.92979700444266,
+          "maximum": 477.9491540102754
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "selected-validation": {
+      "games": 1000,
+      "wins": 382,
+      "draws": 1,
+      "losses": 617,
+      "win_rate": 0.382,
+      "score": 0.3825,
+      "win_rate_95_interval": [
+        0.352,
+        0.412
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 17876,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 999.7432152930116,
+          "median": 1000,
+          "maximum": 16539,
+          "over_1000": 17876
+        },
+        "tinyshogi": {
+          "mean": 1000,
+          "median": 1000.0,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 3.3818640222307295,
+          "maximum": 58.60008898889646
+        },
+        "tinyshogi": {
+          "median": 42.08514800120611,
+          "maximum": 125.3147310053464
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    },
+    "selected-direct": {
+      "games": 1000,
+      "wins": 538,
+      "draws": 2,
+      "losses": 460,
+      "win_rate": 0.538,
+      "score": 0.539,
+      "win_rate_95_interval": [
+        0.506,
+        0.57
+      ],
+      "interval_method": "opening-pair bootstrap, 10000 samples, seed 7",
+      "node_violations": 0,
+      "budget_semantics": "equal requested node budgets",
+      "nodes": {
+        "YaneuraOu": {
+          "mean": 1000,
+          "median": 1000.0,
+          "maximum": 1000,
+          "over_1000": 0
+        },
+        "tinyshogi": {
+          "mean": 1000,
+          "median": 1000,
+          "maximum": 1000,
+          "over_1000": 0
+        }
+      },
+      "elapsed_ms": {
+        "YaneuraOu": {
+          "median": 41.84832600003574,
+          "maximum": 170.9287090052385
+        },
+        "tinyshogi": {
+          "median": 41.955371998483315,
+          "maximum": 286.7485609895084
+        }
+      },
+      "target_accepted": false,
+      "diagnostic_only": true
+    }
+  },
+  "screening": {
+    "screen": [
+      {
+        "name": "c0-b0-r0",
+        "config": {
+          "name": "c0-b0-r0",
+          "completed_results": false,
+          "bucket_hash": false,
+          "recaptures": false
+        },
+        "record": "runs/strength/v2/screen/c0-b0-r0.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 34,
+        "draws": 0,
+        "losses": 66,
+        "win_rate": 0.34,
+        "score": 0.34,
+        "node_violations": 1747,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.25,
+          0.44
+        ]
+      },
+      {
+        "name": "c0-b0-r1",
+        "config": {
+          "name": "c0-b0-r1",
+          "completed_results": false,
+          "bucket_hash": false,
+          "recaptures": true
+        },
+        "record": "runs/strength/v2/screen/c0-b0-r1.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 25,
+        "draws": 0,
+        "losses": 75,
+        "win_rate": 0.25,
+        "score": 0.25,
+        "node_violations": 1837,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.17,
+          0.34
+        ]
+      },
+      {
+        "name": "c0-b1-r0",
+        "config": {
+          "name": "c0-b1-r0",
+          "completed_results": false,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v2/screen/c0-b1-r0.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 34,
+        "draws": 0,
+        "losses": 66,
+        "win_rate": 0.34,
+        "score": 0.34,
+        "node_violations": 1747,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.25,
+          0.44
+        ]
+      },
+      {
+        "name": "c0-b1-r1",
+        "config": {
+          "name": "c0-b1-r1",
+          "completed_results": false,
+          "bucket_hash": true,
+          "recaptures": true
+        },
+        "record": "runs/strength/v2/screen/c0-b1-r1.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 25,
+        "draws": 0,
+        "losses": 75,
+        "win_rate": 0.25,
+        "score": 0.25,
+        "node_violations": 1837,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.17,
+          0.34
+        ]
+      },
+      {
+        "name": "c1-b0-r0",
+        "config": {
+          "name": "c1-b0-r0",
+          "completed_results": true,
+          "bucket_hash": false,
+          "recaptures": false
+        },
+        "record": "runs/strength/v2/screen/c1-b0-r0.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 34,
+        "draws": 1,
+        "losses": 65,
+        "win_rate": 0.34,
+        "score": 0.345,
+        "node_violations": 1802,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.25,
+          0.44
+        ]
+      },
+      {
+        "name": "c1-b0-r1",
+        "config": {
+          "name": "c1-b0-r1",
+          "completed_results": true,
+          "bucket_hash": false,
+          "recaptures": true
+        },
+        "record": "runs/strength/v2/screen/c1-b0-r1.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 25,
+        "draws": 0,
+        "losses": 75,
+        "win_rate": 0.25,
+        "score": 0.25,
+        "node_violations": 1852,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.16,
+          0.34
+        ]
+      },
+      {
+        "name": "c1-b1-r0",
+        "config": {
+          "name": "c1-b1-r0",
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": false
+        },
+        "record": "runs/strength/v2/screen/c1-b1-r0.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 34,
+        "draws": 1,
+        "losses": 65,
+        "win_rate": 0.34,
+        "score": 0.345,
+        "node_violations": 1802,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.25,
+          0.44
+        ]
+      },
+      {
+        "name": "c1-b1-r1",
+        "config": {
+          "name": "c1-b1-r1",
+          "completed_results": true,
+          "bucket_hash": true,
+          "recaptures": true
+        },
+        "record": "runs/strength/v2/screen/c1-b1-r1.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 25,
+        "draws": 0,
+        "losses": 75,
+        "win_rate": 0.25,
+        "score": 0.25,
+        "node_violations": 1852,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.16,
+          0.34
+        ]
+      }
+    ],
+    "depth-screen": [
+      {
+        "name": "q1-recaptures",
+        "config": {
+          "name": "q1-recaptures",
+          "quiescence_depth": 1,
+          "recaptures": true,
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/depth-screen/q1-recaptures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 28,
+        "draws": 0,
+        "losses": 72,
+        "win_rate": 0.28,
+        "score": 0.28,
+        "node_violations": 1707,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.19,
+          0.38
+        ]
+      },
+      {
+        "name": "q3",
+        "config": {
+          "name": "q3",
+          "quiescence_depth": 3,
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/depth-screen/q3.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 38,
+        "draws": 0,
+        "losses": 62,
+        "win_rate": 0.38,
+        "score": 0.38,
+        "node_violations": 1760,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.29,
+          0.47
+        ]
+      },
+      {
+        "name": "q2-selective-shallow",
+        "config": {
+          "name": "q2-selective-shallow",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/depth-screen/q2-selective-shallow.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 29,
+        "draws": 0,
+        "losses": 71,
+        "win_rate": 0.29,
+        "score": 0.29,
+        "node_violations": 1683,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.21,
+          0.37
+        ]
+      },
+      {
+        "name": "q1-selective-shallow-recaptures",
+        "config": {
+          "name": "q1-selective-shallow-recaptures",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 1,
+          "recaptures": true,
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/depth-screen/q1-selective-shallow-recaptures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 42,
+        "draws": 1,
+        "losses": 57,
+        "win_rate": 0.42,
+        "score": 0.425,
+        "node_violations": 1727,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.32,
+          0.52
+        ]
+      },
+      {
+        "name": "q2-ordered-shallow",
+        "config": {
+          "name": "q2-ordered-shallow",
+          "transposition_history": "shallow",
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/depth-screen/q2-ordered-shallow.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 34,
+        "draws": 0,
+        "losses": 66,
+        "win_rate": 0.34,
+        "score": 0.34,
+        "node_violations": 1808,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.25,
+          0.43
+        ]
+      },
+      {
+        "name": "q3-selective-shallow",
+        "config": {
+          "name": "q3-selective-shallow",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 3,
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/depth-screen/q3-selective-shallow.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 37,
+        "draws": 0,
+        "losses": 63,
+        "win_rate": 0.37,
+        "score": 0.37,
+        "node_violations": 1852,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.28,
+          0.46
+        ]
+      }
+    ],
+    "root-screen": [
+      {
+        "name": "root-4",
+        "config": {
+          "name": "root-4",
+          "root_move_limit": 4,
+          "completed_results": true,
+          "bucket_hash": true,
+          "policy": "selective",
+          "transposition_history": "shallow"
+        },
+        "record": "runs/strength/v2/root-screen/root-4.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 1,
+        "draws": 0,
+        "losses": 99,
+        "win_rate": 0.01,
+        "score": 0.01,
+        "node_violations": 1139,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.0,
+          0.03
+        ]
+      },
+      {
+        "name": "root-8",
+        "config": {
+          "name": "root-8",
+          "root_move_limit": 8,
+          "completed_results": true,
+          "bucket_hash": true,
+          "policy": "selective",
+          "transposition_history": "shallow"
+        },
+        "record": "runs/strength/v2/root-screen/root-8.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 5,
+        "draws": 0,
+        "losses": 95,
+        "win_rate": 0.05,
+        "score": 0.05,
+        "node_violations": 1319,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.01,
+          0.09
+        ]
+      },
+      {
+        "name": "root-16",
+        "config": {
+          "name": "root-16",
+          "root_move_limit": 16,
+          "completed_results": true,
+          "bucket_hash": true,
+          "policy": "selective",
+          "transposition_history": "shallow"
+        },
+        "record": "runs/strength/v2/root-screen/root-16.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 11,
+        "draws": 0,
+        "losses": 89,
+        "win_rate": 0.11,
+        "score": 0.11,
+        "node_violations": 1663,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.05,
+          0.18
+        ]
+      },
+      {
+        "name": "root-32",
+        "config": {
+          "name": "root-32",
+          "root_move_limit": 32,
+          "completed_results": true,
+          "bucket_hash": true,
+          "policy": "selective",
+          "transposition_history": "shallow"
+        },
+        "record": "runs/strength/v2/root-screen/root-32.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 14,
+        "draws": 0,
+        "losses": 86,
+        "win_rate": 0.14,
+        "score": 0.14,
+        "node_violations": 1696,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.07,
+          0.22
+        ]
+      }
+    ],
+    "q1-screen": [
+      {
+        "name": "q1-selective-shallow-no-recaptures",
+        "config": {
+          "name": "q1-selective-shallow-no-recaptures",
+          "policy": "selective",
+          "transposition_history": "shallow",
+          "quiescence_depth": 1,
+          "recaptures": false,
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/q1-screen/q1-selective-shallow-no-recaptures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 21,
+        "draws": 0,
+        "losses": 79,
+        "win_rate": 0.21,
+        "score": 0.21,
+        "node_violations": 1678,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.13,
+          0.3
+        ]
+      },
+      {
+        "name": "q1-ordered-shallow-recaptures",
+        "config": {
+          "name": "q1-ordered-shallow-recaptures",
+          "policy": "ordered",
+          "transposition_history": "shallow",
+          "quiescence_depth": 1,
+          "recaptures": true,
+          "completed_results": true,
+          "bucket_hash": true
+        },
+        "record": "runs/strength/v2/q1-screen/q1-ordered-shallow-recaptures.jsonl",
+        "complete": true,
+        "games": 100,
+        "wins": 31,
+        "draws": 0,
+        "losses": 69,
+        "win_rate": 0.31,
+        "score": 0.31,
+        "node_violations": 1804,
+        "node_audit_passed": true,
+        "win_rate_95_interval": [
+          0.21,
+          0.41
+        ]
+      }
+    ]
+  },
+  "verification": {
+    "promoted-eval": {
+      "positions": 1000,
+      "exact_match": true,
+      "model_sha256": "1141d275bceec911156801f27303dc9ff5beb24f4f59144cc069306c59e80782",
+      "fv_scale": 20,
+      "engine_sha256": [
+        "6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "plugin_sha256": "b8cf047553ee45e6d9668c4fd703baaf3577ad04b4744650df517d9a89f0c027",
+      "examples": [
+        {
+          "sfen": "l2g2snl/1r1s1k3/p1npppgp1/2p3p1p/1p5P1/2P2P2P/PPSPP1P2/2G1GS1R1/LN2K2NL w Bb 24",
+          "score": -60
+        },
+        {
+          "sfen": "l2g2snl/1r1s1k3/p1npppgp1/2p3p1p/1p5P1/2P2P1bP/PPSPP1P2/2G1GS1R1/LN2K2NL b B 25",
+          "score": 496
+        },
+        {
+          "sfen": "l2g2snl/1r1s1k3/p1npppgp1/2p3p1p/1p5P1/2PP1P1bP/PPS1P1P2/2G1GS1R1/LN2K2NL w B 26",
+          "score": -349
+        },
+        {
+          "sfen": "l5snl/1r1sgk3/p1npppgp1/2p3p1p/1p5P1/2PP1P1bP/PPS1P1P2/2G1GS1R1/LN2K2NL b B 27",
+          "score": 539
+        }
+      ]
+    },
+    "promoted-rules": {
+      "positions": 5000,
+      "exact_match": true,
+      "oracle": "python-shogi",
+      "oracle_version": "1.1.1",
+      "engine_sha256": "6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8",
+      "openings_sha256": "c92306ee3eb08c38bfba99bb3bc9fc61072abd35940010a1a10eccb104c052b7",
+      "seed": 7
+    },
+    "promoted-search-equivalence": {
+      "positions": 100,
+      "exact_match": true,
+      "engine_sha256": [
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c",
+        "6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8"
+      ],
+      "comparison": "promoted defaults versus validated explicit profile: move, nodes, completed depth, score"
+    },
+    "screen-to-validation-equivalence": {
+      "positions": 100,
+      "exact_match": true,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c"
+      ],
+      "comparison": "move, nodes, completed depth, score; diagnostics-only recapture-counter correction"
+    }
+  },
+  "experiments": [
+    {
+      "record": "runs/strength/v2/baseline-100.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "b676b488039da3463724ca51c0cb66c033d2d397941418d09c7e82410246612a",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "e945ece32eccc4cca1584e4b1039e6c5a9d636100e360d499f48814602a1bb3c",
+      "records_sha256": "264be2108eeaf42794dd8d75a61b94a3ad5e51613092674efbf2505f0cf9e5e9",
+      "summaries_sha256": "2a70e1d4e877473e2cd4c9f41251cc07879cb3945a431af8c35c110ce46f7f87"
+    },
+    {
+      "record": "runs/strength/v2/baseline-development-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "b676b488039da3463724ca51c0cb66c033d2d397941418d09c7e82410246612a",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "4512539b6a1df640b93d26297a75d974873c35ba9173c4ec280546ca92d1af99",
+      "records_sha256": "9a0046706c6c805e63695b1f4b817062be5cba8185dfd5ff7fea439862f85550",
+      "summaries_sha256": "41ddc7fd650d1ef1e887358b9228ea0b1510e405a48be03742f16811f284e155"
+    },
+    {
+      "record": "runs/strength/v2/baseline-validation-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "b676b488039da3463724ca51c0cb66c033d2d397941418d09c7e82410246612a",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "dc1b18cec8ce900f65e03d18e754f65132dd8671c053aff5062fa942e6d14a03",
+      "records_sha256": "79641260ae38553d085319c5757ab440b83d1ff912e821c155b8edb88db8a42c",
+      "summaries_sha256": "edaa7799e0c71bdaffb9d03e818de0acd08961fd81236398b9fee697e4875b99"
+    },
+    {
+      "record": "runs/strength/v2/completed-buckets-development-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "ca77eb6d2ea6e48cead2df3ffa9539cfde00ddaf4ce64c2a2a595f50c6d88fad",
+      "records_sha256": "6a3d2f8c3c33f8b6a0af88208250278274e498c2f108f9e3764c1c96b81ed3ec",
+      "summaries_sha256": "1e52b607eb946e1cb224f10ad282b0a4df4cdd55ab43320f454ca7a766039825"
+    },
+    {
+      "record": "runs/strength/v2/depth-screen/q1-recaptures.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "bd59452fa178c7fb2115b1fc8b45055666220426290007b314f969144225880d",
+      "records_sha256": "957251bb1f3fd737b5fc9127ce12287f9b3ef9e7cb029761ea777793a41309e4",
+      "summaries_sha256": "723a49dc69118760fe7da6c0871ae0d34733cebfaabbe08086650ebd202bd10f"
+    },
+    {
+      "record": "runs/strength/v2/depth-screen/q1-selective-shallow-recaptures.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "4756a746e6e3e10e6e4990b6dce286f301c2f6de292a91311ea23f459572be9e",
+      "records_sha256": "cf53de5871fb0ff16bc281800778cb7e409d6ded4c0ca79d47245069a417517b",
+      "summaries_sha256": "d2fb54403ab5478c6e9a76d57e2ed64b243b5cfa0cbfce862b8a7b62af91d883"
+    },
+    {
+      "record": "runs/strength/v2/depth-screen/q2-ordered-shallow.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "ef2a14d73124a6e2df289a9fe91f5b9cf2906838ca32f6707abff4e716c2383e",
+      "records_sha256": "778324d5afadc71acfdff37bd13ce03cee57e67a0d87ae37b83c3c1c44a3e84b",
+      "summaries_sha256": "6d8ae4e4f18c718868cb34060ce1a8e45997384008e2eadf2e9fe0be936df54a"
+    },
+    {
+      "record": "runs/strength/v2/depth-screen/q2-selective-shallow.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "99364c031ee41cada31166f8567be4547bf84f14b7755d82094fac0008f1b2f6",
+      "records_sha256": "0548366a83e263609a3764f33529be68adbc21354c75c70ce23bd2a3034ffaf3",
+      "summaries_sha256": "16ae2a009e7623140ca9acfd2e6be1d862dec732af0702e37c57a53d0b0dc2b3"
+    },
+    {
+      "record": "runs/strength/v2/depth-screen/q3-selective-shallow.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "f2d972e883e641f11fb4a3f0edc5bc166739cf5bf4b5b996d98f860b82486093",
+      "records_sha256": "057ac51bcee783d7a8c0b05a43ff32dbc265919f729c1da5c6848e3d94c41f75",
+      "summaries_sha256": "5c348568073c72b5cab6fe91d9464cbee53fea621914f6fc901878f14418c0c1"
+    },
+    {
+      "record": "runs/strength/v2/depth-screen/q3.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "0755b5fa084ec83bb04d32812e41e09283a6610d10fb19a0b31f43d584ca348c",
+      "records_sha256": "26d664aaa17b448ed184fbdeb45b77beb25b03b6169330e1f121d3a67a878d07",
+      "summaries_sha256": "b5a36db9ff98a4113f217aa40f498b732d8128db8d921b24ee6591b38a562853"
+    },
+    {
+      "record": "runs/strength/v2/q1-screen/q1-ordered-shallow-recaptures.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "aa2af6d1f3a26abb3939d676dfead49a025cdbd31bbab09e8f4763e32e05c70f",
+      "records_sha256": "ba85dcfbb725a743587580548cc38672bcb5d17550c47fb98f7594c5761d5b18",
+      "summaries_sha256": "94a2868adff76fc7428f14c5d3096ac42a7f3c75da231d61b983b5f1b4803428"
+    },
+    {
+      "record": "runs/strength/v2/q1-screen/q1-selective-shallow-no-recaptures.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "25a0c1d68a768a82f934d756d20eb0abc5c4bdc1c87036727a92387282c56bbe",
+      "records_sha256": "292e1848535428822ac7b80000ed8f5ef01dbbbb878289396501c88de5ca8d1e",
+      "summaries_sha256": "835bf02f054345b0307c0e3fd9274c464a76232c526b21ad4985162b9c94bed6"
+    },
+    {
+      "record": "runs/strength/v2/q1-selective-recaptures-development-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "e13f3b5606858c6f9a98367de98cefb7d1ab056ea951388708728d44e740583e",
+      "records_sha256": "d7d23761c3b60bc7dccb078e69ef14421d02eba1746cb2461e313884b5ce8a54",
+      "summaries_sha256": "41b3c3c656534667c4246f7ef2e2be23e0a33d632ee1d9774d05096cfc49f3c6"
+    },
+    {
+      "record": "runs/strength/v2/q3-development-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "35b267ef3f8a5a64c4d3602887f5ad05012f8c547132444588841cb0f5f076c7",
+      "records_sha256": "68f5cff5147082bef165d10622d40f3e1d97d34c576dd6996d9bb620f721d79e",
+      "summaries_sha256": "12a2937721cf3e4fc149ff4c4633748b07c1700536d1eb0d44450473204c9795"
+    },
+    {
+      "record": "runs/strength/v2/root-screen/root-16.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "f422fb45ed9d5907c123b7a5ca1208c964d9f12eb9d9483686bca5061b50dace",
+      "records_sha256": "f0a9fa005a02c6b85f868a095d592ab93fa09ff1d114320c2a79f1eb96575002",
+      "summaries_sha256": "58975de75ea54b78dcd5f145104d5bc110170c6fe642569ef9d89823b4af9c73"
+    },
+    {
+      "record": "runs/strength/v2/root-screen/root-32.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "40b6aa4dc978cbdf2e83b80bb064cb1bd14e90d8be40b23307ec7b4d6b3d2888",
+      "records_sha256": "280a13766f946390c96b6542b03c14afab48a39bcbe5ef2d7302ff8da67c3c15",
+      "summaries_sha256": "f3cf353b11ccc32f8209904be237e4dffde7c1bf9d1dfdbaf04d8d18a3e025d1"
+    },
+    {
+      "record": "runs/strength/v2/root-screen/root-4.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "bf253d7c83f4ffd58ea36d70fb98772064b8d41d93888d6473c5301114a8ae00",
+      "records_sha256": "84f471f8cb0478df1bdd2d670a5cfc6d1e01c3938988c33a590c67d27d6bac22",
+      "summaries_sha256": "ddb32191c09336c28378fcc6f64407cd5cc3a9b2849c3dc289ef8bef12b5c68b"
+    },
+    {
+      "record": "runs/strength/v2/root-screen/root-8.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "eaa0209b7a3969e5452e8a69aefbb6433c64777603a8385d18fe03b15aa5188e",
+      "records_sha256": "4a00e64574eb89d6f5cbc3135bf4458bafccbdb45df1dce3ee685d8bb1c69564",
+      "summaries_sha256": "be2e576ca9726424802a7c0ca7c53666ac8e0af25fe6fad096f833b7b5107b53"
+    },
+    {
+      "record": "runs/strength/v2/screen/c0-b0-r0.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "faf6b64fbef1bf1e12c279d2ce23dbd1c7138f5efff86c0306795eeed473fe87",
+      "records_sha256": "58e51877116637cc8711b86d407ec5eb9c08dbd1e90f4b5a479932df2166f77d",
+      "summaries_sha256": "a6ef7be5c914a5af38af3e4ecf52d72979c7510fb8a304018a30dcbb445d4a78"
+    },
+    {
+      "record": "runs/strength/v2/screen/c0-b0-r1.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "8ce02f2cff978f72ec62afbe49ac7227c173921cfb41c6836ecde1505f933c69",
+      "records_sha256": "0fedfc6083dbc981dd4af92a9772f645a267d18ea44047d84bc31e71842942dd",
+      "summaries_sha256": "a9c6260ca6a60641725d25ce40834e6525f1ef892f17248c61eb07e8d20f124e"
+    },
+    {
+      "record": "runs/strength/v2/screen/c0-b1-r0.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "5f1c77bb8b1a53ca7ecd9dc29776e7b2af54a0dcb53daf29a306e32a7c363a28",
+      "records_sha256": "e3a8f6d40120cb49f4c696aaded4072fe42f938876666e1debb6674e77bd5a7e",
+      "summaries_sha256": "a6ef7be5c914a5af38af3e4ecf52d72979c7510fb8a304018a30dcbb445d4a78"
+    },
+    {
+      "record": "runs/strength/v2/screen/c0-b1-r1.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "dcd99c9f2b912c8c3d325de47ccc7a89448729bb7ec1c2ea62024040b48236c9",
+      "records_sha256": "013d81921f20a10ed5335642eca0c9525441378aa5c9cb1a005365d097a143fc",
+      "summaries_sha256": "a9c6260ca6a60641725d25ce40834e6525f1ef892f17248c61eb07e8d20f124e"
+    },
+    {
+      "record": "runs/strength/v2/screen/c1-b0-r0.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "787404f097527642523c9ee0ae3f787ceaf8671791fd68aec3d2a7c4b21aee0e",
+      "records_sha256": "b82731d5cc639a8c860dbf882f4f9983e7f3ec0288d648b658fab8647ca5d5e7",
+      "summaries_sha256": "c71f6c9139234621e22eb2301be2891892f0d737597ae49e9549141eab22fa3b"
+    },
+    {
+      "record": "runs/strength/v2/screen/c1-b0-r1.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "876e8b5c0eb5bc6c29f2c47c79c882fda5bbf123041b34921609af7e39af5302",
+      "records_sha256": "f4cff2d0dae222ef9c72d58e21a8e823acba31c4a98d79f1152e67bc5d04b591",
+      "summaries_sha256": "718d7ed32e8768c13fb7f313c37209bff980ae13a3a1c043f0b5d48ab620256e"
+    },
+    {
+      "record": "runs/strength/v2/screen/c1-b1-r0.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "a04f49be149db785e033cebac9e3976192ed449ad2c73e1b1bdd17480ae4b169",
+      "records_sha256": "d368e7c69da93c53f4b2ac57bec337338cc6c5389f0104d530bdba17eb528e39",
+      "summaries_sha256": "c71f6c9139234621e22eb2301be2891892f0d737597ae49e9549141eab22fa3b"
+    },
+    {
+      "record": "runs/strength/v2/screen/c1-b1-r1.jsonl",
+      "games": 100,
+      "engine_sha256": [
+        "c6a67d8264a8fba11a2a3abdc0f533ae697259a436e36736f92a68fb111aaac0",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "9d7db545bde78d548f732b002f721f84d2f721556d481eafa8cc3d6451de1a4e",
+      "records_sha256": "ec81416328f3b7e401747c7c9760afb14b35afc8f303df5347a2f5424fae9eee",
+      "summaries_sha256": "718d7ed32e8768c13fb7f313c37209bff980ae13a3a1c043f0b5d48ab620256e"
+    },
+    {
+      "record": "runs/strength/v2/selected-direct-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c",
+        "b676b488039da3463724ca51c0cb66c033d2d397941418d09c7e82410246612a"
+      ],
+      "manifest_sha256": "449ca9f8f9e9be52efa1cca48b5e6b91b5a9e33a3f085883d96832505f1104c6",
+      "records_sha256": "3c0ac43d262c63ed0ba2c9485adce2eed68e79f30928d82bd2ee247aa8b2895a",
+      "summaries_sha256": "0ca13f64c04bed6fbbab4c4f1f8bbd0f62d8fe3dcc904e7a0e4c6421276f0d9e"
+    },
+    {
+      "record": "runs/strength/v2/selected-validation-1000.jsonl",
+      "games": 1000,
+      "engine_sha256": [
+        "3b8b46426a85e9224d5717b2d9234754b24ce5371c485da673df0432cc27459c",
+        "5443b3edf4bcf5bf5dc46cf9a2a83cd25a644d10992b6d39366a46849214c9dc"
+      ],
+      "manifest_sha256": "a435d0c2e2b6e6cca42489214432054e143c95ecd45529d8bc89b608ce4f6eb2",
+      "records_sha256": "07d1beb1e8069705eb85b5c1526a465eb07c4db1676aa7b6b33a416171712109",
+      "summaries_sha256": "8c144b3aaa2c4230572420d644992594b5b1c64a178a6f2782de52e96cdc2885"
+    }
+  ]
+}

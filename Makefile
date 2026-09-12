@@ -10,6 +10,7 @@ ENGINE := $(BUILD)/tinyshogi
 TESTS := \
 	$(BUILD)/tinyshogi-rules-test \
 	$(BUILD)/tinyshogi-search-test \
+	$(BUILD)/tinyshogi-search-hash-test \
 	$(BUILD)/tinyshogi-nnue-test \
 	$(BUILD)/tinyshogi-brute-test \
 	$(BUILD)/tinyshogi-integer-test \
@@ -30,6 +31,7 @@ test: $(ENGINE) $(TESTS)
 	$(ENGINE) --selftest
 	$(BUILD)/tinyshogi-rules-test
 	$(BUILD)/tinyshogi-search-test
+	$(BUILD)/tinyshogi-search-hash-test
 	$(BUILD)/tinyshogi-nnue-test
 	$(BUILD)/tinyshogi-brute-test
 	$(BUILD)/tinyshogi-integer-test
@@ -77,6 +79,10 @@ $(BUILD)/tinyshogi-search-test: $(BUILD)/tests/test_search.o $(BUILD)/src/search
 
 $(BUILD)/tinyshogi-nnue-test: $(BUILD)/tests/test_nnue.o $(BUILD)/src/nnue.o \
 	$(BUILD)/src/simd.o $(BUILD)/src/shogi.o | $(BUILD)
+	$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
+
+$(BUILD)/tinyshogi-search-hash-test: $(BUILD)/tests/test_search_hash.o $(BUILD)/src/shogi.o \
+	$(BUILD)/src/eval.o $(BUILD)/src/thread_posix.o | $(BUILD)
 	$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/tinyshogi-brute-test: $(BUILD)/tests/test_brute.o $(BUILD)/src/brute.o \

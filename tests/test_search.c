@@ -62,8 +62,127 @@ static int check_exchange(const char *sfen, const char *text, int expected) {
     return 0;
 }
 
+static int check_completed_and_recapture_search(void) {
+    SearchOptions options = search_default_options();
+    options.ab_root_prepass = false;
+    options.ab_completed_results = true;
+    options.quiescence_depth = 0;
+    SearchLimits limits = {.nodes = 1, .depth = 1, .has_searchmoves = true, .searchmove_count = 1};
+    ShogiPosition position;
+    if (!shogi_position_from_sfen(&position, "4k4/9/9/9/9/9/9/9/4K4 b - 1") ||
+        !shogi_parse_usi_move("5i5h", &limits.searchmoves[0])) return fail("completed fixture");
+    SearchJob *job = search_start(&position, &limits, &options);
+    if (!job) return fail("completed search creation");
+    SearchResult result;
+    SearchProgress progress;
+    SearchDiagnostics diagnostics;
+    search_join(job, &result);
+    search_get_progress(job, &progress);
+    search_get_diagnostics(job, &diagnostics);
+    search_destroy(job);
+    if (result.simulations != 1 || progress.depth != 1 || diagnostics.completed_iterations != 1)
+        return fail("last permitted node completes depth one");
+
+    if (!shogi_position_from_sfen(&position, "4k4/9/4g4/5p3/5R3/9/9/9/4K4 b - 1") ||
+        !shogi_parse_usi_move("4e4d", &limits.searchmoves[0])) return fail("recapture fixture");
+    limits.nodes = 1000;
+    int scores[2];
+    for (unsigned enabled = 0; enabled < 2; ++enabled) {
+        options.ab_recaptures = enabled != 0;
+        job = search_start(&position, &limits, &options);
+        if (!job) return fail("recapture search creation");
+        search_join(job, &result);
+        search_get_progress(job, &progress);
+        search_get_diagnostics(job, &diagnostics);
+        search_destroy(job);
+        scores[enabled] = progress.score_cp;
+        if (progress.depth != 1 || result.simulations > limits.nodes ||
+            ((diagnostics.recapture_nodes != 0) != (enabled != 0))) return fail("recapture accounting");
+    }
+    if (scores[1] >= scores[0]) return fail("q0 recapture detects hanging rook");
+    return 0;
+}
+
+static int root_reduction_eval(void *data, const ShogiPosition *position, ShogiColor side) {
+    ShogiMove *late = data;
+    bool target = position->board[late->to] != SHOGI_EMPTY;
+    int score = position->move_number <= 2 ? (target ? 0 : 100) : (target ? -300 : -100);
+    return side == SHOGI_BLACK ? score : -score;
+}
+
+static int check_root_reductions(void) {
+    ShogiPosition position;
+    shogi_position_start(&position);
+    SearchOptions options = search_default_options();
+    options.ab_root_prepass = false;
+    options.quiescence_depth = 0;
+    SearchLimits limits = {.nodes = 10000, .depth = 2, .has_searchmoves = true, .searchmove_count = 5};
+    const char *moves[] = {"7g7f", "2g2f", "3g3f", "4g4f", "5g5f"};
+    for (unsigned i = 0; i < 5; ++i) shogi_parse_usi_move(moves[i], &limits.searchmoves[i]);
+    ShogiEvaluator probe;
+    shogi_evaluator_init(&probe);
+    shogi_evaluator_set(&probe, &limits.searchmoves[4], root_reduction_eval, NULL, "root reduction probe");
+    options.evaluator = &probe;
+    for (unsigned enabled = 0; enabled < 2; ++enabled) {
+        options.ab_root_reductions = enabled != 0;
+        SearchJob *job = search_start(&position, &limits, &options);
+        SearchResult result;
+        SearchProgress progress;
+        SearchDiagnostics diagnostics;
+        if (!job) return fail("root reduction creation");
+        search_join(job, &result);
+        search_get_progress(job, &progress);
+        search_get_diagnostics(job, &diagnostics);
+        search_destroy(job);
+        if (progress.depth != 2 || progress.score_cp != -100 ||
+            result.move.to == limits.searchmoves[4].to || result.simulations > limits.nodes)
+            return fail("reduced root fail-high must survive full-depth verification");
+        if (diagnostics.root_reductions != enabled || diagnostics.root_researches != enabled)
+            return fail("root reduction and verification accounting");
+    }
+    shogi_evaluator_destroy(&probe);
+    return 0;
+}
+
+static int check_quiescence_pruning(void) {
+    ShogiPosition position;
+    if (!shogi_position_from_sfen(&position, "4k4/9/4p4/9/2p1R1p2/9/4p4/9/4K4 w - 1"))
+        return fail("quiescence pruning fixture");
+    SearchOptions options = search_default_options();
+    options.ab_root_prepass = false;
+    options.quiescence_depth = 1;
+    ShogiEvaluator probe;
+    shogi_evaluator_init(&probe);
+    shogi_evaluator_set(&probe, NULL, constant_eval, NULL, "quiescence pruning probe");
+    options.evaluator = &probe;
+    SearchLimits limits = {.nodes = 10000, .depth = 1, .has_searchmoves = true, .searchmove_count = 1};
+    shogi_parse_usi_move("5a6a", &limits.searchmoves[0]);
+    SearchProgress progress[2];
+    SearchResult results[2];
+    for (unsigned enabled = 0; enabled < 2; ++enabled) {
+        options.ab_quiescence_pruning = enabled != 0;
+        SearchJob *job = search_start(&position, &limits, &options);
+        SearchDiagnostics diagnostics;
+        if (!job) return fail("quiescence pruning creation");
+        search_join(job, &results[enabled]);
+        search_get_progress(job, &progress[enabled]);
+        search_get_diagnostics(job, &diagnostics);
+        search_destroy(job);
+        if ((diagnostics.quiescence_pruned != 0) != (enabled != 0))
+            return fail("quiescence pruning accounting");
+    }
+    shogi_evaluator_destroy(&probe);
+    if (progress[0].score_cp != progress[1].score_cp || progress[1].depth != 1 ||
+        results[1].simulations >= results[0].simulations)
+        return fail("quiescence pruning reduces unrelated capture branching");
+    return 0;
+}
+
 int main(void) {
     shogi_init();
+    if (check_completed_and_recapture_search()) return 1;
+    if (check_root_reductions()) return 1;
+    if (check_quiescence_pruning()) return 1;
     ShogiPosition position;
     shogi_position_start(&position);
     SearchOptions options = test_options();
@@ -206,10 +325,10 @@ int main(void) {
     SearchOptions bounded = options;
     bounded.mode = SEARCH_MODE_ALPHABETA;
     bounded.hash_mb = 1;
-    static const uint64_t budgets[] = {1, 7, 30, 31, 200, 1000};
+    static const uint64_t budgets[] = {1, 7, 30, 31, 200, 1000, 2000};
     for (unsigned policy = 0; policy < 3; ++policy) {
         bounded.ab_policy = policy;
-        for (size_t index = 0; index < 8 * sizeof(budgets) / sizeof(budgets[0]); ++index) {
+        for (size_t index = 0; index < 64 * sizeof(budgets) / sizeof(budgets[0]); ++index) {
             search_context_clear(context);
             memset(&limits, 0, sizeof(limits));
             limits.nodes = budgets[index % (sizeof(budgets) / sizeof(budgets[0]))];
@@ -217,6 +336,12 @@ int main(void) {
             bounded.ab_partial_root = (variant & 1) != 0;
             bounded.ab_quiescence_hash = (variant & 2) != 0;
             bounded.ab_shallow_transpositions = (variant & 4) != 0;
+            bounded.ab_recaptures = (variant & 8) != 0;
+            bounded.ab_bucket_hash = (variant & 16) != 0;
+            bounded.ab_completed_results = (variant & 32) != 0;
+            bounded.ab_root_reductions = (variant & 1) != 0;
+            bounded.ab_quiescence_history = (variant & 2) != 0;
+            bounded.ab_quiescence_pruning = (variant & 4) != 0;
             limits.depth = INT_MAX;
             job = search_start(&position, &limits, &bounded);
             if (job == NULL) return fail("bounded alpha-beta creation");

@@ -15,6 +15,7 @@ import sys
 import time
 
 from usi_engine import Engine
+from strength_protocol import validate_match, fatal_violations, PHASES
 
 PAIRED_OPENINGS = (
     (), ("7g7f", "3c3d"), ("2g2f", "8c8d"),
@@ -64,7 +65,7 @@ def parse_args(argv=None):
     parser.add_argument("--tinyshogi-rollout-depth", type=int, default=256)
     parser.add_argument("--tinyshogi-aspiration-window", type=int, default=2000)
     parser.add_argument("--tinyshogi-quiescence-margin", type=int, default=0)
-    parser.add_argument("--tinyshogi-quiescence-depth", type=int, default=2)
+    parser.add_argument("--tinyshogi-quiescence-depth", type=int, default=4)
     parser.add_argument("--tinyshogi-leaf-batch", type=int, default=5)
     parser.add_argument("--opponent-leaf-batch", type=int, default=5)
     parser.add_argument("--tinyshogi-option", action="append", default=[], metavar="NAME=VALUE")
@@ -92,6 +93,9 @@ def parse_args(argv=None):
                         help="Deprecated: processes are restarted for every game to isolate state")
     parser.add_argument("--strict", action="store_true",
                         help="Require the agreed shared-NNUE, equal-1000-node protocol")
+    parser.add_argument("--protocol", type=Path, help="Frozen node-request campaign configuration")
+    parser.add_argument("--phase", choices=PHASES, default="development")
+    parser.add_argument("--candidate-lock", type=Path, help="Required before playing acceptance games")
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args(argv)
 
@@ -129,6 +133,8 @@ def validate_args(args):
     if (args.paired_openings or args.openings) and args.games % 2:
         raise ValueError("paired matches need an even number of games")
     if args.strict:
+        if args.tinyshogi_node_tolerance > 0.05 or args.opponent_node_tolerance > 0.05:
+            raise ValueError("legacy strict tolerance cannot exceed 5%")
         if (args.movetime_ms is not None or
                 (args.tinyshogi_nodes or args.nodes) != 1000 or
                 (args.opponent_nodes or args.nodes) != 1000 or
@@ -226,9 +232,11 @@ def play_game(args, game, opening, model_sha, options):
         if args.jobs > 1 and hasattr(os, "sched_getaffinity"):
             cpus = sorted(os.sched_getaffinity(0))
             slot = game % args.jobs
-            width = args.tinyshogi_threads + args.opponent_threads
+            # Engines search on alternating turns, with pondering disabled.
+            # Share the slot's CPUs rather than reserving idle opponent cores.
+            width = max(args.tinyshogi_threads, args.opponent_threads)
             for index, threads in enumerate((args.tinyshogi_threads, args.opponent_threads)):
-                start = slot * width + (args.tinyshogi_threads if index else 0)
+                start = slot * width
                 affinities[index] = {cpus[(start + offset) % len(cpus)] for offset in range(threads)}
         tiny = Engine("tinyshogi", args.tinyshogi.resolve(), options[0], args.timeout,
                       environment, affinities[0])
@@ -268,7 +276,8 @@ def play_game(args, game, opening, model_sha, options):
                 violation = {"ply": ply, "engine": current.name,
                              "node_limit": budgets[current], "reported_nodes": nodes}
                 violations.append(violation)
-                if args.strict:
+                if args.strict or (args.protocol and fatal_violations(
+                        [violation], args.opponent_eval_plugin is None)):
                     raise RuntimeError(f"node budget audit failed: {violation}")
             records.append({
                 "version": 1, "type": "position", "game": game, "ply": ply,
@@ -312,6 +321,7 @@ def main(argv=None):
     validate_args(args)
     openings = load_openings(args)
     options = engine_options(args)
+    protocol = validate_match(args, options) if args.protocol else None
     args.output.parent.mkdir(parents=True, exist_ok=True)
     summary_path = Path(str(args.output) + ".games.jsonl")
     manifest_path = Path(str(args.output) + ".manifest.json")
@@ -325,16 +335,23 @@ def main(argv=None):
     diff = subprocess.run(["git", "diff", "--binary"], cwd=root,
                           capture_output=True, check=True).stdout
     manifest = {
-        "version": 3, "complete": False, "strict": args.strict,
+        "version": 4 if protocol else 3, "complete": False, "strict": args.strict,
+        "protocol": protocol, "protocol_sha256": sha256(args.protocol) if protocol else None,
+        "candidate_lock_sha256": sha256(args.candidate_lock) if args.candidate_lock else None,
+        "budget_semantics": (("equal requested node budgets" if protocol["version"] == 2 else
+                              "2000 tinyshogi / 1000 YaneuraOu requested nodes; direct tinyshogi matches 2000 each")
+                             if protocol else "legacy"),
+        "selected_openings": openings,
         "created_unix": time.time(), "revision": revision,
         "tracked_diff_sha256": hashlib.sha256(diff).hexdigest(),
         "runner_sha256": {name: sha256(root / "scripts" / name)
-                          for name in ("selfplay_match.py", "usi_engine.py", "match_gate.py")},
+                          for name in ("selfplay_match.py", "usi_engine.py", "match_gate.py", "strength_protocol.py")},
         "arguments": {key: str(value) if isinstance(value, Path) else value
                       for key, value in vars(args).items()},
         "engine_sha256": [sha256(args.tinyshogi), sha256(args.yaneuraou)],
         "referee_sha256": sha256(args.referee),
         "plugin_sha256": sha256(args.tinyshogi_eval_plugin) if args.tinyshogi_eval_plugin else None,
+        "opponent_plugin_sha256": sha256(args.opponent_eval_plugin) if args.opponent_eval_plugin else None,
         "model_sha256": model_sha,
         "opponent_model_sha256": (sha256(args.yaneuraou_eval_dir / "nn.bin")
                                  if args.tinyshogi_nn_bin and args.yaneuraou_eval_dir else model_sha),
@@ -365,6 +382,17 @@ def main(argv=None):
                         print(f"game {summary['game'] + 1}/{args.games}: "
                               f"{summary['result']} ({summary['plies']} plies, {summary['reason']})",
                               flush=True)
+        if ([sha256(args.tinyshogi), sha256(args.yaneuraou)] != manifest["engine_sha256"] or
+                sha256(args.referee) != manifest["referee_sha256"] or
+                (args.tinyshogi_eval_plugin and sha256(args.tinyshogi_eval_plugin) != manifest["plugin_sha256"]) or
+                (args.opponent_eval_plugin and sha256(args.opponent_eval_plugin) != manifest["opponent_plugin_sha256"]) or
+                (args.tinyshogi_nn_bin and sha256(args.tinyshogi_nn_bin) != manifest["model_sha256"]) or
+                (args.tinyshogi_nn_bin and args.yaneuraou_eval_dir and
+                 sha256(args.yaneuraou_eval_dir / "nn.bin") != manifest["opponent_model_sha256"]) or
+                (args.protocol and sha256(args.protocol) != manifest["protocol_sha256"]) or
+                (args.candidate_lock and sha256(args.candidate_lock) != manifest["candidate_lock_sha256"]) or
+                (args.openings and sha256(args.openings) != manifest["openings_sha256"])):
+            raise RuntimeError("experiment artifacts changed during the match")
         manifest["complete"] = True
     except BaseException as error:
         manifest["error"] = str(error)

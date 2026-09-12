@@ -47,9 +47,16 @@ fi
 if [ ! -e "$SOURCE_DIR" ]; then
     mkdir -p "$(dirname -- "$SOURCE_DIR")"
     echo "Cloning YaneuraOu ($REF) into $SOURCE_DIR"
-    git clone --depth 1 --branch "$REF" "$REPO_URL" "$SOURCE_DIR"
+    git init "$SOURCE_DIR"
+    git -C "$SOURCE_DIR" remote add origin "$REPO_URL"
+    git -C "$SOURCE_DIR" fetch --depth 1 origin "$REF"
+    git -C "$SOURCE_DIR" checkout --detach FETCH_HEAD
 else
     echo "Using existing YaneuraOu checkout: $SOURCE_DIR"
+    # Never silently build a different revision from the requested pin.
+    EXPECTED=$(git -C "$SOURCE_DIR" rev-parse --verify "$REF^{commit}" 2>/dev/null || true)
+    ACTUAL=$(git -C "$SOURCE_DIR" rev-parse HEAD)
+    [ -n "$EXPECTED" ] && [ "$ACTUAL" = "$EXPECTED" ] || die "checkout does not match requested ref $REF"
 fi
 
 [ -f "$SOURCE_DIR/source/Makefile" ] || die "YaneuraOu source/Makefile not found"

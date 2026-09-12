@@ -1,6 +1,241 @@
 # Shared-NNUE strength experiment
 
-## Status
+## Two-to-one node-request campaign (2026-09-12)
+
+The new campaign permits **2,000 requested nodes for tinyshogi against 1,000
+for unchanged YaneuraOu**, using the same Háo `nn.bin`, `FV_SCALE=20`, one
+thread and 64 MiB hash. Tinyshogi keeps a hard 2,000-node cap. Every opponent
+overrun is recorded. Direct tinyshogi comparisons give both versions 2,000
+nodes, separating parameter/search gains from the larger budget.
+
+**Independent validation: 683 wins, 1 draw and 316 losses (68.3%; 95% interval
+65.3–71.2%)**. The previous q3 version scored 571–4–425 (57.1%) at the same
+revised requests. The paired gain is **11.2 percentage points**, interval
+**7.2–15.0**. In 1,000 direct games at 2,000 nodes each, the candidate scored
+582–4–414: **58.4% score**, interval **55.45–61.3%**. Both promotion checks
+pass. **The 85% target remains unmet**; acceptance openings were not played,
+and no acceptance lock was created.
+
+The promoted native/browser defaults are q4, `AlphaBetaPolicy=selective`,
+`TranspositionHistory=shallow`, `QuiescenceHistory=true`, and
+`QuiescencePruning=true`, retaining completed results and bucket hashing.
+Recaptures and root reductions remain off. These defaults were selected for
+the 2,000-node shared-NNUE experiment; training self-play still uses MCTS/q2.
+
+The promoted executable is SHA-256
+`798b8bf9b4d0f8edf5c32aa6d0197f3cfba928702cddfceb12e3bf24b704934b`.
+Its default move, score, nodes and completed depth match the measured explicit
+profile on 100 development positions. Make, CMake, Meson, ASan/UBSan and
+browser checks pass, including 30 Python tests, 1,000 exact NNUE comparisons,
+5,000 independent legal-move comparisons, and real WASM execution with the
+shared NNUE loaded. WASM and native results also agree at budgets 1, 7, 64,
+1,000 and 2,000. Meson's expanded search matrix has a 120-second test timeout.
+The campaign completed 8,600 development/validation games across separate
+experiments, with 421 additional partial games excluded. These are not a
+pooled acceptance sample.
+
+All tinyshogi decisions stayed within 2,000 nodes. The selected YaneuraOu
+validation recorded 17,672 opponent decisions above its request, with median
+1,000, mean 999.46 and maximum 50,819 nodes. The direct match had no overruns
+for either engine. Its second engine retains the runner's legacy `YaneuraOu`
+label, but the manifest pins the previous tinyshogi executable.
+
+`runs/strength/v3/openings/protocol.json` registers three fresh 500-pair splits
+with seed 20260913. It excludes both historical splits and all v2 positions.
+The frozen baseline is the v2 promoted q3 engine, SHA-256
+`6873c8f55e73a8ec50c040071a7f3bcdef9cce0427725864372d918583cb4dc8`.
+The v2 protocol and its earlier equal-request results remain unchanged.
+
+The full baseline development match at the new budget scored **557 wins,
+2 draws and 441 losses (55.7%; pair-bootstrap 95% interval 52.6–58.9%)**.
+Tinyshogi's maximum was 2,000 nodes with zero overruns. YaneuraOu exceeded its
+request on 17,502 decisions, with maximum 58,713 and median 1,000 nodes.
+This is development evidence; the 85% target is not established by it.
+
+Full development comparisons, using identical 500 opening pairs:
+
+| Profile | Wins | Draws | Losses | Win rate | Pair-bootstrap 95% interval |
+|---|---:|---:|---:|---:|---:|
+| Frozen q3 baseline | 557 | 2 | 441 | 55.7% | 52.6–58.9% |
+| q4, selective search, shallow transpositions | 618 | 4 | 378 | 61.8% | 59.0–64.7% |
+| q4 + selective/shallow + tactical ordering and capture pruning | 670 | 1 | 329 | 67.0% | 63.9–70.1% |
+
+The selected profile gains 11.3 percentage points over the baseline, with a
+paired interval of 7.3–15.4 points. Selection followed 26 exploratory 100-game
+development screens. Those screens explored q1–q5, selective search, shallow
+transpositions, recaptures, root reductions, tactical ordering, pruning
+margins and aspiration. Their outcomes are retained separately in the
+[portable campaign results](strength-v3-results.json); they are not pooled
+with the full matches or used as acceptance evidence.
+
+`QuiescenceHistory` orders tactical moves using exchange and history scores.
+`QuiescencePruning` limits later unrelated captures, preserving checks,
+evasions, promotions and captures of the piece that just moved. Cached shallow
+quiescence bounds include that previous destination when histories differ;
+hypothetical null moves clear it. `RootReductions` probes late quiet root
+moves at reduced depth and verifies improvements at full depth. Root reductions
+were not selected: their q3 screen scored 59 wins versus 61 for the baseline.
+
+Two incomplete experiments were excluded before selection: 42 games before
+the cached-destination fix, and 379 before clearing the null-move destination.
+The corrected combined profile restarted and completed the full development match.
+The frozen executable is SHA-256
+`2262842960cab47326277eb0ca3396adc530a4ad1296c30a7e3fcc079de5de41`,
+with all options recorded in `runs/strength/v3/selected.json` before validation.
+It passes 1,000 exact NNUE comparisons and 5,000 independent legal-move
+comparisons. Source snapshots and checksums are retained with the run artifacts.
+
+Reproduce registration with new artifact paths:
+
+```sh
+make -j8 BUILD=build/strength-v3-baseline all
+python3 -B scripts/prepare_strength.py --campaign \
+  --budget tiny-2000-yane-1000 --seed 20260913 \
+  --baseline build/strength-v3-baseline/tinyshogi \
+  --exclude-protocol runs/strength/v2/openings/protocol.json \
+  --output-dir runs/strength/v3/openings
+```
+
+Freeze the baseline before editing search code. Add `--tinyshogi-nodes 2000
+--opponent-nodes 1000` to campaign matches, or 2,000 for both engines in a
+direct comparison. The protocol validates those limits before launching an
+engine and again when auditing the saved games. Reports distinguish decisions
+above 1,000 nodes from decisions above each engine's actual request.
+
+Example match using the promoted defaults (choose a new output filename):
+
+```sh
+python3 -B scripts/selfplay_match.py \
+  --protocol runs/strength/v3/openings/protocol.json \
+  --tinyshogi build/make/tinyshogi \
+  --tinyshogi-eval-plugin build/make/tinyshogi-yaneuraou-nnue-direct.so \
+  --tinyshogi-nn-bin eval/hao/eval/nn.bin --yaneuraou-eval-dir eval/hao/eval \
+  --tinyshogi-nodes 2000 --opponent-nodes 1000 \
+  --openings runs/strength/v3/openings/development.sfens \
+  --games 100 --jobs 8 --output runs/strength/v3/example-promoted.jsonl
+```
+
+The independent validation and direct comparison are audited in
+`runs/strength/v3/validation-comparison.json`. As in v2, acceptance requires a
+qualified candidate lock and 850 outright wins in 1,000 new acceptance games.
+
+## Equal-request campaign (2026-09-12)
+
+This campaign uses **1,000 requested nodes per move for each engine**, the
+same Háo `nn.bin`, one thread, 64 MiB hash and `FV_SCALE=20`. Tinyshogi must
+stay within 1,000 nodes. Unmodified YaneuraOu's reported overruns are recorded
+and summarized, rather than invalidating this explicitly different protocol.
+The historical strict-budget results below retain their original meaning.
+
+The v2 native default is alpha-beta, with common native/browser defaults
+provided by `search_default_options()`. MCTS remains selectable and training
+self-play selects it explicitly. The validated defaults are quiescence depth
+3, `CompletedResults=true`, `BucketHash=true`, `AlphaBetaPolicy=ordered`, and
+`TranspositionHistory=exact`. `QuiescenceRecaptures` remains experimental and
+disabled. Training self-play retains its quiescence-depth-2 default.
+
+**The 85% target remains unmet.** On 1,000 independent validation games, the
+selected profile scored **382 wins, 1 draw and 617 losses (38.2% wins;
+95% interval 35.2–41.2%)**, versus the original baseline's 316–2–682 (31.6%).
+The paired improvement is **6.6 percentage points**, interval **2.9–10.3**.
+In 1,000 direct games it scored **538–2–460**, a 53.9% score with interval
+50.7–57.1%. Both promotion conditions pass; the acceptance qualification does
+not. No acceptance games were played and no acceptance lock was created.
+
+Tinyshogi never exceeded 1,000 nodes in these matches. In the selected
+YaneuraOu validation, the opponent exceeded its request on 17,876 decisions;
+its median was 1,000, mean 999.74 (including terminal decisions) and maximum
+16,539. The direct tinyshogi comparison had zero node overruns. These results
+establish improvement under equal **requests**, not identical actual work.
+Audited comparisons and complete move records are under `runs/strength/v2/`.
+The direct-run records retain the runner's legacy `YaneuraOu` label for the
+second engine; their manifest identifies the original tinyshogi binary.
+The portable [campaign results](strength-v2-results.json) retain all summaries,
+experiment checksums and verification reports. The campaign completed 9,100
+development/validation games; those are separate experiments, not a pooled
+acceptance sample. Make, CMake, Meson, ASan/UBSan and browser checks pass,
+including 28 Python transport/audit tests. The promoted executable also passes
+1,000 exact NNUE comparisons and 5,000 independent rules comparisons. Its
+default move, score, node count and completed depth match the measured explicit
+profile on 100 development positions.
+
+Development results on the new 500-pair split:
+
+| Configuration | Wins | Draws | Losses | Win rate | Pair-bootstrap 95% interval |
+|---|---:|---:|---:|---:|---:|
+| Original ordered alpha-beta, q2 | 304 | 4 | 692 | 30.4% | 27.5–33.4% |
+| Completed results + buckets, q2 | 307 | 5 | 688 | 30.7% | 27.8–33.7% |
+| Completed results + buckets, q3 | 372 | 0 | 628 | 37.2% | 34.2–40.2% |
+| Selective + shallow history + recaptures, q1, completed results + buckets | 330 | 4 | 666 | 33.0% | 30.0–36.1% |
+
+The selected q3 profile's paired improvement over the original baseline is
+6.8 percentage points (95% interval 2.8–10.8). The q2 structural changes alone
+gain 0.3 points (interval 0.0–0.7), insufficient for independent promotion.
+The q1 selective/recapture profile's initial 42/100 screening result fell to
+33% over the full development set, illustrating why small screens are not
+acceptance evidence. Root-move limits of 4, 8, 16 and 32 scored only 1, 5, 11
+and 14 wins respectively in 100-game screens and were rejected.
+
+The frozen configuration is `runs/strength/v2/openings/protocol.json`. It pins
+the rebuilt, unchanged YaneuraOu commit `33ccf1f907eb7184889fa23051243f81ab0bf973`,
+its compiler/build identity, shared weights and original tinyshogi baseline.
+It registers 500 development, 500 validation and 500 acceptance positions,
+each split balanced between ply 24 and 32. Selection uses seed 20260912 and
+excludes both historical splits by board, side and hands. The optimizer accepts
+only the registered development file, including when run in diagnostic mode.
+
+To reproduce setup in a fresh checkout (use new artifact paths for new runs):
+
+```sh
+make -j8 BUILD=build/strength-v2-baseline all
+bash scripts/download_strength_fixtures.sh
+YANEURAOU_REF=33ccf1f907eb7184889fa23051243f81ab0bf973 JOBS=8 \
+  bash scripts/download_yaneuraou.sh
+python3 -B scripts/prepare_strength.py --campaign \
+  --output-dir runs/strength/v2/openings
+make -j8 BUILD=build/strength-v2-candidate all
+```
+
+Preserve the original baseline before changing search code. A rebuilt baseline
+from later source is a new experiment and cannot reproduce this campaign's
+recorded comparison. Candidate and opponent binaries are pinned by SHA-256;
+build output directories and match files must remain unchanged during a run.
+
+Example development match:
+
+```sh
+python3 -B scripts/selfplay_match.py \
+  --protocol runs/strength/v2/openings/protocol.json \
+  --tinyshogi build/strength-v2-candidate/tinyshogi \
+  --tinyshogi-eval-plugin build/strength-v2-candidate/tinyshogi-yaneuraou-nnue-direct.so \
+  --tinyshogi-nn-bin eval/hao/eval/nn.bin --yaneuraou-eval-dir eval/hao/eval \
+  --tinyshogi-quiescence-depth 3 \
+  --openings runs/strength/v2/openings/development.sfens \
+  --games 100 --jobs 8 --output runs/strength/v2/example-development.jsonl
+```
+
+For validation, use `--phase validation`, the registered `validation.sfens`,
+and 1,000 games. Compare the candidate and original baseline against YaneuraOu
+on identical pairs, plus a direct 1,000-game candidate/baseline match using
+`--opponent-eval-plugin` and the baseline binary as `--yaneuraou`.
+`scripts/compare_strength.py` audits these three matches and computes paired
+win-rate changes and direct-match score intervals. Its optional `--freeze`
+creates an acceptance lock only when improvement is supported and validation
+has at least 850 outright wins. Draws count as zero wins for that target.
+
+Acceptance requires `--phase acceptance --candidate-lock <lock.json>`, the
+registered acceptance file and exactly 1,000 games. Audit with
+`scripts/match_gate.py <record.jsonl> --protocol <protocol.json>`, plus exact
+NNUE and rules parity reports for the tested artifacts. The gate checks the
+lock, opening pairs, model/binary identities and complete checksummed records.
+It requires 850 outright wins and reports a pair-bootstrap 95% interval.
+`--report-only` never accepts a target. Failed validation leaves acceptance
+positions reserved for a future qualifying candidate.
+After a consumed acceptance attempt, prepare the next campaign with a new
+`--seed` and `--exclude-protocol` for every earlier campaign. This excludes
+all previously registered development, validation and acceptance positions.
+
+## Historical strict-budget status
 
 The 85% target has **not** been achieved. The revised search is substantially
 stronger than the corrected original tinyshogi search in development testing,
@@ -215,8 +450,9 @@ sampling uncertainty, not a guarantee about other opening distributions.
 ## Implemented changes
 
 The C11 engine remains independent of YaneuraOu search code. Existing MCTS
-behavior remains available and is still the default `SearchMode`. Selecting
-alpha-beta now defaults to `AlphaBetaPolicy=ordered`:
+behavior remained the default `SearchMode` at that promotion. The 2026-09-12
+campaign makes alpha-beta the normal default. The earlier alpha-beta profile
+used `AlphaBetaPolicy=ordered`:
 
 - Persistent, sized transposition storage; generation-aware replacement,
   mate-distance normalization, and history-qualified score reuse. Repetition

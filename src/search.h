@@ -9,6 +9,7 @@
 
 #define SEARCH_DEFAULT_ROLLOUT_DEPTH 256U
 #define SEARCH_DEFAULT_QUIESCENCE_DEPTH 2U
+#define SEARCH_DEFAULT_AB_QUIESCENCE_DEPTH 4U
 #define SEARCH_DEFAULT_EXPLORATION_MILLI 1414U
 #define SEARCH_DEFAULT_ASPIRATION_WINDOW 2000U
 #define SEARCH_DEFAULT_QUIESCENCE_MARGIN 0U
@@ -67,6 +68,12 @@ typedef struct {
     bool ab_quiescence_hash;
     bool ab_root_prepass;
     bool ab_null_move;
+    bool ab_recaptures;
+    bool ab_bucket_hash;
+    bool ab_completed_results;
+    bool ab_root_reductions;
+    bool ab_quiescence_history;
+    bool ab_quiescence_pruning;
     /* Reuse shallow bounds across repetition-free histories only when the
      * recorded search dependency height proves repetition unreachable. */
     bool ab_shallow_transpositions;
@@ -113,6 +120,14 @@ typedef struct {
     uint64_t transposition_cutoffs;
     uint64_t evaluations;
     uint64_t evaluation_cache_hits;
+    uint64_t completed_iterations;
+    uint64_t interrupted_children;
+    uint64_t recapture_nodes;
+    uint64_t tt_replacements;
+    uint64_t tt_retained;
+    uint64_t root_reductions;
+    uint64_t root_researches;
+    uint64_t quiescence_pruned;
 } SearchDiagnostics;
 
 typedef struct {
@@ -129,6 +144,10 @@ typedef struct {
 } SearchPolicyEntry;
 
 typedef struct SearchJob SearchJob;
+
+/* Shared application defaults. Explicitly initialized MCTS/training options
+ * and the numeric SearchMode values retain their existing meanings. */
+SearchOptions search_default_options(void);
 
 /* Retains per-worker tree storage between sequential searches.  A context may
  * have only one active SearchJob at a time. */

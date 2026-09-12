@@ -32,7 +32,13 @@ test('rules', rules_test)
 search_test = executable('tinyshogi-search-test', 'tests/test_search.c',
   sources : ['src/search.c', 'src/shogi.c', 'src/eval.c', 'src/thread_posix.c'],
   dependencies : [threads_dep, math_dep, dl_dep], install : false)
-test('search', search_test)
+# The full node-budget/option matrix also runs in unoptimized builds.
+test('search', search_test, timeout : 120)
+
+search_hash_test = executable('tinyshogi-search-hash-test', 'tests/test_search_hash.c',
+  sources : ['src/shogi.c', 'src/eval.c', 'src/thread_posix.c'],
+  dependencies : [threads_dep, math_dep, dl_dep], install : false)
+test('search-hash', search_hash_test)
 
 nnue_test = executable('tinyshogi-nnue-test', 'tests/test_nnue.c',
   sources : ['src/nnue.c', 'src/simd.c', 'src/shogi.c'], dependencies : [math_dep], install : false)
