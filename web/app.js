@@ -357,6 +357,19 @@ document.querySelector('#result-new-game').addEventListener('click', () => {
 document.querySelector('#nnue-model').addEventListener('change', async event => {
   const file = event.target.files[0];
   if (!file) return;
+  if (file.name.toLowerCase().endsWith('.bin')) {
+    const state = document.querySelector('#nnue-state');
+    state.textContent = `Loading ${file.name} into the WASM engine…`;
+    engineWorker.terminate();
+    engineBusy = false;
+    autoplayBusy = false;
+    engineSearchSfen = '';
+    autoplaySearchSfen = '';
+    engineWorker = createEngineWorker();
+    const buffer = await file.arrayBuffer();
+    engineWorker.postMessage({ mode: 'load-model', buffer }, [buffer]);
+    return;
+  }
   const state = document.querySelector('#nnue-state');
   state.textContent = `Loading ${file.name} onto WebGPU…`;
   const previous = gpuNnue;
@@ -490,6 +503,19 @@ document.querySelector('#nnue-move').addEventListener('click', async () => {
 function createEngineWorker() {
   const worker = new Worker(new URL('./engine-worker.js', import.meta.url), { type: 'module' });
   worker.onmessage = event => {
+    if (event.data.model) {
+      const state = document.querySelector('#nnue-state');
+      if (event.data.error || !event.data.nnue) {
+        state.textContent = event.data.error || 'WASM NNUE model rejected; material evaluation remains active.';
+        engineInfo = 'WASM NNUE unavailable; using material evaluation.';
+      } else {
+        state.textContent = 'WASM NNUE active for engine search.';
+        engineInfo = 'WASM NNUE model loaded.';
+      }
+      render();
+      maybeStartEngineMove();
+      return;
+    }
     if (event.data.autoplay) {
       autoplayBusy = false;
       const stale = autoplaySearchSfen !== api.getSfen();
@@ -581,8 +607,8 @@ document.addEventListener('keydown', event => {
 api.init();
 engineWorker = createEngineWorker();
 document.querySelector('#nnue-state').textContent = WebGpuNnue.available()
-  ? 'Load a .nnue model to evaluate with WebGPU.'
-  : 'WebGPU is not available; engine moves use the built-in evaluator.';
+  ? 'Upload nn.bin for WASM NNUE, or .nnue for WebGPU evaluation.'
+  : 'Upload nn.bin for WASM NNUE; otherwise engine moves use material evaluation.';
 render();
 }
 

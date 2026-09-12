@@ -16,7 +16,7 @@ EMCCFLAGS ?= -O2 -std=c11 -sENVIRONMENT=web -sMODULARIZE=1 -sEXPORT_ES6=1 \
 
 all: $(TARGET)
 
-$(TARGET): web_api.c web_thread.c ../examples/yaneuraou_nnue_direct.c ../src/search.c ../src/search.h ../src/eval.c ../src/eval.h ../src/nnue.c ../src/nnue.h ../src/shogi.c ../src/shogi.h ../eval/hao/eval/nn.bin
+$(TARGET): web_api.c web_thread.c ../examples/yaneuraou_nnue_direct.c ../src/search.c ../src/search.h ../src/eval.c ../src/eval.h ../src/nnue.c ../src/nnue.h ../src/shogi.c ../src/shogi.h
 	@mkdir -p $(BUILD_DIR)
 	$(EMCC_ENV) $(EMCC) $(EMCCFLAGS) -I../src -DTINYSHOGI_WEB_NNUE web_api.c web_thread.c ../examples/yaneuraou_nnue_direct.c ../src/search.c ../src/eval.c ../src/nnue.c ../src/simd.c ../src/shogi.c -o $@
 

@@ -30,7 +30,7 @@
     <section class="panel move-panel"><h2>Moves</h2><ol id="moves" aria-label="Move timeline"></ol><p class="hint">Select a move to jump to that position.</p></section>
     <section class="panel"><label class="sfen-label" for="sfen">SFEN position</label>
       <textarea id="sfen" rows="2" spellcheck="false"></textarea><div class="export-actions"><button id="load-sfen" type="button">Load SFEN</button><button id="copy-sfen" type="button">Copy SFEN</button><button id="copy-usi" type="button">Copy USI position</button></div><p id="export-state" class="hint" aria-live="polite"></p></section>
-    <section class="panel nnue-panel"><label for="nnue-model">NNUE model</label><input id="nnue-model" type="file" accept=".nnue,application/octet-stream"><p id="nnue-state" class="hint"></p></section>
+    <section class="panel nnue-panel"><label for="nnue-model">NNUE model</label><input id="nnue-model" type="file" accept=".bin,.nnue,application/octet-stream"><p id="nnue-state" class="hint"></p></section>
     <p class="hint">Select a piece or a hand piece, then a highlighted square. Use Tab and arrow keys to navigate the board; Ctrl/Cmd-Z undoes.</p>
   </main>
   <dialog id="promotion-dialog" aria-labelledby="promotion-title"><form method="dialog"><h2 id="promotion-title">Promote this piece?</h2><p>Choose the form to place on this square.</p><div class="dialog-actions"><button type="button" data-promotion="yes">Promote</button><button type="button" data-promotion="no">Keep original</button><button value="cancel">Cancel</button></div></form></dialog>

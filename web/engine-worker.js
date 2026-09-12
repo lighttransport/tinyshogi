@@ -1,20 +1,6 @@
 import createTinyshogi from './build/tinyshogi.js';
 
 const engineReady = createTinyshogi().then(module => {
-  return fetch(new URL(/* @vite-ignore */ '../nn.bin', import.meta.url))
-    .then(response => {
-      if (!response.ok) throw new Error(`NNUE model request failed (${response.status})`);
-      return response.arrayBuffer();
-    })
-    .then(buffer => {
-      module.FS.writeFile('/nn.bin', new Uint8Array(buffer));
-      return module;
-    })
-    .catch(error => {
-      console.warn(`WASM NNUE unavailable; using material evaluator: ${error.message || error}`);
-      return module;
-    });
-}).then(module => {
 const api = {
   init: module.cwrap('web_init', null, []),
   setSfen: module.cwrap('web_set_sfen', 'number', ['string']),
@@ -29,16 +15,28 @@ const api = {
   getSfen: module.cwrap('web_get_sfen', 'string', [])
 };
 api.init();
-return api;
+return { api, module };
 });
 
 self.onmessage = async event => {
-  const { mode = 'move', sfen, nodes = 64, maxPlies = 1000 } = event.data || {};
-  let api;
+  const { mode = 'move', sfen, nodes = 64, maxPlies = 1000, buffer } = event.data || {};
+  let engine;
   try {
-    api = await engineReady;
+    engine = await engineReady;
   } catch (error) {
     self.postMessage({ error: `Engine initialization failed: ${error.message || error}`, autoplay: mode === 'autoplay' });
+    return;
+  }
+  const { api, module } = engine;
+  if (mode === 'load-model') {
+    try {
+      if (!buffer) throw new Error('no NNUE model data received');
+      module.FS.writeFile('/nn.bin', new Uint8Array(buffer));
+      api.init();
+      self.postMessage({ model: true, nnue: Boolean(api.nnueActive()) });
+    } catch (error) {
+      self.postMessage({ model: true, error: `WASM NNUE load failed: ${error.message || error}` });
+    }
     return;
   }
   if (!api.setSfen(sfen || '')) {
