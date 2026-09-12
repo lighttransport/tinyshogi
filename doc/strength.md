@@ -327,7 +327,7 @@ python3 -B scripts/verify_rules.py --engine build/strength-current/tinyshogi \
 ```
 
 All output paths are write-once: use a new name for a new experiment. The
-full match/gate commands are in the [README](../README.md). Use
+full match/gate commands are in the [user guide](guide.md#shared-weight-validation). Use
 `development.sfens` for tuning; the held-out set is reserved for a frozen
 candidate. `--jobs` runs independent games and assigns CPU sets on Linux so
 single-threaded tinyshogi instances do not all pin themselves to one CPU.
