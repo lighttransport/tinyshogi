@@ -70,6 +70,8 @@ if(BUILD_TESTING)
   if(Python3_Interpreter_FOUND)
     add_test(NAME match-tools COMMAND ${Python3_EXECUTABLE} -B
              ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_match_tools.py $<TARGET_FILE:tinyshogi>)
+    add_test(NAME mcp COMMAND ${Python3_EXECUTABLE} -B
+             ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_mcp.py $<TARGET_FILE:tinyshogi>)
   endif()
 
   tinyshogi_target(tinyshogi-yaneuraou-nnue-test

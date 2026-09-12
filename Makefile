@@ -38,6 +38,7 @@ test: $(ENGINE) $(TESTS)
 	$(BUILD)/tinyshogi-integer-batch-test
 	$(BUILD)/tinyshogi-simd-test
 	$(PYTHON) -B tests/test_match_tools.py $(ENGINE)
+	$(PYTHON) -B tests/test_mcp.py $(ENGINE)
 	if [ -r "$${YANEURAOU_NN_BIN:-eval/nn.bin}" ]; then \
 		YANEURAOU_NN_BIN="$${YANEURAOU_NN_BIN:-eval/nn.bin}" $(BUILD)/tinyshogi-yaneuraou-nnue-test; \
 	fi

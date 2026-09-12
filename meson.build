@@ -23,6 +23,7 @@ test('selftest', tinyshogi, args : ['--selftest'])
 python = find_program('python3', required : false)
 if python.found()
   test('match-tools', python, args : ['-B', files('tests/test_match_tools.py'), tinyshogi])
+  test('mcp', python, args : ['-B', files('tests/test_mcp.py'), tinyshogi])
 endif
 
 rules_test = executable('tinyshogi-rules-test', 'tests/test_rules.c',

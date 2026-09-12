@@ -1,9 +1,16 @@
 import createTinyshogi from './build/tinyshogi.js';
+import { createWasmMcp } from './mcp.js';
 
 const engineReady = createTinyshogi().then(module => {
 const api = {
   init: module.cwrap('web_init', null, []),
+  reset: module.cwrap('web_reset', null, []),
   setSfen: module.cwrap('web_set_sfen', 'number', ['string']),
+  playUsi: module.cwrap('web_play_usi', 'number', ['string']),
+  count: module.cwrap('web_legal_move_count', 'number', []),
+  moveUsi: module.cwrap('web_move_usi', 'string', ['number']),
+  historyCount: module.cwrap('web_history_count', 'number', []),
+  historyMove: module.cwrap('web_history_move', 'string', ['number']),
   engineMove: module.cwrap('web_engine_move', 'string', ['number']),
   engineNodes: module.cwrap('web_engine_last_nodes', 'number', []),
   engineScore: module.cwrap('web_engine_last_score', 'number', []),
@@ -15,7 +22,7 @@ const api = {
   getSfen: module.cwrap('web_get_sfen', 'string', [])
 };
 api.init();
-return { api, module };
+return { api, module, mcp: createWasmMcp(api) };
 });
 
 self.onmessage = async event => {
@@ -27,7 +34,12 @@ self.onmessage = async event => {
     self.postMessage({ error: `Engine initialization failed: ${error.message || error}`, autoplay: mode === 'autoplay' });
     return;
   }
-  const { api, module } = engine;
+  const { api, module, mcp } = engine;
+  if (mode === 'mcp') {
+    const response = await mcp.handle(event.data.request);
+    if (response) self.postMessage({ mcp: response });
+    return;
+  }
   if (mode === 'load-model') {
     try {
       if (!buffer) throw new Error('no NNUE model data received');

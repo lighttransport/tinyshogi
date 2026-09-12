@@ -733,6 +733,10 @@ python3 tools/tinyshogi_mcp.py
 
 Set `TINYSHOGI_ENGINE` when the engine is elsewhere. MCP clients should launch
 the script as a stdio server and call `tools/list` followed by `tools/call`.
+The browser build exposes the same board/search surface through `web/mcp.js`;
+forward `{mode: "mcp", request}` messages to `engine-worker.js` and read
+responses from its `{mcp: ...}` messages. Both adapters use the engine's
+canonical legality and search code.
 
 ## License and provenance
 

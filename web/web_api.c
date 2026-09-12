@@ -95,6 +95,14 @@ int web_move_drop(int index) {
     return web_get_move(index, &move) ? (int)move.drop : 0;
 }
 
+const char *web_move_usi(int index) {
+    static char move_text[16];
+    ShogiMove move;
+    if (!web_get_move(index, &move) ||
+        !shogi_move_to_usi(move, move_text, sizeof(move_text))) return "";
+    return move_text;
+}
+
 int web_play_move(int index) {
     ShogiMove move;
     if (!web_get_move(index, &move) || undo_count >= WEB_MAX_UNDO ||

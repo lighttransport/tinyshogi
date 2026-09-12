@@ -33,6 +33,16 @@ class TinyShogi:
         self.send("isready")
         self.read_until("readyok")
 
+    def close(self):
+        if self.training and self.training.poll() is None:
+            self.training.terminate()
+        if self.proc.poll() is None:
+            try:
+                self.send("quit")
+            except Exception:
+                pass
+            self.proc.terminate()
+
     def send(self, line):
         if self.proc.poll() is not None:
             raise RuntimeError("engine has exited")
@@ -68,6 +78,15 @@ class TinyShogi:
             raise RuntimeError("engine closed stdout")
         return line.strip()
 
+    def status(self):
+        self.position()
+        self.send("status")
+        line = self.proc.stdout.readline().strip()
+        prefix = "info string status "
+        if not line.startswith(prefix):
+            raise RuntimeError("invalid status from engine: " + line)
+        return json.loads(line[len(prefix):])
+
     def board(self):
         with self.lock:
             value = self.sfen()
@@ -81,6 +100,8 @@ class TinyShogi:
             "hands": fields[2],
             "move_number": int(fields[3]),
             "moves": list(self.moves),
+            "legal_moves": self.status().get("legal_moves", []),
+            "result": self.status().get("result", "ongoing"),
         }
 
     def play(self, move):
@@ -162,6 +183,7 @@ def tools():
         return {"type": "object", "properties": properties or {}, "required": required or []}
     return [
         {"name": "query_board", "description": "Return exact current board/SFEN and move history.", "inputSchema": schema()},
+        {"name": "legal_moves", "description": "List legal USI moves for the current position.", "inputSchema": schema()},
         {"name": "play_move", "description": "Play one legal USI move on the current board.", "inputSchema": schema({"move": {"type": "string"}}, ["move"])},
         {"name": "reset_board", "description": "Reset to startpos or a supplied SFEN.", "inputSchema": schema({"sfen": {"type": "string"}})},
         {"name": "search", "description": "Search the current board and return bestmove plus engine output.", "inputSchema": schema({"nodes": {"type": "integer", "minimum": 1}, "movetime": {"type": "integer", "minimum": 1}})},
@@ -178,6 +200,7 @@ def call(name, args):
     if GAME is None:
         GAME = TinyShogi()
     if name == "query_board": data = GAME.board()
+    elif name == "legal_moves": data = GAME.board().get("legal_moves", [])
     elif name == "play_move": data = GAME.play(args.get("move"))
     elif name == "reset_board": data = GAME.reset(args.get("sfen"))
     elif name == "search": data = GAME.search(args.get("nodes", 256), args.get("movetime", 0))
@@ -193,21 +216,30 @@ def call(name, args):
 
 
 def main():
+    global GAME
     for line in sys.stdin:
+        request = None
         try:
             request = json.loads(line)
+            if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
+                raise ValueError("invalid JSON-RPC request")
             method = request.get("method")
             ident = request.get("id")
             if method == "notifications/initialized": continue
             if method == "initialize":
-                response = {"protocolVersion": request.get("params", {}).get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}, "prompts": {}}, "serverInfo": {"name": "tinyshogi", "version": "1"}}
+                response = {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "tinyshogi-native", "version": "1"}}
+            elif method == "ping": response = {}
             elif method == "tools/list": response = {"tools": tools()}
             elif method == "tools/call": response = call(request["params"]["name"], request["params"].get("arguments", {}))
+            elif method == "shutdown": response = None
+            elif method == "exit": break
             else: raise ValueError("unsupported method: " + str(method))
             if ident is not None: print(json.dumps({"jsonrpc": "2.0", "id": ident, "result": response}), flush=True)
         except Exception as exc:
-            if request.get("id") is not None:
-                print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "error": {"code": -32000, "message": str(exc)}}), flush=True)
+            if isinstance(request, dict) and request.get("id") is not None:
+                print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "error": {"code": -32600 if "JSON-RPC" in str(exc) else -32000, "message": str(exc)}}), flush=True)
+    if GAME is not None:
+        GAME.close()
 
 
 if __name__ == "__main__": main()
