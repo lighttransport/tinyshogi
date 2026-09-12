@@ -1157,15 +1157,15 @@ bool shogi_repetition_result(const ShogiPosition *position, ShogiResult *result)
     for (size_t index = 0; index < position->history_length; ++index) {
         if (position->history[index] == position->hash) ++count;
     }
-    if (count < 4) return false;
+    if (count < SHOGI_REPETITION_COUNT) return false;
 
-    size_t occurrences[4] = {0};
+    size_t occurrences[SHOGI_REPETITION_COUNT] = {0};
     size_t found = 0;
-    for (size_t index = position->history_length; index-- > 0 && found < 4;) {
+    for (size_t index = position->history_length; index-- > 0 && found < SHOGI_REPETITION_COUNT;) {
         if (position->history[index] == position->hash) occurrences[found++] = index;
     }
-    if (found < 4) return false;
-    size_t start = occurrences[3];
+    if (found < SHOGI_REPETITION_COUNT) return false;
+    size_t start = occurrences[SHOGI_REPETITION_COUNT - 1];
     for (int candidate = 0; candidate < 2; ++candidate) {
         bool has_check = false;
         bool all_checks = true;

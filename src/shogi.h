@@ -9,6 +9,7 @@
 #define SHOGI_SQUARES 81
 #define SHOGI_MAX_MOVES 600
 #define SHOGI_MAX_HISTORY 4096
+#define SHOGI_REPETITION_COUNT 4
 #define SHOGI_SQ_NONE 255
 
 typedef enum {

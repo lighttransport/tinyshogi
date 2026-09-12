@@ -25,7 +25,8 @@ currently a CLI/USI engine using CPU-based, shared-tree Monte Carlo Tree Search
 (UCT with heuristic rollouts and virtual loss).
 
 The implementation includes orthodox move legality: promotion, drops, nifu,
-dead-rank drops, uchifuzume, check and checkmate, fourfold repetition with
+dead-rank drops, uchifuzume, check and checkmate, fourfold repetition (the
+default four-occurrence sennichite threshold) with
 perpetual-check detection, and the 27-point entering-king declaration profile. The declaration profile requires
 the king to be in the enemy camp, at least ten other pieces in that camp, no
 check on the king, and 28 points for Sente or 27 for Gote. Rooks, bishops,
