@@ -3,6 +3,7 @@
 
 #include "shogi.h"
 #include "eval.h"
+#include "policy_value.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -19,7 +20,8 @@
 
 typedef enum {
     SEARCH_MODE_MCTS = 0,
-    SEARCH_MODE_ALPHABETA = 1
+    SEARCH_MODE_ALPHABETA = 1,
+    SEARCH_MODE_PUCT = 2
 } SearchMode;
 
 typedef enum {
@@ -90,6 +92,9 @@ typedef struct {
     bool a64fx_uct;
     bool perpetual_check;
     SearchContext *context;
+    const ShogiPolicyValueEvaluator *policy_value;
+    float puct_constant;
+    float root_noise;
 } SearchOptions;
 
 typedef struct {
@@ -98,6 +103,7 @@ typedef struct {
     bool resign;
     ShogiMove move;
     uint64_t simulations;
+    bool failed;
 } SearchResult;
 
 typedef struct {

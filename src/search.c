@@ -163,6 +163,7 @@ struct SearchJob {
     uint64_t start_ns;
     ShogiColor root_side;
     bool neural_mcts;
+    atomic_bool pv_failed;
     AlphaBetaHashEntry *ab_hash;
     size_t ab_hash_capacity;
     bool ab_hash_owned;
@@ -2024,11 +2025,20 @@ static size_t claim_simulation_batch(SearchJob *job, size_t capacity) {
     return claimed;
 }
 
+#include "puct_search.inc"
+
 static void *worker_main(void *opaque) {
     WorkerContext *worker = opaque;
     SearchJob *job = worker->job;
     (void)ts_thread_pin_allowed(worker->id);
     shogi_set_fast_check_bookkeeping(job->options.perpetual_check);
+    if (job->options.mode == SEARCH_MODE_PUCT) {
+        shogi_set_fast_check_bookkeeping(true);
+        run_puct(worker);
+        atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
+        free(worker);
+        return NULL;
+    }
     worker->eval_cache_capacity = WORKER_EVAL_CACHE_CAPACITY;
     worker->eval_cache = calloc(worker->eval_cache_capacity, sizeof(*worker->eval_cache));
     if (worker->eval_cache == NULL) worker->eval_cache_capacity = 0;
@@ -2351,6 +2361,10 @@ static void choose_result(SearchJob *job) {
 SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limits,
                         const SearchOptions *options) {
     if (position == NULL || limits == NULL || options == NULL) return NULL;
+    if (options->mode == SEARCH_MODE_PUCT &&
+        (options->policy_value == NULL || options->policy_value->evaluate_batch == NULL ||
+         !isfinite(options->puct_constant) || options->puct_constant < 0 ||
+         !isfinite(options->root_noise) || options->root_noise < 0 || options->root_noise > 1)) return NULL;
     SearchJob *job = calloc(1, sizeof(*job));
     if (job == NULL) return NULL;
     shogi_position_copy_active(&job->root_position, position);
@@ -2391,6 +2405,7 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
         (job->options.mcts_policy == SEARCH_MCTS_NEURAL ||
          (job->options.mcts_policy == SEARCH_MCTS_AUTO && stateful_evaluator));
     atomic_init(&job->stop, false);
+    atomic_init(&job->pv_failed, false);
     atomic_init(&job->pondering, limits->ponder);
     atomic_init(&job->workers_done, 0);
     atomic_init(&job->simulations, 0);
@@ -2612,6 +2627,11 @@ void search_join(SearchJob *job, SearchResult *result) {
     }
     for (unsigned index = 0; index < job->worker_count; ++index) ts_thread_join(&job->workers[index]);
     choose_result(job);
+    if (atomic_load(&job->pv_failed)) {
+        job->result.failed = true;
+        job->result.has_move = false;
+        job->result.resign = true;
+    }
     job->joined = true;
     if (result != NULL) *result = job->result;
 }

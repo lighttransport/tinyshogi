@@ -40,6 +40,8 @@ browser development.
   A64FX optimization.
 - [Strength experiments](doc/strength.md): match results, limitations, and reproduction.
 - [Training report](doc/train.md): distributed training and optimizer comparisons.
+- [Independent DL engine](doc/dlshogi.md): native policy/value training, PUCT,
+  GEMM CPU/CUDA/HIP backends, provenance and current verification limits.
 - GPU workflows: [CUDA](cuda/README.md) and [CUDA/ROCm NNUE training](gpu/README.md).
 
 ## License

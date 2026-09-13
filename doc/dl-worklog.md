@@ -324,3 +324,32 @@ relative L2. Three 100-step runs sustain 1,023.25--1,026.55 examples/s with a
 1,025.39 median. Correct per-node accounting reports 19.2103 product TFLOP/s,
 9.85142% of the 195-TFLOP/s reference. This meets the requested qualified
 1,000 examples/s alternative without claiming 75% peak.
+
+## Pre-push blockers repaired (2026-09-14)
+
+GEMM pin: `7d0cd57b13a7f1773dd059e7a2d0c6f9090ffd80`.
+The six-product AMD C256 convolution packer now writes its third compensation
+plane. Poisoned-buffer forward/backward packing and the existing BF16/integer
+exactness diagnostics pass. Full native `hip` batch-2 gradient relative L2 is
+`0.000015322475`; the unchanged output, optimizer and reload gates also pass.
+
+CUEW/ROCEW loader variables are now hidden in GN Make/CMake builds and in the
+parent Make integration. This prevents vendor function-name collisions when
+using `libgn.so` or export-enabled engine executables. A host-only ELF-symbol
+regression runs in Make/CTest, and a new shared-library GPU test reproduces the
+formerly crashing usage. Shared-library B3 attention tests pass for the AMD
+BF16x3/FP16 hybrid (`0.00038926958` gradient relative L2) and CUDA BF16x3
+(`0.000065028274`). See GEMM's RDNA4 report for exact commands and output errors.
+
+This parent change includes the previously uncommitted native DL integration:
+build rules, encoding, policy/value queue, PUCT, self-play/replay/campaign/match
+tools, documentation and tests. It also includes the missing MCP CTest working
+directory. Both Release CMake configurations (`GN_HIPBLASLT=OFF/ON`) pass 15/15
+tests. `make dl-check` passes the feature/PUCT suite, CPU gradient/resume and
+symbol checks, self-play/train/reload/campaign smoke, and six offline tooling
+tests. The optional PyTorch oracle was not rerun: the available Python
+environments lack torch or numpy. No performance claim is changed here.
+
+Publication is still a separate authorized action: push the reviewed GEMM
+branch before pushing this parent gitlink. No remote push was performed as
+part of the blocker repairs.

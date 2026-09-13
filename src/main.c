@@ -5,6 +5,9 @@
 #include "nnue.h"
 #include "nnue_data.h"
 #include "thread.h"
+#ifdef TINYSHOGI_DL
+#include "dl_eval.h"
+#endif
 
 #include <errno.h>
 #include <poll.h>
@@ -29,6 +32,13 @@ typedef struct {
     SearchJob *job;
     uint64_t last_info_ns;
     bool quit;
+#ifdef TINYSHOGI_DL
+    ShogiDlModel *dl;
+    char dl_path[1024];
+    char dl_backend[16];
+    unsigned dl_batch;
+    int dl_device;
+#endif
 } Application;
 
 typedef struct {
@@ -286,6 +296,7 @@ static unsigned detected_threads(void) {
 }
 
 static void print_bestmove(const SearchResult *result) {
+    if (result->failed) puts("info string error! policy/value inference failed; search aborted");
     if (result->declaration_win) {
         puts("bestmove win");
     } else if (result->resign || !result->has_move) {
@@ -515,7 +526,15 @@ static void print_usi(void) {
     printf("option name AspirationWindow type spin default %u min 16 max 8000\n", SEARCH_DEFAULT_ASPIRATION_WINDOW);
     printf("option name QuiescenceMargin type spin default %u min 0 max 1000\n", SEARCH_DEFAULT_QUIESCENCE_MARGIN);
     printf("option name MultiPV type spin default %u min 1 max %u\n", SEARCH_DEFAULT_MULTIPV, SEARCH_MAX_MULTIPV);
+#ifdef TINYSHOGI_DL
+    puts("option name SearchMode type combo default alphabeta var mcts var alphabeta var puct");
+    puts("option name DLModel type string default none");
+    puts("option name DLBackend type combo default cpu var cpu var cuda var hip var hip-blaslt");
+    puts("option name DLDevice type spin default 0 min 0 max 63");
+    puts("option name DLBatchSize type spin default 32 min 1 max 256");
+#else
     puts("option name SearchMode type combo default alphabeta var mcts var alphabeta");
+#endif
     puts("option name USI_Hash type spin default 64 min 1 max 4096");
     printf("option name AlphaBetaPolicy type combo default %s var classic var ordered var selective\n",
            defaults.ab_policy == 2 ? "selective" : defaults.ab_policy == 1 ? "ordered" : "classic");
@@ -557,6 +576,51 @@ static void set_option(Application *application, char *line) {
     }
     if (value_index >= count) return;
     uint64_t value;
+#ifdef TINYSHOGI_DL
+    if (strcmp(tokens[2], "DLModel") == 0 || strcmp(tokens[2], "DLBackend") == 0 ||
+        strcmp(tokens[2], "DLDevice") == 0 || strcmp(tokens[2], "DLBatchSize") == 0) {
+        if (strcmp(tokens[2], "DLModel") == 0) {
+            size_t used = 0;
+            application->dl_path[0] = 0;
+            for (size_t i = value_index; i < count; ++i) {
+                int n = snprintf(application->dl_path + used, sizeof(application->dl_path) - used,
+                                 "%s%s", i == value_index ? "" : " ", tokens[i]);
+                if (n < 0 || (size_t)n >= sizeof(application->dl_path) - used) {
+                    puts("info string DLModel path too long");
+                    application->dl_path[0] = 0;
+                    break;
+                }
+                used += (size_t)n;
+            }
+        } else if (strcmp(tokens[2], "DLBackend") == 0) {
+            if (strcmp(tokens[value_index], "cpu") && strcmp(tokens[value_index], "cuda") &&
+                strcmp(tokens[value_index], "hip") && strcmp(tokens[value_index], "hip-blaslt")) return;
+            snprintf(application->dl_backend, sizeof(application->dl_backend), "%s", tokens[value_index]);
+        } else {
+            if (!parse_unsigned(tokens[value_index], &value)) return;
+            if (strcmp(tokens[2], "DLDevice") == 0) {
+                if (value > 63) return;
+                application->dl_device = (int)value;
+            } else {
+                if (value < 1 || value > 256) return;
+                application->dl_batch = (unsigned)value;
+            }
+        }
+        shogi_dl_close(application->dl);
+        application->dl = NULL;
+        application->options.policy_value = NULL;
+        if (application->dl_path[0] && strcmp(application->dl_path, "none")) {
+            application->dl = shogi_dl_open(application->dl_path, application->dl_backend,
+                                            application->dl_device, application->dl_batch);
+            if (application->dl) {
+                application->options.policy_value = shogi_dl_evaluator(application->dl);
+                printf("info string DL model loaded backend %s\n", application->dl_backend);
+            } else printf("info string DL load failed: %s\n", shogi_dl_error(NULL));
+        }
+        fflush(stdout);
+        return;
+    }
+#endif
     if (strcmp(tokens[2], "Threads") == 0 && parse_unsigned(tokens[value_index], &value)) {
         if (value >= 1 && value <= 64) application->options.threads = (unsigned)value;
     } else if (strcmp(tokens[2], "Seed") == 0 && parse_unsigned(tokens[value_index], &value)) {
@@ -629,6 +693,10 @@ static void set_option(Application *application, char *line) {
             application->options.mode = SEARCH_MODE_ALPHABETA;
         else if (strcmp(tokens[value_index], "mcts") == 0)
             application->options.mode = SEARCH_MODE_MCTS;
+#ifdef TINYSHOGI_DL
+        else if (strcmp(tokens[value_index], "puct") == 0)
+            application->options.mode = SEARCH_MODE_PUCT;
+#endif
     } else if (strcmp(tokens[2], "MCTSMode") == 0) {
         if (strcmp(tokens[value_index], "auto") == 0)
             application->options.mcts_policy = SEARCH_MCTS_AUTO;
@@ -1058,6 +1126,10 @@ int main(int argc, char **argv) {
 
     Application application;
     memset(&application, 0, sizeof(application));
+#ifdef TINYSHOGI_DL
+    snprintf(application.dl_backend, sizeof(application.dl_backend), "cpu");
+    application.dl_batch = 32;
+#endif
     shogi_evaluator_init(&application.evaluator);
     for (unsigned index = 0; index < 4U; ++index) {
         shogi_evaluator_init(&application.nnue_evaluators[index]);
@@ -1113,5 +1185,8 @@ int main(int argc, char **argv) {
     search_context_destroy(application.search_context);
     destroy_nnue_replicas(&application);
     shogi_evaluator_destroy(&application.evaluator);
+#ifdef TINYSHOGI_DL
+    shogi_dl_close(application.dl);
+#endif
     return 0;
 }

@@ -12,6 +12,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 option(TINYSHOGI_BUILD_BENCHMARKS "Build benchmark programs" ON)
 option(TINYSHOGI_BUILD_EXAMPLES "Build evaluator plugin examples" ON)
+option(TINYSHOGI_DL "Build the native policy/value network and PUCT tools" OFF)
 
 set(TINYSHOGI_WARNINGS -Wall -Wextra -Wpedantic)
 set(TINYSHOGI_ENGINE_SOURCES
@@ -35,6 +36,31 @@ endfunction()
 
 tinyshogi_target(tinyshogi ${TINYSHOGI_ENGINE_SOURCES})
 set_target_properties(tinyshogi PROPERTIES ENABLE_EXPORTS ON)
+
+if(TINYSHOGI_DL)
+  if(GN_HIPBLASLT)
+    enable_language(CXX)
+  endif()
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/gemm/nn/gn.h")
+    message(FATAL_ERROR "Initialize third_party/gemm (git submodule update --init)")
+  endif()
+  add_subdirectory(third_party/gemm/nn)
+  add_library(tinyshogi-dl STATIC src/dl_eval.c src/dl_features.c)
+  target_include_directories(tinyshogi-dl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(tinyshogi-dl PUBLIC gn)
+  target_compile_definitions(tinyshogi PRIVATE TINYSHOGI_DL)
+  target_link_libraries(tinyshogi PRIVATE tinyshogi-dl)
+  tinyshogi_target(dl-selfplay tools/dl_selfplay.c src/search.c src/shogi.c src/eval.c
+    src/thread_posix.c)
+  target_link_libraries(dl-selfplay PRIVATE tinyshogi-dl)
+  if(BUILD_TESTING)
+    tinyshogi_target(dl-test tests/test_dl.c src/search.c src/shogi.c src/eval.c
+      src/thread_posix.c)
+    target_link_libraries(dl-test PRIVATE tinyshogi-dl)
+    target_compile_options(dl-test PRIVATE -UNDEBUG)
+    add_test(NAME dl-policy-value COMMAND dl-test)
+  endif()
+endif()
 
 if(BUILD_TESTING)
   tinyshogi_target(tinyshogi-rules-test tests/test_rules.c src/shogi.c)
@@ -72,6 +98,7 @@ if(BUILD_TESTING)
              ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_match_tools.py $<TARGET_FILE:tinyshogi>)
     add_test(NAME mcp COMMAND ${Python3_EXECUTABLE} -B
              ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_mcp.py $<TARGET_FILE:tinyshogi>)
+    set_tests_properties(mcp PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   endif()
 
   tinyshogi_target(tinyshogi-yaneuraou-nnue-test
