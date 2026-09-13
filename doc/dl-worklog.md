@@ -305,6 +305,15 @@ TFLOP/s and 18.3703 product TFLOP/s (**9.42065%** of nominal dense peak).
 This satisfies the qualified 1,000 examples/s alternative; it does not satisfy
 the independent 75%-of-peak target.
 
+### AMD fused normalization follow-up
+
+Fused convolution bias + BN + SiLU forward and SiLU + BN backward retain the
+same intermediate graph values while removing separate full-tensor passes.
+Batch-64 qualification remains green at 0.00082243384 global gradient relative
+L2. Three 100-step runs measured 1,040.70 examples/s median
+(1,037.93--1,041.43), 11.2414 useful TFLOP/s and 19.4972 product TFLOP/s
+(9.99857% of nominal peak), a 1.49% improvement over the prior median.
+
 ### Qualified rate target achieved
 
 Selective precision allocation supersedes the earlier all-BF16 result:
