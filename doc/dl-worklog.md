@@ -289,3 +289,29 @@ documentation and preflight gates keep these outstanding items explicit.
 - Grouped eight-query forward attention shares K/V, and grouped score backward
   reduced its profiled aggregate from 67.2 ms to 37.1 ms. Rejected broad and
   shape-specific K=256 rocBLASLt routing after whole-step regressions.
+
+### Qualified throughput target reached
+
+The selective `hip-bf16x3-fp16back-blaslt` path retains three-product BF16
+forward, uses FP16/FP32 for the high-volume convolution backward path, and
+restores compensated BF16 only for linear dX propagation. Pointwise
+add/SiLU and SiLU/multiply pairs are fused in forward and backward.
+
+Full CPU-oracle results pass at batch 16 (`0.00083100988`) and at the timed
+batch 64 (`0.00082061858`) against the unchanged 0.001 global-gradient gate,
+including AdamW and exact reload. Three 100-step batch-64 timings measured
+**1,028.09 examples/s median** (1,026.46--1,029.80), 11.1050 useful matrix
+TFLOP/s and 18.3703 product TFLOP/s (**9.42065%** of nominal dense peak).
+This satisfies the qualified 1,000 examples/s alternative; it does not satisfy
+the independent 75%-of-peak target.
+
+### Qualified rate target achieved
+
+Selective precision allocation supersedes the earlier all-BF16 result:
+`hip-bf16x3-fp16back-blaslt` uses three-product BF16 forward, one-product
+FP16 convolution backward/parameter-gradient paths, and compensated BF16 linear
+dX. Batch-64 CPU-oracle qualification passes at 0.00082061858 global gradient
+relative L2. Three 100-step runs sustain 1,023.25--1,026.55 examples/s with a
+1,025.39 median. Correct per-node accounting reports 19.2103 product TFLOP/s,
+9.85142% of the 195-TFLOP/s reference. This meets the requested qualified
+1,000 examples/s alternative without claiming 75% peak.
