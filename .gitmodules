@@ -1,0 +1,3 @@
+[submodule "gemm"]
+	path = third_party/gemm
+	url = https://github.com/lighttransport/gemm.git

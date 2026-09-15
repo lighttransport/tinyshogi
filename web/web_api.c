@@ -17,6 +17,11 @@ static unsigned engine_last_depth;
 static uint64_t engine_last_time_ms;
 static uint64_t engine_last_nps;
 static char root_sfen[512];
+/* Keep the alpha-beta transposition table alive across moves.  Emscripten's
+ * growing heap does not return a freed 64 MiB table to the browser, so
+ * allocating the native default for every engine move eventually exhausts
+ * the worker's WASM memory. */
+static SearchContext *web_search_context;
 
 static void web_clear_history(void) {
     undo_count = 0;
@@ -31,6 +36,7 @@ void web_reset(void) {
     shogi_position_start(&position);
     web_clear_history();
     web_capture_root_sfen();
+    if (web_search_context != NULL) search_context_clear(web_search_context);
     engine_last_nodes = 0;
     engine_last_score = 0;
     engine_last_depth = 0;
@@ -171,6 +177,7 @@ int web_set_sfen(const char *sfen) {
     position = next;
     web_clear_history();
     web_capture_root_sfen();
+    if (web_search_context != NULL) search_context_clear(web_search_context);
     return 1;
 }
 
@@ -185,7 +192,11 @@ const char *web_engine_move(unsigned nodes) {
         .rollout_depth = 64,
         .quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH,
         .exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI,
-        .multi_pv = 1
+        .multi_pv = 1,
+        /* 4096 nodes does not need the native 64 MiB table.  Keep the WASM
+         * heap bounded and reuse this allocation through web_search_context. */
+        .hash_mb = 4,
+        .context = web_search_context
     };
     limits.nodes = nodes == 0 ? 64 : nodes;
     SearchJob *job = search_start(&position, &limits, &options);
@@ -262,5 +273,7 @@ unsigned web_nnue_move_feature_id(int move_index, int perspective, int feature_i
 
 void web_init(void) {
     shogi_init();
+    if (web_search_context == NULL)
+        web_search_context = search_context_create();
     web_reset();
 }
