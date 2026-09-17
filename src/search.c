@@ -30,6 +30,10 @@ typedef struct TreeArenaChunk {
     struct TreeArenaChunk *next;
     size_t used;
     size_t capacity;
+    /* Keep the flexible payload aligned for TreeChild's uint64_t fields.
+     * On wasm32 the three fields above would otherwise place data at offset
+     * 12, which passes on x86 but triggers an alignment fault in WASM. */
+    uint64_t payload_alignment;
     unsigned char data[];
 } TreeArenaChunk;
 
