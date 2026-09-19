@@ -2,6 +2,7 @@
 #include "../src/search.h"
 #include "../src/nnue.h"
 
+#include <emscripten/heap.h>
 #include <stddef.h>
 
 /* A deliberately small, single-position API for the browser demo. */
@@ -17,11 +18,31 @@ static unsigned engine_last_depth;
 static uint64_t engine_last_time_ms;
 static uint64_t engine_last_nps;
 static char root_sfen[512];
+static ShogiMove cached_legal_moves[SHOGI_MAX_MOVES];
+static size_t cached_legal_move_count;
+static bool cached_legal_moves_valid;
+#ifndef TINYSHOGI_WEB_HASH_BYTES
+#define TINYSHOGI_WEB_HASH_BYTES (64U * 1024U)
+#endif
 /* Keep the alpha-beta transposition table alive across moves.  Emscripten's
  * growing heap does not return a freed 64 MiB table to the browser, so
  * allocating the native default for every engine move eventually exhausts
  * the worker's WASM memory. */
 static SearchContext *web_search_context;
+
+static void web_invalidate_legal_moves(void) {
+    cached_legal_moves_valid = false;
+    cached_legal_move_count = 0;
+}
+
+static size_t web_prepare_legal_moves(void) {
+    if (!cached_legal_moves_valid) {
+        cached_legal_move_count = shogi_generate_legal(
+            &position, cached_legal_moves, SHOGI_MAX_MOVES);
+        cached_legal_moves_valid = true;
+    }
+    return cached_legal_move_count;
+}
 
 static void web_clear_history(void) {
     undo_count = 0;
@@ -34,6 +55,7 @@ static void web_capture_root_sfen(void) {
 
 void web_reset(void) {
     shogi_position_start(&position);
+    web_invalidate_legal_moves();
     web_clear_history();
     web_capture_root_sfen();
     if (web_search_context != NULL) search_context_clear(web_search_context);
@@ -63,16 +85,14 @@ int web_hand_count(int color, int hand_index) {
 }
 
 int web_legal_move_count(void) {
-    ShogiMove moves[SHOGI_MAX_MOVES];
-    return (int)shogi_generate_legal(&position, moves, SHOGI_MAX_MOVES);
+    return (int)web_prepare_legal_moves();
 }
 
 static bool web_get_move(int index, ShogiMove *move) {
-    if (index < 0 || index >= SHOGI_MAX_MOVES) return false;
-    ShogiMove moves[SHOGI_MAX_MOVES];
-    size_t count = shogi_generate_legal(&position, moves, SHOGI_MAX_MOVES);
+    if (move == NULL || index < 0 || index >= SHOGI_MAX_MOVES) return false;
+    size_t count = web_prepare_legal_moves();
     if ((size_t)index >= count) return false;
-    *move = moves[index];
+    *move = cached_legal_moves[index];
     return true;
 }
 
@@ -102,6 +122,7 @@ int web_play_move(int index) {
         !shogi_make_move_undo(&position, move, &undo_stack[undo_count])) return 0;
     ++undo_count;
     redo_count = 0;
+    web_invalidate_legal_moves();
     return 1;
 }
 
@@ -150,6 +171,7 @@ int web_undo(void) {
     if (!shogi_unmake_move(&position, undo)) return 0;
     if (redo_count < WEB_MAX_UNDO) redo_stack[redo_count++] = undo->move;
     --undo_count;
+    web_invalidate_legal_moves();
     return 1;
 }
 
@@ -161,6 +183,7 @@ int web_redo(void) {
         return 0;
     }
     ++undo_count;
+    web_invalidate_legal_moves();
     return 1;
 }
 
@@ -175,6 +198,7 @@ int web_set_sfen(const char *sfen) {
     ShogiPosition next;
     if (sfen == NULL || !shogi_position_from_sfen(&next, sfen)) return 0;
     position = next;
+    web_invalidate_legal_moves();
     web_clear_history();
     web_capture_root_sfen();
     if (web_search_context != NULL) search_context_clear(web_search_context);
@@ -183,6 +207,10 @@ int web_set_sfen(const char *sfen) {
 
 const char *web_engine_move(unsigned nodes) {
     static char move_text[16];
+    if (web_search_context == NULL) {
+        web_search_context = search_context_create();
+        if (web_search_context == NULL) return "";
+    }
     SearchLimits limits = {0};
     SearchOptions options = {
         .mode = SEARCH_MODE_ALPHABETA,
@@ -193,12 +221,13 @@ const char *web_engine_move(unsigned nodes) {
         .quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH,
         .exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI,
         .multi_pv = 1,
-        /* 4096 nodes does not need the native 64 MiB table.  Keep the WASM
-         * heap bounded and reuse this allocation through web_search_context. */
-        .hash_mb = 4,
+        /* The browser's bounded searches do not need the native 64 MiB table.
+         * Prefer a lower linear-memory high-water mark over cache hits, and
+         * reuse the allocation through web_search_context. */
+        .hash_bytes = TINYSHOGI_WEB_HASH_BYTES,
         .context = web_search_context
     };
-    limits.nodes = nodes == 0 ? 64 : nodes;
+    limits.nodes = nodes == 0 ? 64 : nodes > 2000000U ? 2000000U : nodes;
     SearchJob *job = search_start(&position, &limits, &options);
     if (job == NULL) return "";
     SearchResult result;
@@ -273,7 +302,9 @@ unsigned web_nnue_move_feature_id(int move_index, int perspective, int feature_i
 
 void web_init(void) {
     shogi_init();
-    if (web_search_context == NULL)
-        web_search_context = search_context_create();
     web_reset();
+}
+
+unsigned web_memory_bytes(void) {
+    return (unsigned)emscripten_get_heap_size();
 }

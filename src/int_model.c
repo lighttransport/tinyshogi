@@ -118,6 +118,7 @@ static uint32_t round_up_u32(uint32_t value, uint32_t multiple) {
 static void *aligned_calloc_256(size_t count, size_t element_size) {
     if (element_size != 0 && count > SIZE_MAX / element_size) return NULL;
     size_t bytes = count * element_size;
+    if (bytes > SIZE_MAX - 255U) return NULL;
     size_t allocated = (bytes + 255U) & ~(size_t)255U;
     void *memory = aligned_alloc(256U, allocated);
     if (memory != NULL) memset(memory, 0, allocated);
@@ -135,9 +136,24 @@ static bool mul3_size(size_t a, size_t b, size_t element_size, size_t *out) {
     return true;
 }
 
+static bool add_size(size_t *total, size_t amount) {
+    if (total == NULL || *total > SIZE_MAX - amount) return false;
+    *total += amount;
+    return true;
+}
+
+static bool file_has_remaining(FILE *file, size_t required) {
+    if (file == NULL || required > (size_t)LONG_MAX) return false;
+    long current = ftell(file);
+    if (current < 0 || fseek(file, 0, SEEK_END) != 0) return false;
+    long end = ftell(file);
+    bool restored = fseek(file, current, SEEK_SET) == 0;
+    return restored && end >= current && (size_t)(end - current) >= required;
+}
+
 static void int_model_build_gemm_caches(IntModel *model) {
     if (model == NULL || model->feature_dim == 0 || model->hidden_dim == 0 ||
-        model->action_count == 0) return;
+        model->action_count == 0 || model->hidden_dim > UINT32_MAX - 63U) return;
     model->w1_gemm_hidden_dim = round_up_u32(model->hidden_dim, 64U);
     if ((model->feature_dim & 3U) == 0U) {
         size_t count = 0;
@@ -178,28 +194,43 @@ bool int_model_load(IntModel *model, const char *path) {
     model->feature_dim = metadata[1]; model->hidden_dim = metadata[2]; model->action_count = metadata[3];
     model->input_scale_q16 = scales[0]; model->hidden_scale_q16 = scales[1];
     model->policy_scale_q16 = scales[2]; model->value_scale_q16 = scales[3];
-    size_t w1_count = 0, policy_count = 0, policy_i16_bytes = 0;
-    ok = mul3_size(model->feature_dim, model->hidden_dim, sizeof(*model->w1), &w1_count) &&
-        mul3_size(model->action_count, model->hidden_dim, sizeof(*model->policy), &policy_count) &&
+    size_t w1_bytes = 0, b1_bytes = 0, value_bytes = 0;
+    size_t policy_bytes = 0, value_i16_bytes = 0, policy_i16_bytes = 0;
+    ok = mul3_size(model->feature_dim, model->hidden_dim,
+                   sizeof(*model->w1), &w1_bytes) &&
+        mul3_size(model->hidden_dim, 1U, sizeof(*model->b1), &b1_bytes) &&
+        mul3_size(model->hidden_dim, 1U, sizeof(*model->value), &value_bytes) &&
+        mul3_size(model->action_count, model->hidden_dim,
+                  sizeof(*model->policy), &policy_bytes) &&
+        mul3_size(model->hidden_dim, 1U,
+                  sizeof(*model->value_i16), &value_i16_bytes) &&
         mul3_size(model->action_count, model->hidden_dim, sizeof(*model->policy_i16),
                   &policy_i16_bytes);
     if (!ok) { fclose(file); return false; }
-    model->w1 = malloc(w1_count); model->b1 = malloc(model->hidden_dim * sizeof(int32_t));
-    model->value = malloc(model->hidden_dim); model->policy = malloc(policy_count);
-    model->value_i16 = malloc((size_t)model->hidden_dim * sizeof(int16_t));
+    size_t file_bytes = 0;
+    ok = add_size(&file_bytes, w1_bytes) &&
+        add_size(&file_bytes, b1_bytes) &&
+        add_size(&file_bytes, value_bytes) &&
+        add_size(&file_bytes, sizeof(model->value_bias)) &&
+        add_size(&file_bytes, policy_bytes) &&
+        file_has_remaining(file, file_bytes);
+    if (!ok) { fclose(file); return false; }
+    model->w1 = malloc(w1_bytes); model->b1 = malloc(b1_bytes);
+    model->value = malloc(value_bytes); model->policy = malloc(policy_bytes);
+    model->value_i16 = malloc(value_i16_bytes);
     model->policy_i16 = malloc(policy_i16_bytes);
     ok = model->w1 != NULL && model->b1 != NULL && model->value != NULL && model->policy != NULL &&
          model->value_i16 != NULL && model->policy_i16 != NULL &&
-         fread(model->w1, 1, w1_count, file) == w1_count &&
-         fread(model->b1, sizeof(int32_t), model->hidden_dim, file) == model->hidden_dim &&
-         fread(model->value, 1, model->hidden_dim, file) == model->hidden_dim &&
+         fread(model->w1, 1, w1_bytes, file) == w1_bytes &&
+         fread(model->b1, 1, b1_bytes, file) == b1_bytes &&
+         fread(model->value, 1, value_bytes, file) == value_bytes &&
          fread(&model->value_bias, sizeof(model->value_bias), 1, file) == 1 &&
-         fread(model->policy, 1, policy_count, file) == policy_count;
+         fread(model->policy, 1, policy_bytes, file) == policy_bytes;
     fclose(file);
     if (!ok) { int_model_destroy(model); return false; }
     for (uint32_t i = 0; i < model->hidden_dim; ++i)
         model->value_i16[i] = model->value[i];
-    for (size_t i = 0; i < policy_count; ++i)
+    for (size_t i = 0; i < policy_bytes; ++i)
         model->policy_i16[i] = model->policy[i];
     int_model_build_gemm_caches(model);
     return true;

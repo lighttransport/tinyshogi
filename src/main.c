@@ -1014,6 +1014,21 @@ static void process_line(Application *application, char *line) {
     }
 }
 
+/* Return 1 for a complete command, 0 at EOF/error, and -1 after discarding an
+ * overlong command. This prevents the remainder of one input line from being
+ * interpreted as a second USI command on the next read. */
+static int read_command_line(char *line, size_t capacity) {
+    if (line == NULL || capacity < 2 || fgets(line, capacity, stdin) == NULL)
+        return 0;
+    if (strchr(line, '\n') != NULL || feof(stdin)) return 1;
+    int byte;
+    do {
+        byte = fgetc(stdin);
+    } while (byte != '\n' && byte != EOF);
+    line[0] = '\0';
+    return -1;
+}
+
 int main(int argc, char **argv) {
     shogi_init();
     if (argc > 1 && strcmp(argv[1], "--selftest") == 0) return selftest() ? 0 : 1;
@@ -1053,7 +1068,10 @@ int main(int argc, char **argv) {
     bool input_eof = false;
     while (!application.quit) {
         if (application.job == NULL) {
-            if (input_eof || fgets(line, sizeof(line), stdin) == NULL) break;
+            if (input_eof) break;
+            int read_status = read_command_line(line, sizeof(line));
+            if (read_status == 0) break;
+            if (read_status < 0) continue;
             process_line(&application, line);
             continue;
         }
@@ -1070,9 +1088,10 @@ int main(int argc, char **argv) {
             break;
         }
         if (status > 0 && (descriptor.revents & (POLLIN | POLLHUP)) != 0) {
-            if (fgets(line, sizeof(line), stdin) != NULL) {
+            int read_status = read_command_line(line, sizeof(line));
+            if (read_status > 0) {
                 process_line(&application, line);
-            } else {
+            } else if (read_status == 0) {
                 input_eof = true;
                 if (search_waits_for_stop(application.job)) finish_job(&application, true);
             }

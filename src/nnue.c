@@ -13,6 +13,10 @@
 #define NNUE_HAND_BASE SHOGI_NNUE_BOARD_FEATURES
 #define NNUE_HAND_COUNTS 19U
 
+static bool valid_perspective(ShogiColor perspective) {
+    return perspective == SHOGI_BLACK || perspective == SHOGI_WHITE;
+}
+
 static inline uint8_t orient_square(uint8_t square, ShogiColor perspective) {
     if (perspective == SHOGI_BLACK || square == SHOGI_SQ_NONE) return square;
     return (uint8_t)(SHOGI_SQUARES - 1U - square);
@@ -44,13 +48,19 @@ static void cache_feature_position(ShogiPosition *cached,
 size_t shogi_nnue_feature_ids(const ShogiPosition *position,
                               ShogiColor perspective,
                               uint32_t *features, size_t capacity) {
-    if (position == NULL || features == NULL || capacity == 0) return 0;
+    if (position == NULL || features == NULL || capacity == 0 ||
+        !valid_perspective(perspective)) return 0;
     uint8_t king = position->king_square[perspective];
-    if (king == SHOGI_SQ_NONE) return 0;
+    if (king >= SHOGI_SQUARES ||
+        position->board[king] != shogi_piece(perspective, SHOGI_KING)) return 0;
     size_t count = 0;
     for (uint8_t square = 0; square < SHOGI_SQUARES; ++square) {
         uint8_t piece = position->board[square];
         if (piece == SHOGI_EMPTY) continue;
+        ShogiPieceType type = shogi_piece_type(piece);
+        ShogiColor color = shogi_piece_color(piece);
+        if (type < SHOGI_PAWN || type > SHOGI_DRAGON ||
+            piece != shogi_piece(color, type)) return 0;
         if (count < capacity) features[count] = board_feature(king, square, piece, perspective);
         ++count;
     }
@@ -144,6 +154,21 @@ static bool checked_size(uint32_t a, uint32_t b, size_t element_size, size_t *ou
     return true;
 }
 
+static bool checked_add(size_t *total, size_t amount) {
+    if (total == NULL || *total > SIZE_MAX - amount) return false;
+    *total += amount;
+    return true;
+}
+
+static bool file_has_remaining(FILE *file, size_t required) {
+    if (file == NULL || required > (size_t)LONG_MAX) return false;
+    long current = ftell(file);
+    if (current < 0 || fseek(file, 0, SEEK_END) != 0) return false;
+    long end = ftell(file);
+    bool restored = fseek(file, current, SEEK_SET) == 0;
+    return restored && end >= current && (size_t)(end - current) >= required;
+}
+
 static bool nnue3_evaluate_raw(const ShogiNnueModel *model, const int32_t *sum,
                                ShogiColor perspective, int64_t *raw) {
     if (model == NULL || sum == NULL || raw == NULL || model->head_dim == 0 ||
@@ -231,6 +256,13 @@ static bool load_nnue3(ShogiNnueModel *model, const char *path) {
         checked_size(metadata[4], metadata[3], sizeof(int64_t), &head_bias_bytes) &&
         checked_size(metadata[4], metadata[3], sizeof(int16_t), &final_weight_bytes) &&
         checked_size(metadata[4], 1, sizeof(int64_t), &final_bias_bytes);
+    size_t payload_bytes = 0;
+    if (ok) ok = checked_add(&payload_bytes, feature_bytes) &&
+        checked_add(&payload_bytes, head_weight_bytes) &&
+        checked_add(&payload_bytes, head_bias_bytes) &&
+        checked_add(&payload_bytes, final_weight_bytes) &&
+        checked_add(&payload_bytes, final_bias_bytes) &&
+        file_has_remaining(file, payload_bytes);
     int16_t *feature_weights = ok ? malloc(feature_bytes) : NULL;
     int16_t *head_weights = ok ? malloc(head_weight_bytes) : NULL;
     int64_t *head_bias = ok ? malloc(head_bias_bytes) : NULL;
@@ -334,7 +366,13 @@ bool shogi_nnue_model_load(ShogiNnueModel *model, const char *path) {
     size_t feature_bytes = 0;
     if (ok) ok = checked_size(metadata[1], metadata[2], sizeof(int16_t), &feature_bytes) &&
                 metadata[3] == 2U;
-    size_t output_bytes = ok ? (size_t)metadata[2] * 2U * sizeof(int16_t) : 0;
+    size_t output_bytes = 0;
+    if (ok) ok = checked_size(metadata[2], 2U, sizeof(int16_t), &output_bytes);
+    size_t payload_bytes = 0;
+    if (ok) ok = checked_add(&payload_bytes, feature_bytes) &&
+        checked_add(&payload_bytes, output_bytes) &&
+        checked_add(&payload_bytes, sizeof(int32_t)) &&
+        file_has_remaining(file, payload_bytes);
     int16_t *feature_weights = ok ? malloc(feature_bytes) : NULL;
     int16_t *output_weights = ok ? malloc(output_bytes) : NULL;
     int32_t bias = 0;
@@ -583,13 +621,14 @@ int shogi_nnue_evaluate(const ShogiNnueModel *model,
     if (model == NULL || accumulator == NULL ||
         (model->format_version == SHOGI_NNUE3_FORMAT_VERSION ?
          model->final_weights == NULL : model->output_weights == NULL) ||
-        perspective > SHOGI_WHITE || accumulator->hidden_dim != model->hidden_dim) return 0;
+        !valid_perspective(perspective) ||
+        accumulator->hidden_dim != model->hidden_dim) return 0;
     return shogi_nnue_evaluate_sum(model, accumulator->sum[perspective], perspective);
 }
 
 bool shogi_nnue_state_init(ShogiNnueState *state, const ShogiNnueModel *model,
                            ShogiColor perspective) {
-    if (state == NULL || model == NULL || perspective > SHOGI_WHITE ||
+    if (state == NULL || model == NULL || !valid_perspective(perspective) ||
         model->hidden_dim == 0 || model->feature_weights == NULL ||
         (model->format_version == SHOGI_NNUE3_FORMAT_VERSION ?
          model->final_weights == NULL : model->output_weights == NULL)) return false;
@@ -778,7 +817,8 @@ bool shogi_nnue_state_evaluate_batch(const ShogiNnueState *const *states,
 int shogi_nnue_evaluate_position(const ShogiNnueModel *model,
                                  const ShogiPosition *position,
                                  ShogiColor perspective) {
-    if (model == NULL || position == NULL) return 0;
+    if (model == NULL || position == NULL ||
+        !valid_perspective(perspective)) return 0;
     /* Search evaluates positions from worker threads. Reuse one scratch
      * accumulator per thread to keep the hot path free of malloc/free while
      * retaining thread safety and the public accumulator API. */

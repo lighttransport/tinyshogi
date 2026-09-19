@@ -42,21 +42,34 @@ export function createWasmMcp(api) {
     if (name === 'query_board') return board();
     if (name === 'legal_moves') return board().legal_moves;
     if (name === 'play_move') {
-      if (typeof args.move !== 'string' || !args.move || /\s/.test(args.move)) throw new Error('move must be a USI move string');
+      if (typeof args.move !== 'string' || args.move.length < 4 ||
+          args.move.length > 5 || /\s/.test(args.move))
+        throw new Error('move must be a USI move string');
       if (!api.playUsi(args.move)) throw new Error(`illegal move: ${args.move}`);
       return board();
     }
     if (name === 'reset_board') {
+      if (args.sfen !== undefined && typeof args.sfen !== 'string')
+        throw new Error('sfen must be a string');
       const sfen = args.sfen || '';
       if (!sfen) { api.reset(); return board(); }
+      if (sfen.length > 511) throw new Error('sfen is too long');
       if (!api.setSfen(sfen)) throw new Error('invalid SFEN');
       return board();
     }
     if (name === 'search') {
-      const nodes = Math.max(1, Math.min(2000000, Number(args.nodes ?? 256) || 256));
+      if (args.nodes !== undefined && typeof args.nodes !== 'number')
+        throw new Error('nodes must be a number');
+      const requestedNodes = Number(args.nodes ?? 256);
+      if (!Number.isFinite(requestedNodes)) throw new Error('nodes must be a finite number');
+      const nodes = Math.max(1, Math.min(2000000, Math.trunc(requestedNodes)));
       const before = api.getSfen();
-      const bestmove = api.engineMove(nodes);
-      api.setSfen(before);
+      let bestmove;
+      try {
+        bestmove = api.engineMove(nodes);
+      } finally {
+        if (!api.setSfen(before)) throw new Error('failed to restore position after search');
+      }
       return { bestmove: bestmove || 'resign', nodes: api.engineNodes?.() ?? 0,
         score: api.engineScore?.() ?? 0, depth: api.engineDepth?.() ?? 0,
         timeMs: api.engineTime?.() ?? 0, nps: api.engineNps?.() ?? 0, board: board() };

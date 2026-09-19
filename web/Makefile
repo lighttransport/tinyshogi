@@ -1,15 +1,20 @@
 EMCC ?= emcc
 BUILD_DIR ?= build
+EXTRA_EMCCFLAGS ?=
 TARGET := $(BUILD_DIR)/tinyshogi.js
 EMCC_ENV = $(if $(EM_CACHE),EM_CACHE=$(EM_CACHE),)
 
 # No pthread flags are used by default. The WASM API includes the single-thread
 # search backend; the UI invokes it from engine-worker.js.
 EMCCFLAGS ?= -O2 -std=c11 -sENVIRONMENT=web -sMODULARIZE=1 -sEXPORT_ES6=1 \
+	-DTINYSHOGI_MAX_HISTORY=1024 -DTINYSHOGI_SEARCH_MAX_PATH=128 \
 	-sALLOW_MEMORY_GROWTH=1 \
-	-sSTACK_SIZE=4194304 \
+	-sINITIAL_MEMORY=327680 -sMAXIMUM_MEMORY=67108864 \
+	-sSTACK_SIZE=229376 -sSTACK_OVERFLOW_CHECK=2 -sMALLOC=emmalloc \
+	-sMEMORY_GROWTH_GEOMETRIC_STEP=0 -sMEMORY_GROWTH_LINEAR_STEP=65536 \
 	-sEXPORTED_RUNTIME_METHODS='["cwrap"]' \
-	-sEXPORTED_FUNCTIONS='["_web_init","_web_reset","_web_piece_at","_web_side_to_move","_web_hand_count","_web_legal_move_count","_web_move_from","_web_move_to","_web_move_promotes","_web_move_drop","_web_play_move","_web_play_usi","_web_can_undo","_web_can_redo","_web_history_count","_web_history_move","_web_timeline_count","_web_timeline_move","_web_undo","_web_redo","_web_get_sfen","_web_get_root_sfen","_web_set_sfen","_web_engine_move","_web_engine_last_nodes","_web_engine_last_score","_web_engine_last_depth","_web_engine_last_time_ms","_web_engine_last_nps","_web_game_result","_web_nnue_feature_count","_web_nnue_feature_id","_web_nnue_move_feature_count","_web_nnue_move_feature_id"]'
+	-sEXPORTED_FUNCTIONS='["_web_init","_web_reset","_web_piece_at","_web_side_to_move","_web_hand_count","_web_legal_move_count","_web_move_from","_web_move_to","_web_move_promotes","_web_move_drop","_web_play_move","_web_play_usi","_web_can_undo","_web_can_redo","_web_history_count","_web_history_move","_web_timeline_count","_web_timeline_move","_web_undo","_web_redo","_web_get_sfen","_web_get_root_sfen","_web_set_sfen","_web_engine_move","_web_engine_last_nodes","_web_engine_last_score","_web_engine_last_depth","_web_engine_last_time_ms","_web_engine_last_nps","_web_game_result","_web_nnue_feature_count","_web_nnue_feature_id","_web_nnue_move_feature_count","_web_nnue_move_feature_id","_web_memory_bytes"]' \
+	$(EXTRA_EMCCFLAGS)
 
 .PHONY: all clean
 

@@ -69,6 +69,14 @@ int main(void) {
     uint32_t ids[128];
     if (shogi_nnue_feature_ids(&start, SHOGI_BLACK, ids, 128) == 0)
         return fail("feature extraction");
+    if (shogi_nnue_feature_ids(&start, (ShogiColor)-1, ids, 128) != 0 ||
+        shogi_nnue_state_init(&(ShogiNnueState){0}, &model, (ShogiColor)-1) ||
+        shogi_nnue_evaluate_position(&model, &start, (ShogiColor)-1) != 0)
+        return fail("invalid perspective rejection");
+    ShogiPosition malformed = start;
+    malformed.board[0] = 0xffU;
+    if (shogi_nnue_feature_ids(&malformed, SHOGI_BLACK, ids, 128) != 0)
+        return fail("malformed feature rejection");
     ShogiNnueAccumulator first, rebuilt;
     if (!shogi_nnue_accumulator_init(&first, model.hidden_dim) ||
         !shogi_nnue_accumulator_init(&rebuilt, model.hidden_dim) ||

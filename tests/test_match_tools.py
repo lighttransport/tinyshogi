@@ -4,6 +4,7 @@
 import copy
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
@@ -93,6 +94,12 @@ class RefereeTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_overlong_command_is_not_split(self):
+        commands = "x" * 4095 + "isready\nisready\nquit\n"
+        completed = subprocess.run([ENGINE], input=commands, text=True,
+                                   capture_output=True, timeout=5, check=True)
+        self.assertEqual(completed.stdout.splitlines().count("readyok"), 1)
+
     def test_fragmented_stdout_and_large_stderr(self):
         with tempfile.TemporaryDirectory() as directory:
             program = Path(directory) / "engine"

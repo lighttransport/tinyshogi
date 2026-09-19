@@ -74,6 +74,23 @@ int main(void) {
     memset(&limits, 0, sizeof(limits));
     limits.nodes = 16;
 
+    SearchLimits invalid_limits = limits;
+    invalid_limits.searchmove_count = SHOGI_MAX_MOVES + 1U;
+    if (search_start(&position, &invalid_limits, &options) != NULL)
+        return fail("oversized searchmoves rejection");
+    ShogiPosition invalid_position = position;
+    invalid_position.side = (ShogiColor)2;
+    if (search_start(&invalid_position, &limits, &options) != NULL)
+        return fail("invalid side rejection");
+    invalid_position = position;
+    invalid_position.board[0] = 0xffU;
+    if (search_start(&invalid_position, &limits, &options) != NULL)
+        return fail("invalid piece rejection");
+    SearchOptions invalid_options = options;
+    invalid_options.mode = (SearchMode)99;
+    if (search_start(&position, &limits, &invalid_options) != NULL)
+        return fail("invalid search mode rejection");
+
     SearchJob *job = search_start(&position, &limits, &options);
     if (job == NULL) return fail("node-limited search creation");
     SearchResult result;

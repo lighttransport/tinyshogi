@@ -16,13 +16,25 @@
 #include <time.h>
 #include <unistd.h>
 
-#define SEARCH_MAX_PATH 512
+#ifndef TINYSHOGI_SEARCH_MAX_PATH
+#define TINYSHOGI_SEARCH_MAX_PATH 512
+#endif
+#if TINYSHOGI_SEARCH_MAX_PATH < SEARCH_MAX_PV
+#error "TINYSHOGI_SEARCH_MAX_PATH must be at least SEARCH_MAX_PV"
+#endif
+#define SEARCH_MAX_PATH TINYSHOGI_SEARCH_MAX_PATH
 #define SEARCH_MAX_UNDO 2048
 #define DEFAULT_MAX_TREE_NODES 1000000U
 #define WORKER_EVAL_CACHE_CAPACITY (1U << 14)
 #define VALUE_SCALE UINT64_C(1000000)
 #define SEARCH_NEURAL_MAX_BATCH 12U
 #define SEARCH_NEURAL_MAX_DEPTH 8
+
+#if defined(__GNUC__) || defined(__clang__)
+#define TS_NOINLINE __attribute__((noinline))
+#else
+#define TS_NOINLINE
+#endif
 
 typedef struct TreeNode TreeNode;
 
@@ -237,6 +249,33 @@ static bool same_search_move(ShogiMove left, ShogiMove right) {
            left.promote == right.promote && left.drop == right.drop;
 }
 
+/* Search assumes canonical piece encodings and uses side, king and hand
+ * fields as array indices. Public callers need a cheap structural gate before
+ * those assumptions reach the worker thread. */
+static bool search_position_valid(const ShogiPosition *position) {
+    if (position == NULL ||
+        (position->side != SHOGI_BLACK && position->side != SHOGI_WHITE) ||
+        position->move_number == UINT_MAX ||
+        position->history_length > SHOGI_MAX_HISTORY) return false;
+    for (unsigned color = 0; color < 2; ++color) {
+        uint8_t king = position->king_square[color];
+        if (king >= SHOGI_SQUARES ||
+            position->board[king] != shogi_piece((ShogiColor)color, SHOGI_KING))
+            return false;
+        for (unsigned hand = 0; hand < 7; ++hand)
+            if (position->hand[color][hand] > 18) return false;
+    }
+    for (unsigned square = 0; square < SHOGI_SQUARES; ++square) {
+        uint8_t piece = position->board[square];
+        if (piece == SHOGI_EMPTY) continue;
+        ShogiPieceType type = shogi_piece_type(piece);
+        ShogiColor color = shogi_piece_color(piece);
+        if (type < SHOGI_PAWN || type > SHOGI_DRAGON ||
+            piece != shogi_piece(color, type)) return false;
+    }
+    return true;
+}
+
 static bool should_stop(const SearchJob *job) {
     if (atomic_load_explicit((atomic_bool *)&job->stop, memory_order_relaxed)) return true;
     uint64_t deadline = atomic_load_explicit(
@@ -268,7 +307,12 @@ static void *tree_arena_alloc(SearchTree *tree, size_t size) {
         chunk = chunk->next;
     }
     if (chunk == NULL) {
-        size_t capacity = size > (1U << 20) ? size : (1U << 20);
+        /* Alpha-beta owns only its root node. Giving that tree the MCTS
+         * arena's 1 MiB minimum needlessly raises the allocator high-water
+         * mark, which is especially costly for a growing WASM heap. */
+        size_t minimum = tree->node_capacity == 1U ? (64U << 10) : (1U << 20);
+        size_t capacity = size > minimum ? size : minimum;
+        if (capacity > SIZE_MAX - sizeof(TreeArenaChunk)) return NULL;
         TreeArenaChunk *fresh = malloc(sizeof(*fresh) + capacity);
         if (fresh == NULL) return NULL;
         fresh->next = tree->arena.chunks;
@@ -318,11 +362,13 @@ static void tree_destroy(SearchTree *tree) {
 
 static bool tree_init(SearchTree *tree, size_t node_capacity) {
     if (tree == NULL || node_capacity == 0) return false;
+    if (node_capacity > SIZE_MAX / 2U) return false;
     memset(tree, 0, sizeof(*tree));
     tree->node_capacity = node_capacity;
     tree->nodes = calloc(node_capacity, sizeof(*tree->nodes));
     tree->hash_capacity = 1;
-    while (tree->hash_capacity < node_capacity * 2U &&
+    size_t target_hash_capacity = node_capacity * 2U;
+    while (tree->hash_capacity < target_hash_capacity &&
            tree->hash_capacity <= SIZE_MAX / 2U)
         tree->hash_capacity <<= 1;
     tree->hash_table = calloc(tree->hash_capacity, sizeof(*tree->hash_table));
@@ -911,9 +957,6 @@ static double run_simulation(WorkerContext *worker, ShogiPosition *position,
             ++expanded->virtual_loss;
             child_selection_update(node, (unsigned)(expanded - node->children));
             if (!path_push(&path, node, expanded)) break;
-            TreeNode *next = expanded->node;
-            if (next == NULL) break;
-            node = next;
             break;
         }
         TreeChild *selected = select_child(job, node, position->side == job->root_side);
@@ -1627,7 +1670,7 @@ static bool alpha_beta_root_depth(WorkerContext *worker, int depth,
     return true;
 }
 
-static void run_alpha_beta(WorkerContext *worker) {
+static TS_NOINLINE void run_alpha_beta(WorkerContext *worker) {
     SearchJob *job = worker->job;
     job->ab_history_unique[0] = true;
     for (size_t i = 0; i < job->root_position.history_length; ++i) {
@@ -1643,7 +1686,8 @@ static void run_alpha_beta(WorkerContext *worker) {
     /* A shogi game cannot meaningfully exceed a few hundred plies.  Cap the depth
      * so an absurd `go depth N` cannot push depth-based arithmetic past int range
      * or spend the budget on infeasible lines. */
-    if (max_depth > 512) max_depth = 512;
+    int max_supported_depth = SEARCH_MAX_PATH - 4;
+    if (max_depth > max_supported_depth) max_depth = max_supported_depth;
     if (job->options.ab_root_prepass) alpha_beta_root_prepass(worker);
     else {
         for (unsigned i = 0; i < job->root->move_count; ++i)
@@ -1675,7 +1719,7 @@ static void run_alpha_beta(WorkerContext *worker) {
         int previous_score = job->ab_best_score;
         int best_score = -AB_INFINITY;
         ShogiMove best_move = job->root->children[0].move;
-        int root_scores[SHOGI_MAX_MOVES];
+        int root_scores[SHOGI_MAX_MOVES] = {0};
         unsigned aspiration = job->options.aspiration_window;
         if (aspiration == 0) aspiration = SEARCH_DEFAULT_ASPIRATION_WINDOW;
         int window_alpha = previous_score - (int)aspiration;
@@ -1846,7 +1890,10 @@ static void finish_neural_lane(WorkerContext *worker, NeuralLane *lane,
     backpropagate(worker, &lane->path, lane->value, root_visits, root_values);
 }
 
-static void run_neural_batch(WorkerContext *worker, size_t lane_count) {
+/* NeuralLane contains a full position and undo path. Keep this frame out of
+ * worker_main: inlining it reserves roughly 1 MiB of stack even for the
+ * alpha-beta-only WASM worker, where this function is never called. */
+static TS_NOINLINE void run_neural_batch(WorkerContext *worker, size_t lane_count) {
     NeuralLane lanes[SEARCH_NEURAL_MAX_BATCH];
     const void *states[SEARCH_NEURAL_MAX_BATCH];
     int scores[SEARCH_NEURAL_MAX_BATCH];
@@ -1914,21 +1961,30 @@ static size_t claim_simulation_batch(SearchJob *job, size_t capacity) {
     return claimed;
 }
 
-static void *worker_main(void *opaque) {
-    WorkerContext *worker = opaque;
+static void worker_destroy_evaluator_states(WorkerContext *worker) {
     SearchJob *job = worker->job;
-    (void)ts_thread_pin_allowed(worker->id);
-    shogi_set_fast_check_bookkeeping(job->options.perpetual_check);
-    worker->eval_cache_capacity = WORKER_EVAL_CACHE_CAPACITY;
-    worker->eval_cache = calloc(worker->eval_cache_capacity, sizeof(*worker->eval_cache));
-    if (worker->eval_cache == NULL) worker->eval_cache_capacity = 0;
-    uint64_t rng = job->options.seed_auto ? monotonic_ns() ^ ((uint64_t)worker->id * UINT64_C(0x9e3779b9))
-                                          : job->options.seed + (uint64_t)worker->id * UINT64_C(0x9e3779b97f4a7c15);
+    shogi_evaluator_state_destroy(worker->evaluator, worker->eval_state);
+    if (job->neural_mcts && worker->neural_ready) {
+        unsigned batch = job->options.leaf_batch_size;
+        if (batch == 0 || batch > SEARCH_NEURAL_MAX_BATCH)
+            batch = SEARCH_NEURAL_MAX_BATCH;
+        for (unsigned index = 0; index < batch; ++index)
+            shogi_evaluator_state_destroy(worker->evaluator,
+                                          worker->neural_eval_states[index]);
+    }
+}
+
+/* Keep the rollout undo array out of the alpha-beta worker's frame. Besides
+ * lowering native thread stacks, this lets the alpha-beta-only browser build
+ * use a much smaller WASM stack without changing MCTS limits. */
+static TS_NOINLINE void run_mcts_worker(WorkerContext *worker, uint64_t rng) {
+    SearchJob *job = worker->job;
     ShogiPosition position = job->root_position;
     if (job->neural_mcts) {
         worker->neural_ready = true;
         unsigned batch = job->options.leaf_batch_size;
-        if (batch == 0 || batch > SEARCH_NEURAL_MAX_BATCH) batch = SEARCH_NEURAL_MAX_BATCH;
+        if (batch == 0 || batch > SEARCH_NEURAL_MAX_BATCH)
+            batch = SEARCH_NEURAL_MAX_BATCH;
         for (unsigned index = 0; index < batch; ++index) {
             worker->neural_eval_states[index] =
                 shogi_evaluator_state_create(worker->evaluator, &position, job->root_side);
@@ -1946,34 +2002,21 @@ static void *worker_main(void *opaque) {
                                                            &position, job->root_side);
     }
     ShogiUndo undos[SEARCH_MAX_UNDO];
-    if (job->options.mode == SEARCH_MODE_ALPHABETA) {
-        if (worker->id == 0) run_alpha_beta(worker);
-        atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
-        shogi_evaluator_state_destroy(worker->evaluator, worker->eval_state);
-        free(worker->eval_cache);
-        free(worker);
-        return NULL;
-    }
-    size_t local_capacity = (job->options.max_tree_nodes + job->worker_count - 1U) /
-                            job->worker_count;
+    size_t local_capacity = job->options.max_tree_nodes / job->worker_count +
+        (job->options.max_tree_nodes % job->worker_count != 0);
     if (local_capacity < 64U) local_capacity = 64U;
     if (!worker_tree_prepare(worker, local_capacity)) {
-        atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
-        shogi_evaluator_state_destroy(worker->evaluator, worker->eval_state);
-        free(worker->eval_cache);
-        free(worker);
-        return NULL;
+        /* worker_tree_prepare transfers a persistent tree before resizing it.
+         * Release even on failure so the context does not remain in-use. */
+        worker_tree_release(worker);
+        goto done;
     }
     worker->root = tree_new_node(&worker->tree, position.hash);
     if (worker->root == NULL ||
         !node_expand(&worker->tree, worker->root, &position,
                      job->root->moves, job->root->move_count)) {
-        atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
         worker_tree_release(worker);
-        shogi_evaluator_state_destroy(worker->evaluator, worker->eval_state);
-        free(worker->eval_cache);
-        free(worker);
-        return NULL;
+        goto done;
     }
     while (!should_stop(job)) {
         if (job->neural_mcts && worker->neural_ready) {
@@ -2001,15 +2044,37 @@ static void *worker_main(void *opaque) {
         double value = run_simulation(worker, &position, undos, &rng);
         (void)value;
     }
-    atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
     worker_tree_release(worker);
-    shogi_evaluator_state_destroy(worker->evaluator, worker->eval_state);
-    if (job->neural_mcts && worker->neural_ready) {
-        unsigned batch = job->options.leaf_batch_size;
-        if (batch == 0 || batch > SEARCH_NEURAL_MAX_BATCH) batch = SEARCH_NEURAL_MAX_BATCH;
-        for (unsigned index = 0; index < batch; ++index)
-            shogi_evaluator_state_destroy(worker->evaluator,
-                                          worker->neural_eval_states[index]);
+done:
+    atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
+    worker_destroy_evaluator_states(worker);
+}
+
+static void *worker_main(void *opaque) {
+    WorkerContext *worker = opaque;
+    SearchJob *job = worker->job;
+    (void)ts_thread_pin_allowed(worker->id);
+    shogi_set_fast_check_bookkeeping(job->options.perpetual_check);
+    /* The built-in material evaluator never consults this cache. Avoid a
+     * pointless allocation per worker when no external evaluator is active. */
+    if (shogi_evaluator_active(worker->evaluator)) {
+        worker->eval_cache_capacity = WORKER_EVAL_CACHE_CAPACITY;
+        worker->eval_cache = calloc(worker->eval_cache_capacity,
+                                    sizeof(*worker->eval_cache));
+        if (worker->eval_cache == NULL) worker->eval_cache_capacity = 0;
+    }
+    uint64_t rng = job->options.seed_auto
+        ? monotonic_ns() ^ ((uint64_t)worker->id * UINT64_C(0x9e3779b9))
+        : job->options.seed +
+              (uint64_t)worker->id * UINT64_C(0x9e3779b97f4a7c15);
+    if (job->options.mode == SEARCH_MODE_ALPHABETA) {
+        worker->eval_state = shogi_evaluator_state_create(
+            worker->evaluator, &job->root_position, job->root_side);
+        if (worker->id == 0) run_alpha_beta(worker);
+        atomic_fetch_add_explicit(&job->workers_done, 1, memory_order_release);
+        worker_destroy_evaluator_states(worker);
+    } else {
+        run_mcts_worker(worker, rng);
     }
     free(worker->eval_cache);
     free(worker);
@@ -2192,6 +2257,7 @@ size_t search_get_root_policy(const SearchJob *job, SearchPolicyEntry *entries, 
 
 static unsigned default_threads(void) {
     unsigned count = ts_thread_allowed_count();
+    if (count == 0) count = 1;
     if (count > 8) count = 8;
     return count;
 }
@@ -2240,7 +2306,10 @@ static void choose_result(SearchJob *job) {
 
 SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limits,
                         const SearchOptions *options) {
-    if (position == NULL || limits == NULL || options == NULL) return NULL;
+    if (!search_position_valid(position) || limits == NULL || options == NULL ||
+        limits->searchmove_count > SHOGI_MAX_MOVES ||
+        (options->mode != SEARCH_MODE_MCTS &&
+         options->mode != SEARCH_MODE_ALPHABETA)) return NULL;
     SearchJob *job = calloc(1, sizeof(*job));
     if (job == NULL) return NULL;
     shogi_position_copy_active(&job->root_position, position);
@@ -2258,6 +2327,8 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
             job->ab_killers[ply][slot].to = SHOGI_SQ_NONE;
         }
     if (job->options.rollout_depth == 0) job->options.rollout_depth = SEARCH_DEFAULT_ROLLOUT_DEPTH;
+    if (job->options.rollout_depth > SEARCH_MAX_UNDO)
+        job->options.rollout_depth = SEARCH_MAX_UNDO;
     if (job->options.quiescence_depth > 8) job->options.quiescence_depth = SEARCH_DEFAULT_QUIESCENCE_DEPTH;
     if (job->options.exploration_milli == 0) job->options.exploration_milli = SEARCH_DEFAULT_EXPLORATION_MILLI;
     if (job->options.aspiration_window == 0)
@@ -2265,6 +2336,10 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
     job->exploration_constant = (float)job->options.exploration_milli / 1000.0f;
     if (job->options.multi_pv == 0) job->options.multi_pv = SEARCH_DEFAULT_MULTIPV;
     if (job->options.multi_pv > SEARCH_MAX_MULTIPV) job->options.multi_pv = SEARCH_MAX_MULTIPV;
+    if (job->options.node_overrun_percent > 10)
+        job->options.node_overrun_percent = 10;
+    if (job->options.root_move_limit > SHOGI_MAX_MOVES)
+        job->options.root_move_limit = SHOGI_MAX_MOVES;
     if (job->options.leaf_batch_size == 0) {
         job->options.leaf_batch_size = job->options.evaluator != NULL &&
             job->options.evaluator->state_score_batch_size != 0
@@ -2292,9 +2367,18 @@ SearchJob *search_start(const ShogiPosition *position, const SearchLimits *limit
         return NULL;
     }
     if (job->options.mode == SEARCH_MODE_ALPHABETA) {
-        unsigned hash_mb = job->options.hash_mb == 0 ? 64 : job->options.hash_mb;
-        if (hash_mb > 4096) hash_mb = 4096;
-        size_t entries = (size_t)hash_mb * 1024U * 1024U / sizeof(*job->ab_hash);
+        size_t entries;
+        if (job->options.hash_bytes != 0) {
+            entries = job->options.hash_bytes / sizeof(*job->ab_hash);
+            if (entries == 0) entries = 1;
+        } else {
+            unsigned hash_mb = job->options.hash_mb == 0 ? 64 : job->options.hash_mb;
+            if (hash_mb > 4096) hash_mb = 4096;
+            /* Divide before multiplying so the documented 4096 MiB ceiling
+             * does not wrap to zero on wasm32. */
+            size_t entries_per_mb = (1024U * 1024U) / sizeof(*job->ab_hash);
+            entries = (size_t)hash_mb * entries_per_mb;
+        }
         job->ab_hash_capacity = 1;
         while (job->ab_hash_capacity <= entries / 2)
             job->ab_hash_capacity *= 2;

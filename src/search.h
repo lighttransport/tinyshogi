@@ -58,6 +58,9 @@ typedef struct {
     unsigned quiescence_margin;
     unsigned multi_pv;
     unsigned hash_mb;
+    /* Optional exact transposition-table budget. Nonzero takes precedence
+     * over hash_mb, primarily for memory-constrained embeddings. */
+    size_t hash_bytes;
     /* 0: classic, 1: exchange/history ordering, 2: selective search. */
     unsigned ab_policy;
     bool ab_skip_quiet_checks;

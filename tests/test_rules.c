@@ -1,5 +1,6 @@
 #include "../src/shogi.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -92,6 +93,7 @@ static uint64_t perft(const ShogiPosition *position, int depth) {
 
 int main(void) {
     shogi_init();
+    shogi_position_start(NULL);
     ShogiPosition position;
     shogi_position_start(&position);
     ShogiMove moves[SHOGI_MAX_MOVES];
@@ -260,6 +262,63 @@ int main(void) {
             return fail("fast path defers check when disabled");
         if (!shogi_unmake_move(&gate_position, &gate_undo)) return fail("perpetual-check gate unmake");
         shogi_set_fast_check_bookkeeping(true);
+    }
+
+    /* The fast path is public and must reject malformed moves before touching
+     * board, hand, history, or Zobrist arrays. */
+    {
+        ShogiPosition guarded, before;
+        ShogiMove invalid;
+        ShogiUndo invalid_undo;
+        shogi_position_start(&guarded);
+        before = guarded;
+        if (!shogi_parse_usi_move("P*5e", &invalid) ||
+            shogi_make_move_undo_fast(&guarded, invalid, &invalid_undo) ||
+            memcmp(&guarded, &before, sizeof(guarded)) != 0)
+            return fail("fast path empty-hand drop rejection");
+        if (!shogi_parse_usi_move("5i4i", &invalid) ||
+            shogi_make_move_undo_fast(&guarded, invalid, &invalid_undo) ||
+            memcmp(&guarded, &before, sizeof(guarded)) != 0)
+            return fail("fast path own-capture rejection");
+
+        memset(&invalid, 0, sizeof(invalid));
+        invalid.from = SHOGI_SQUARES;
+        invalid.to = 0;
+        if (shogi_make_move_undo(&guarded, invalid, &invalid_undo) ||
+            memcmp(&guarded, &before, sizeof(guarded)) != 0)
+            return fail("undo path source bounds rejection");
+
+        count = shogi_generate_legal(&guarded, moves, SHOGI_MAX_MOVES);
+        guarded.move_number = UINT_MAX;
+        before = guarded;
+        if (count == 0 || shogi_make_move(&guarded, moves[0]) ||
+            shogi_make_move_undo_fast(&guarded, moves[0], &invalid_undo) ||
+            memcmp(&guarded, &before, sizeof(guarded)) != 0)
+            return fail("move-number overflow rejection");
+
+        memset(&invalid_undo, 0, sizeof(invalid_undo));
+        invalid_undo.valid = 1;
+        invalid_undo.color = SHOGI_BLACK;
+        invalid_undo.previous_side = SHOGI_BLACK;
+        invalid_undo.move.from = SHOGI_SQ_NONE;
+        invalid_undo.move.to = SHOGI_SQUARES;
+        before = guarded;
+        if (shogi_unmake_move(&guarded, &invalid_undo) ||
+            memcmp(&guarded, &before, sizeof(guarded)) != 0)
+            return fail("malformed undo rejection");
+    }
+    {
+        ShogiPosition guarded;
+        ShogiResult repetition;
+        shogi_position_start(&guarded);
+        if (shogi_is_in_check(&guarded, (ShogiColor)-1) ||
+            shogi_is_declaration_win(&guarded, (ShogiColor)-1) ||
+            shogi_generate_pseudo_for_color(&guarded, (ShogiColor)-1,
+                                            moves, SHOGI_MAX_MOVES) != 0)
+            return fail("negative color rejection");
+        guarded.history_length = SHOGI_MAX_HISTORY + 1U;
+        if (shogi_repetition_result(&guarded, &repetition))
+            return fail("oversized repetition history rejection");
     }
     return 0;
 }

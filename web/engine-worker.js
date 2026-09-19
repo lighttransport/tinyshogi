@@ -17,18 +17,23 @@ return api;
 });
 
 self.onmessage = async event => {
-  const { sfen, nodes = 64 } = event.data || {};
-  let api;
   try {
-    api = await engineReady;
+    const request = event.data;
+    if (!request || typeof request !== 'object' ||
+        typeof request.sfen !== 'string' || request.sfen.length > 511) {
+      throw new Error('Invalid engine request');
+    }
+    if (request.nodes !== undefined && typeof request.nodes !== 'number') {
+      throw new Error('Invalid node budget');
+    }
+    const requestedNodes = Number(request.nodes ?? 64);
+    const nodes = Number.isFinite(requestedNodes)
+      ? Math.max(1, Math.min(2000000, Math.trunc(requestedNodes))) : 64;
+    const api = await engineReady;
+    if (!api.setSfen(request.sfen)) throw new Error('Invalid SFEN');
+    const move = api.engineMove(nodes);
+    self.postMessage({ move, sfen: api.getSfen(), nodes: api.engineNodes(), score: api.engineScore(), depth: api.engineDepth(), timeMs: api.engineTime(), nps: api.engineNps() });
   } catch (error) {
-    self.postMessage({ error: `Engine initialization failed: ${error.message || error}` });
-    return;
+    self.postMessage({ error: error.message || String(error) });
   }
-  if (!api.setSfen(sfen || '')) {
-    self.postMessage({ error: 'Invalid SFEN' });
-    return;
-  }
-  const move = api.engineMove(nodes);
-  self.postMessage({ move, sfen: api.getSfen(), nodes: api.engineNodes(), score: api.engineScore(), depth: api.engineDepth(), timeMs: api.engineTime(), nps: api.engineNps() });
 };
