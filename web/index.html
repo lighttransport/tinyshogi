@@ -8,11 +8,11 @@
 </head>
 <body>
   <main class="app-shell">
-    <header class="hero"><p class="eyebrow">WASM + WebGPU</p><h1>tinyshogi</h1><p id="status" aria-live="polite">Loading…</p><p id="evaluation" class="evaluation">Evaluation: loading…</p></header>
+    <header class="hero"><h1>tinyshogi</h1><p id="status" aria-live="polite">Loading…</p><p id="evaluation" class="evaluation">Evaluation: loading…</p></header>
     <section class="game" aria-label="Shogi game">
-      <div class="hand-label">White hand</div><div id="hand-1" class="hand" aria-label="White pieces in hand"></div>
+      <div class="hand-label"><span>White hand</span><span id="pet-slot-1" class="pet-slot"></span></div><div id="hand-1" class="hand" aria-label="White pieces in hand"></div>
       <div id="board" class="board" aria-label="Shogi board"></div>
-      <div class="hand-label">Black hand</div><div id="hand-0" class="hand" aria-label="Black pieces in hand"></div>
+      <div class="hand-label"><span>Black hand</span><span id="pet-slot-0" class="pet-slot"></span></div><div id="hand-0" class="hand" aria-label="Black pieces in hand"></div>
     </section>
     <div class="controls" aria-label="Game controls">
       <button id="undo" type="button">Undo</button>
@@ -22,9 +22,10 @@
       <button id="engine-cancel" type="button">Cancel search</button>
       <button id="nnue-move" type="button" title="Choose the highest-scoring legal move using the loaded NNUE model">NNUE move (1 ply)</button>
       <button id="flip-board" type="button">Flip board</button>
+      <label class="piece-style-control">Pieces <select id="piece-style-toggle"><option value="kanji">Stylized kanji</option><option value="japanese" selected>Japanese (歩・王)</option><option value="pixel">8-bit characters</option></select></label>
     </div>
-    <section class="analysis panel"><div class="engine-settings"><label for="engine-strength">Playing strength</label><select id="engine-strength"><option value="practice">Practice</option><option value="casual">Casual</option><option value="club" selected>Club</option><option value="strong">Strong</option><option value="expert">Expert</option><option value="custom">Custom budget</option></select><label for="engine-side">Auto-play</label><select id="engine-side"><option value="">Off</option><option value="0">Engine as Black</option><option value="1">Engine as White</option></select><label class="budget-label" for="engine-nodes">Search budget <output id="engine-nodes-value">256</output> nodes</label></div>
-      <input id="engine-nodes" type="range" min="64" max="4096" step="64" value="256"><p id="engine-info" class="hint"></p></section>
+    <section class="analysis panel"><div class="engine-settings"><label for="engine-strength">Playing strength</label><select id="engine-strength"><option value="mouse">Mouse</option><option value="rabbit">Rabbit</option><option value="cat" selected>Cat</option><option value="dog">Dog</option><option value="lion">Lion</option><option value="whale">Whale</option><option value="custom">Custom budget</option></select><label for="engine-side">Auto-play</label><select id="engine-side"><option value="">Off</option><option value="0">Engine as Black</option><option value="1" selected>Engine as White</option></select><label class="budget-label" for="engine-nodes">Search budget <output id="engine-nodes-value">256</output> nodes</label></div>
+      <div id="pet-options" class="pet-options" role="group" aria-label="Engine pet strength"></div><input id="engine-nodes" type="range" min="64" max="8192" step="64" value="256"><p id="engine-info" class="hint"></p></section>
     <section class="panel move-panel"><h2>Moves</h2><ol id="moves" aria-label="Move timeline"></ol><p class="hint">Select a move to jump to that position.</p></section>
     <section class="panel"><label class="sfen-label" for="sfen">SFEN position</label>
       <textarea id="sfen" rows="2" spellcheck="false"></textarea><div class="export-actions"><button id="load-sfen" type="button">Load SFEN</button><button id="copy-sfen" type="button">Copy SFEN</button><button id="copy-usi" type="button">Copy USI position</button></div><p id="export-state" class="hint" aria-live="polite"></p></section>

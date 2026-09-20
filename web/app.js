@@ -1,5 +1,9 @@
 import createTinyshogi from './build/tinyshogi.js';
 import { WebGpuNnue } from './nnue-webgpu.js';
+import pieceSpriteMarkup from './pieces.svg?raw';
+import japaneseSpriteMarkup from './pieces-japanese.svg?raw';
+import pixelPieceSpriteMarkup from './pieces-pixel.svg?raw';
+import petSpriteMarkup from './pets.svg?raw';
 
 async function main() {
 const module = await createTinyshogi();
@@ -49,15 +53,29 @@ let evaluationBusy = false;
 let pendingEvaluation = null;
 let flipped = false;
 let lastMove = -1;
+let lastMoveFrom = -1;
 let engineInfo = '';
 let pendingPromotion = [];
 let nnueMoveBusy = false;
 let previousResult = 0;
 let focusedVisualSquare = 40;
+let pieceStyle = 'japanese';
 
 const names = ['', '歩', '香', '桂', '銀', '金', '角', '飛', '玉', 'と', '杏', '圭', '全', '馬', '龍'];
 const handNames = ['歩', '香', '桂', '銀', '金', '角', '飛'];
-const strengthNodes = { practice: 64, casual: 128, club: 256, strong: 1024, expert: 4096 };
+const pieceSprite = new DOMParser().parseFromString(pieceSpriteMarkup, 'image/svg+xml');
+const japaneseSprite = new DOMParser().parseFromString(japaneseSpriteMarkup, 'image/svg+xml');
+const pixelPieceSprite = new DOMParser().parseFromString(pixelPieceSpriteMarkup, 'image/svg+xml');
+const strengthNodes = { mouse: 64, rabbit: 128, cat: 256, dog: 1024, lion: 4096, whale: 8192 };
+const petSprite = new DOMParser().parseFromString(petSpriteMarkup, 'image/svg+xml');
+const petLevels = [
+  { id: 'mouse', name: 'Mouse', nodes: 64 },
+  { id: 'rabbit', name: 'Rabbit', nodes: 128 },
+  { id: 'cat', name: 'Cat', nodes: 256 },
+  { id: 'dog', name: 'Dog', nodes: 1024 },
+  { id: 'lion', name: 'Lion', nodes: 4096 },
+  { id: 'whale', name: 'Whale', nodes: 8192 }
+];
 
 function legalMoves() {
   const moves = [];
@@ -84,12 +102,13 @@ function render() {
     if (square === selected) button.classList.add('selected');
     if (targets.has(square)) button.classList.add('target');
     if (square === lastMove) button.classList.add('last-move');
+    if (square === lastMoveFrom) button.classList.add('last-move-from');
     button.dataset.square = square;
     button.dataset.visualSquare = visualSquare;
     button.tabIndex = visualSquare === focusedVisualSquare ? 0 : -1;
     const pieceLabel = document.createElement('span');
     pieceLabel.className = 'piece-label';
-    pieceLabel.textContent = piece ? names[Math.abs(piece)] : '';
+    if (piece) pieceLabel.append(pieceIcon(Math.abs(piece)));
     button.append(pieceLabel);
     if (visualRow === 0) {
       const file = document.createElement('span');
@@ -109,6 +128,9 @@ function render() {
     board.append(button);
   }
   renderHands();
+  renderPetOptions();
+  renderPetBadge();
+  renderPieceStyleControl();
   renderMoveList();
   const result = api.result();
   const turn = result === 0 ? (api.side() === 0 ? 'Black to move' : 'White to move')
@@ -158,6 +180,84 @@ function squareName(square) {
   return `${file}${String.fromCharCode(97 + Math.floor(square / 9))}`;
 }
 
+function pieceIcon(type) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.classList.add('piece-svg', pieceStyle === 'pixel' ? 'pixel-piece' : 'kanji-piece');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('viewBox', pieceStyle === 'pixel' ? '0 0 32 32' : '0 0 100 100');
+  const sprite = pieceStyle === 'pixel' ? pixelPieceSprite : pieceStyle === 'japanese' ? japaneseSprite : pieceSprite;
+  const symbol = sprite.getElementById(`piece-${type}`);
+  if (symbol) {
+    icon.setAttribute('viewBox', symbol.getAttribute('viewBox'));
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    for (const child of symbol.children) group.append(child.cloneNode(true));
+    icon.append(group);
+  }
+  return icon;
+}
+
+function renderPieceStyleControl() {
+  const toggle = document.querySelector('#piece-style-toggle');
+  toggle.value = pieceStyle;
+}
+
+function petIcon(type) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.classList.add('pet-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('viewBox', '0 0 32 32');
+  const symbol = petSprite.getElementById(`pet-${type}`);
+  if (symbol) {
+    for (const child of symbol.children) icon.append(child.cloneNode(true));
+  }
+  return icon;
+}
+
+function renderPetOptions() {
+  const options = document.querySelector('#pet-options');
+  const current = document.querySelector('#engine-strength').value;
+  for (const option of options.children) {
+    const active = option.dataset.pet === current;
+    option.classList.toggle('active', active);
+    option.setAttribute('aria-pressed', String(active));
+  }
+}
+
+function renderPetBadge() {
+  const current = petLevels.find(pet => pet.id === document.querySelector('#engine-strength').value) || petLevels[2];
+  const engineSide = configuredEngineSide();
+  const color = engineSide >= 0 ? engineSide : api.side();
+  for (const slot of document.querySelectorAll('.pet-slot')) slot.replaceChildren();
+  const slot = document.querySelector(`#pet-slot-${color}`);
+  if (!slot) return;
+  const badge = document.createElement('span');
+  badge.className = 'pet-badge';
+  badge.title = `Engine pet: ${current.name}, ${current.nodes} nodes`;
+  badge.setAttribute('aria-label', `Engine pet ${current.name}`);
+  badge.append(petIcon(current.id), document.createTextNode(current.name));
+  slot.append(badge);
+}
+
+function buildPetOptions() {
+  const options = document.querySelector('#pet-options');
+  for (const pet of petLevels) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pet-option';
+    button.dataset.pet = pet.id;
+    button.title = `${pet.name}: ${pet.nodes} node search budget`;
+    button.setAttribute('aria-label', `${pet.name}, ${pet.nodes} nodes`);
+    button.append(petIcon(pet.id), document.createTextNode(pet.name));
+    button.addEventListener('click', () => {
+      document.querySelector('#engine-strength').value = pet.id;
+      document.querySelector('#engine-nodes').value = pet.nodes;
+      engineInfo = `${pet.name}: ${pet.nodes} node search budget.`;
+      render();
+    });
+    options.append(button);
+  }
+}
+
 function moveLabel(move) {
   return move.from === 255 ? `${handNames[move.drop - 1]}*${squareName(move.to)}`
     : `${squareName(move.from)}–${squareName(move.to)}${move.promotes ? '+' : ''}`;
@@ -194,7 +294,9 @@ function goToPly(targetPly) {
   while (api.historyCount() > targetPly) api.undo();
   while (api.historyCount() < targetPly) api.redo();
   engineInfo = '';
-  lastMove = targetPly === 0 ? -1 : usiDestination(api.timelineMove(targetPly - 1));
+  const timelineMove = targetPly === 0 ? '' : api.timelineMove(targetPly - 1);
+  lastMove = timelineMove ? usiDestination(timelineMove) : -1;
+  lastMoveFrom = timelineMove ? usiOrigin(timelineMove) : -1;
   selected = -1; selectedDrop = 0;
   render();
 }
@@ -258,7 +360,12 @@ function renderHands() {
       const count = api.hand(color, index);
       const button = document.createElement('button');
       button.className = 'hand-piece' + (selectedDrop === type && api.side() === color ? ' selected' : '');
-      button.textContent = `${handNames[index]} ${count || ''}`;
+      button.setAttribute('aria-label', `${handNames[index]}${count ? `, ${count} in hand` : ''}`);
+      button.append(pieceIcon(type));
+      const countLabel = document.createElement('span');
+      countLabel.className = 'piece-count';
+      countLabel.textContent = count || '';
+      button.append(countLabel);
       button.disabled = color !== api.side() || count === 0 || engineOwnsTurn();
       button.addEventListener('click', () => {
         selected = -1;
@@ -294,6 +401,7 @@ function clickSquare(square, moves) {
 function playMove(move) {
   if (move && api.play(move.index)) {
     lastMove = move.to;
+    lastMoveFrom = move.from === 255 ? -1 : move.from;
     focusedVisualSquare = flipped ? 80 - move.to : move.to;
   }
   selected = -1; selectedDrop = 0; engineInfo = '';
@@ -301,7 +409,7 @@ function playMove(move) {
   maybeStartEngineMove();
 }
 
-function refresh() { selected = -1; selectedDrop = 0; lastMove = -1; render(); }
+function refresh() { selected = -1; selectedDrop = 0; lastMove = -1; lastMoveFrom = -1; render(); }
 document.querySelector('#reset').addEventListener('click', () => { api.reset(); engineInfo = ''; refresh(); maybeStartEngineMove(); });
 document.querySelector('#undo').addEventListener('click', () => { if (api.undo()) { engineInfo = ''; refresh(); } });
 document.querySelector('#redo').addEventListener('click', () => { if (api.redo()) { engineInfo = ''; refresh(); } });
@@ -317,6 +425,10 @@ document.querySelector('#load-sfen').addEventListener('click', () => {
 document.querySelector('#copy-sfen').addEventListener('click', () => copyText(api.getSfen(), 'SFEN'));
 document.querySelector('#copy-usi').addEventListener('click', () => copyText(usiPositionCommand(), 'USI position command'));
 document.querySelector('#flip-board').addEventListener('click', () => { flipped = !flipped; render(); });
+document.querySelector('#piece-style-toggle').addEventListener('change', event => {
+  pieceStyle = event.target.value;
+  render();
+});
 document.querySelector('#engine-nodes').addEventListener('input', () => {
   document.querySelector('#engine-strength').value = 'custom';
   render();
@@ -443,6 +555,7 @@ document.querySelector('#nnue-move').addEventListener('click', async () => {
     if (!api.play(bestMove.index)) throw new Error('chosen NNUE move is no longer legal');
     playedMove = true;
     lastMove = bestMove.to;
+    lastMoveFrom = bestMove.from === 255 ? -1 : bestMove.from;
     engineInfo = `NNUE 1-ply: ${moveLabel(bestMove)} · ${formatScore(bestScore)}`;
   } catch (error) {
     engineInfo = `NNUE move failed: ${error.message}`;
@@ -471,6 +584,7 @@ function createEngineWorker() {
     } else {
       engineInfo = `Engine: ${event.data.move} · depth ${event.data.depth} · ${event.data.nodes} nodes · ${event.data.timeMs} ms · ${formatNps(event.data.nps)} N/s · ${formatScore(event.data.score)}`;
       lastMove = usiDestination(event.data.move);
+      lastMoveFrom = usiOrigin(event.data.move);
       focusedVisualSquare = flipped ? 80 - lastMove : lastMove;
       selected = -1; selectedDrop = 0; render();
     }
@@ -488,6 +602,10 @@ function usiDestination(move) {
   if (!move || move.length < 4) return -1;
   return (move.charCodeAt(3) - 97) * 9 + 9 - Number(move[2]);
 }
+function usiOrigin(move) {
+  if (!move || move[1] === '*') return -1;
+  return (move.charCodeAt(1) - 97) * 9 + 9 - Number(move[0]);
+}
 document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
     event.preventDefault();
@@ -496,10 +614,12 @@ document.addEventListener('keydown', event => {
 });
 api.init();
 engineWorker = createEngineWorker();
+buildPetOptions();
 document.querySelector('#nnue-state').textContent = WebGpuNnue.available()
   ? 'Load a .nnue model to evaluate with WebGPU.'
   : 'WebGPU is not available; engine moves use the built-in evaluator.';
 render();
+maybeStartEngineMove();
 }
 
 main().catch(error => {
