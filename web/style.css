@@ -3,7 +3,7 @@
 body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, #fff8e9, #e8ddca 65%); color: #292019; }
 .app-shell { max-width: 610px; margin: 0 auto; padding: 2.5rem 1rem 3rem; text-align: center; }
 .hero { margin-bottom: 1.25rem; }.eyebrow { margin: 0; color: #9a6c31; font-size: .72rem; font-weight: 750; letter-spacing: .15em; text-transform: uppercase; }
-h1 { margin: .15rem 0 .25rem; font-size: clamp(2rem, 7vw, 3.1rem); letter-spacing: -.06em; }.hero p { margin-left: auto; margin-right: auto; }
+h1 { margin: .15rem 0 .25rem; font-size: clamp(2rem, 7vw, 3.1rem); letter-spacing: -.06em; }.hero p { margin-left: auto; margin-right: auto; }.source-link { margin: 0 0 .35rem; font-size: .82rem; }.source-link a { color: #345c42; font-weight: 700; }
 #status { min-height: 1.5em; margin: 0; font-weight: 650; }.evaluation { margin: .25rem 0 0; color: #6d5b49; font: .86rem ui-monospace, monospace; }
 .game { padding: 1rem; background: #fffaf0a8; border: 1px solid #cdbd9e; border-radius: 18px; box-shadow: 0 14px 38px #6a4c2730; }
 .board { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); width: min(100%, 540px); margin: .5rem auto 1rem; border: 3px solid #51351f; box-shadow: 0 5px 12px #4a301c55; overflow: hidden; }

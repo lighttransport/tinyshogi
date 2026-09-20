@@ -51,7 +51,9 @@ xmake f -m release
 xmake
 ```
 
-Browser demo (requires `emcc` in `PATH`):
+Browser demo: [open the live GitHub Pages demo](https://lighttransport.github.io/tinyshogi/).
+
+To build and run locally (requires `emcc` in `PATH`):
 
 ```sh
 make -C web
