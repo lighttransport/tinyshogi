@@ -26,15 +26,15 @@ Requirements: elan (installs the toolchain in `lean-toolchain`) and clang.
 | Milestone | Scope | Status |
 |---|---|---|
 | T0 | scaffold, vendored MiniC, forked `c2lean.py`, CI, axiom check | **done** |
-| T1 | pieces, positions, SFEN, USI | executable spec matching the C (incl. its tolerances), `Usi.parse_print` proven, fixtures kernel-checked. **todo**: general SFEN round-trip theorem |
+| T1 | pieces, positions, SFEN, USI | **done**: executable spec matching the C (incl. its tolerances). `Sfen.parse_print` (round trip for every well-formed position, including the 512-byte limit, `strtoul` and hand-count rules) and `parse_print_reachable`. `Usi.parse_print` |
 | T2 | attacks, pseudo moves, legality, uchifuzume | **done**: executable spec. `legalMoves_iff` (fuel-free legality incl. the recursive uchifuzume rule), `legalAux_stable` (the recursion budget is adequate), king safety, no king or self capture, forced promotion, drop rules (hand, empty square, dead row, nifu) |
-| T3 | invariants | **done**: `reachable_inv` (shape, no dead pieces), `reachable_kings` (exactly one king per side). **todo**: material conservation, make/unmake round trip |
+| T3 | invariants | **done**: `reachable_inv` (shape, no dead pieces), `reachable_kings` (exactly one king per side), `play_familyCount` / `reachable_material` (each unpromoted family is exactly a full set, so `validate_material` holds). make/unmake round trip: four-way tested (below), **todo** as a proof |
 | T4 | perft, kernel speed | perft 1 kernel-checked (about 10 s). perft 2–5 compiled (`cdiff`, C tests). One fixture per rule is kernel-checked (5–25 s each) |
-| T5 | MiniC/translator extensions | **partial**: enum typedefs (checked by `_Static_assert` in the probe), `_Bool` conversion, `NULL`/pointer equality, `for` scoping, enum case labels, `abs`, the comma operator, `static const` globals (bytes dumped by the probe), fuel monotonicity (`MiniC.Fuel`). 34/72 functions translate (`tools/c2lean_report.py`) |
+| T5 | MiniC/translator extensions | **done for the rules core**: E5 `alloc`, E7 `memcpy`/`memset`, E8 `ctz`. Translator: A-normal form (calls hoisted, short-circuit kept), memory locals, by-value structs, struct results, initialisers, enum typedefs (asserted by the probe), `_Bool`, `NULL`, `abs`, comma, `sizeof`, `static const` and after-init globals (bytes dumped by the probe), `switch` with `break`. Fuel monotonicity (`MiniC.Fuel`). 60/72 functions translate. The remaining 12 are SFEN/USI text I/O (libc `ctype`, `strtok_r`, `snprintf`), `shogi_init` (atomics) and printing |
 | T6 | Lean → C tables | **done**: `src/shogi_tables.h` is generated from `Shogi/Tables.lean`; `*_refine` prove that the bytes clang emits equal the Lean tables; `probes_uncapped` (the 10-entry cap never drops an attacker). perft and NPS unchanged |
 | T7 | helpers, attacks | layer 1 **done**: 17 helper refinements (piece bytes, types, promotion, hand index, squares, zone, `forced_promotion` = `deadRow`), every input. Layer 2 (`square_attacked`, `shogi_piece_attacks_square`): translated and four-way tested; **todo**: symbolic proofs |
-| T8–T10 | generators, make/unmake, legality, repetition | todo (four-way tested at spec level, see T11) |
-| T11 | differential testing | **done**: C (ASan/UBSan) vs spec on SFEN, legal moves, random walks, perft, game results (repetition, perpetual check, declaration). MiniC model vs C vs spec on attacks. python-shogi 1.1.1 with `--oracle` |
+| T8–T10 | generators, make/unmake, legality, repetition | translated (`Shogi/C/Gen.lean`: move generation, king safety, probe make/unmake, `generate_legal_mut_internal` with the uchifuzume recursion, make/unmake with hash and history, repetition, declaration). The MiniC models agree with C and the spec (T11). **todo**: symbolic refinement proofs |
+| T11 | differential testing | **done**: C (ASan/UBSan) vs spec on SFEN, legal moves, random walks, perft, game results (repetition, perpetual check, declaration). The **MiniC model of the C** vs compiled C vs spec on attacks, full legal-move generation, make-move (position and 64-bit Zobrist hash), and make/unmake round trips (both paths). python-shogi 1.1.1 with `--oracle` |
 
 ### Findings
 
@@ -59,6 +59,7 @@ Requirements: elan (installs the toolchain in `lean-toolchain`) and clang.
 | `Shogi/Rules.lean` | attacks, pseudo-legal moves, drops, promotion, legality with uchifuzume, perft |
 | `Shogi/Game.lean`, `Shogi/Declaration.lean` | history, sennichite with perpetual check, declaration, game result |
 | `Shogi/Theorems.lean` | theorems about the rules (T2/T3) |
+| `Shogi/SfenTheorems.lean` | SFEN round trip (T1) |
 | `Shogi/Tables.lean` | attack tables (Lean source of `src/shogi_tables.h`) |
 | `Shogi/Tests.lean`, `Shogi/RuleTests.lean` | kernel-checked fixtures |
 | `Shogi/C/Model.lean` | abstraction: spec position ↦ `ShogiPosition` bytes, MiniC memory |
@@ -75,6 +76,25 @@ The Lean kernel; the MiniC semantics (`MiniC/Semantics.lean`); `tools/c2lean.py`
 and clang's front end; an LP64 little-endian target; the C compiler (proofs do
 not reach machine code). See PLAN.md §6 for the full list, including what is not
 modelled.
+
+tinyshogi's additions to the MiniC semantics (all trusted, all exercised by the
+four-way `cdiff`):
+
+| Ext | Construct | Semantics, and what it does not detect |
+|---|---|---|
+| E5 | `Stmt.alloc` | fresh zero-filled block for an address-taken, array or struct local. The next block number lives in block 0. Blocks are never freed, so use after return and reads of uninitialised locals are **not** UB in the model |
+| E7 | `Stmt.memcpy`, `Stmt.memset` | C semantics on byte ranges; overlapping `memcpy` is UB |
+| E8 | `UnOp.ctz` | lowest set bit; `ctz 0` is UB |
+
+Translator lowerings (validated by `--check`, `cdiff` and the four-way runs):
+calls are hoisted out of expressions into statements, with `&&`, `||` and `?:`
+expanded into `if` so short-circuiting is kept. Postfix `++`/`--` become
+temporaries. By-value struct parameters are copied by the callee on entry.
+Struct results go through a hidden first parameter. Struct assignment and
+initialisation become `memcpy` or per-field stores. `static const` local
+arrays are re-initialised per call (they are read-only). Global table bytes,
+layouts and the enum representation are measured by a probe compiled with the
+same clang.
 
 ## Attribution
 

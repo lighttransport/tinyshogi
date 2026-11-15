@@ -330,6 +330,10 @@ def main():
     ap.add_argument("--plies", type=int, default=120)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--games", type=int, default=200)
+    ap.add_argument("--mini-make", type=int, default=300,
+                    help="moves for the MiniC-model make-move / hash check")
+    ap.add_argument("--mini-legal", type=int, default=30,
+                    help="game positions for the MiniC-model legal-move check")
     ap.add_argument("--mini", type=int, default=40,
                     help="positions for the MiniC-model attack checks (four-way)")
     ap.add_argument("--oracle", action="store_true", help="also compare with python-shogi 1.1.1")
@@ -374,6 +378,47 @@ def main():
             cs = c.batch(cmd_spec, mini)
             bad += compare(cmd_spec + " spec", mini, cs, lean.batch(cmd_spec, mini))
             bad += compare(cmd_mini + " MiniC", mini, cs, lean.batch(cmd_mini, mini))
+        # The MiniC model of the whole C legal-move generator (pins, check
+        # evasion, nifu, dead drops, uchifuzume recursion) on the edge cases
+        # and on positions from random games.
+        legal_mini = list(EDGE)
+        start = b"lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"
+        sfen = start
+        while len(legal_mini) < len(EDGE) + args.mini_legal:
+            moves = c.ask("L", sfen).split()
+            if not moves:
+                sfen = start
+                continue
+            sfen = c.ask("M", sfen + b"|" + rng.choice(moves).encode()).encode()
+            if rng.random() < 0.3:
+                legal_mini.append(sfen)
+        lc = c.batch("L", legal_mini)
+        bad += compare("l MiniC", legal_mini, lc, lean.batch("l", legal_mini))
+        # MiniC model of reset_history + shogi_make_move: same position and the
+        # same 64-bit Zobrist hash as the compiled C, on moves from random games.
+        make_inputs = []
+        sfen = start
+        while len(make_inputs) < args.mini_make:
+            moves = c.ask("L", sfen).split()
+            if not moves:
+                sfen = start
+                continue
+            mv = rng.choice(moves).encode()
+            make_inputs.append(sfen + b"|" + mv)
+            sfen = c.ask("M", sfen + b"|" + mv).encode()
+        make_inputs += [e + b"|" + rng.choice(c.ask("L", e).split()).encode()
+                        for e in EDGE if c.ask("L", e).split()]
+        bad += compare("h MiniC make", make_inputs, c.batch("H", make_inputs),
+                       lean.batch("h", make_inputs))
+        # make_move_undo{,_fast} + unmake_move restore the live state, in the
+        # compiled C and in its MiniC model.
+        for cc, lc_ in (("U", "u"), ("V", "v")):
+            outc = c.batch(cc, make_inputs)
+            bad += compare(lc_ + " MiniC undo", make_inputs, outc, lean.batch(lc_, make_inputs))
+            not_restored = [i for i, o in zip(make_inputs, outc) if o != "RESTORED"]
+            for i in not_restored[:5]:
+                print(f"NOT RESTORED [{cc}] {i!r}")
+            bad += len(not_restored)
         gbad, results = game_tests(rng, c, lean, args.games)
         bad += gbad
         c.close()
@@ -381,6 +426,8 @@ def main():
     print(f"cdiff: {len(inputs)} SFEN inputs ({accepted} accepted), "
           f"{len(legal_inputs)} legal-move positions, {args.walks} walks x {args.plies} plies, "
           f"games {results}, MiniC attack checks on {len((EDGE + gen)[:args.mini])} positions, "
+          f"MiniC legal-move checks on {len(EDGE) + args.mini_legal} positions, "
+          f"MiniC make/hash checks on {args.mini_make}+ moves, "
           f"{bad} mismatches")
     if args.oracle:
         print(f"python-shogi: {ORACLE['checked']} positions compared, "

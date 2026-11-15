@@ -183,6 +183,9 @@ inductive BinOp where
 
 inductive UnOp where
   | neg | bnot | lnot
+  /-- `__builtin_ctz` (tinyshogi extension E8): index of the lowest set bit;
+      UB on 0 (GCC/Clang documentation). -/
+  | ctz
   deriving DecidableEq, Repr
 
 inductive Expr where
@@ -227,6 +230,16 @@ inductive Stmt where
   | brk
   | cont
   | ret (e : Option Expr)
+  /-- tinyshogi extension E5: `id := pointer to a fresh zero-filled block of
+      `size` bytes`. The next block number is kept little-endian in the
+      8 bytes of block 0 (the allocator block); allocating a block that
+      already exists is UB. Blocks are never freed (use after the owning
+      call returns is not detected). -/
+  | alloc (id : Nat) (size : Nat)
+  /-- tinyshogi extension E7: C `memcpy(dst, src, n)`; overlap is UB. -/
+  | memcpy (dst src n : Expr)
+  /-- tinyshogi extension E7: C `memset(dst, c, n)`. -/
+  | memset (dst c n : Expr)
   deriving Repr, Inhabited
 
 structure Func where
@@ -380,8 +393,16 @@ def evalBinInt (op : BinOp) (t : Option IntTy) (va vb : Val) : Res Val :=
   | some t, _, _ => binInt op t va vb
   | _, _, _ => .ub
 
+/-- Index of the lowest set bit of `n > 0` (at most `w` steps). -/
+def ctzNat : Nat → Nat → Nat
+  | 0, _ => 0
+  | w + 1, n => if n % 2 = 1 then 0 else 1 + ctzNat w (n / 2)
+
 def evalUn (op : UnOp) (t : IntTy) (v : Val) : Res Val :=
   match op with
+  | .ctz => do
+    let a ← intOf t v
+    if a = 0 then .ub else pure (.int IntTy.i32 (ctzNat t.width a))
   | .lnot => do let b ← truthy v; pure (boolVal (!b))
   | .neg => do let a ← intOf t v; arith t (-(t.toInt a))
   | .bnot => do let a ← intOf t v; pure (.int t (t.modulus - 1 - a))
@@ -602,6 +623,35 @@ def execStmt (p : Prog) : Nat → State → Stmt → Res (Outcome × State)
     | .ret (some e) => do
       let v ← evalExpr p fuel s e
       pure (.ret (some v), s)
+    | .alloc i size => do
+      let c ← readBytes s.mem 0 0 8
+      let b := decodeLE c
+      guard (b ≠ 0 && (s.mem b).isNone)
+      let m1 ← writeBytes s.mem 0 0 (encodeLE 8 (b + 1))
+      let m2 := m1.upd b (List.replicate size 0)
+      pure (.normal, { s with mem := m2, locals := s.locals.upd i (.ptr b 0) })
+    | .memcpy d src n => do
+      let vd ← evalExpr p fuel s d
+      let vs ← evalExpr p fuel s src
+      let vn ← evalExpr p fuel s n
+      guard (!s.ro)
+      match vd, vs, vn with
+      | .ptr bd od, .ptr bs os, .int _ k => do
+        guard (bd ≠ bs || od + k ≤ os || os + k ≤ od)
+        let bytes ← readBytes s.mem bs os k
+        let m ← writeBytes s.mem bd od bytes
+        pure (.normal, { s with mem := m })
+      | _, _, _ => .ub
+    | .memset d c n => do
+      let vd ← evalExpr p fuel s d
+      let vc ← evalExpr p fuel s c
+      let vn ← evalExpr p fuel s n
+      guard (!s.ro)
+      match vd, vc, vn with
+      | .ptr bd od, .int _ x, .int _ k => do
+        let m ← writeBytes s.mem bd od (List.replicate k (x % 256).toUInt8)
+        pure (.normal, { s with mem := m })
+      | _, _, _ => .ub
 end
 
 /-- Call function `f` with argument values `args` in memory `m`. -/

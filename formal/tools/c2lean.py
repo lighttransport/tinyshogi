@@ -57,6 +57,39 @@ FUNCTIONS = [
     "shogi_piece_attacks_square",
     "find_king",
     "same_king_ray",
+    "shogi_is_in_check",
+    # T8: move generation.
+    "add_move",
+    "add_normal_move",
+    "add_step",
+    "add_slide",
+    "add_pseudo_drops",
+    "generate_pseudo_for_color",
+    "generate_pseudo",
+    "shogi_generate_pseudo",
+    "shogi_generate_pseudo_for_color",
+    # T9: legality filter (probe make/unmake, pins, uchifuzume).
+    "king_safety_prepare",
+    "same_move",
+    "make_legal_probe",
+    "unmake_legal_probe",
+    "generate_legal_mut_internal",
+    "shogi_generate_legal_mut",
+    # T9: make / unmake (hash and history bookkeeping).
+    "position_hash",
+    "reset_history",
+    "shogi_make_move_internal",
+    "shogi_make_move",
+    "shogi_make_move_undo_internal",
+    "shogi_make_move_undo",
+    "shogi_make_move_undo_fast",
+    "shogi_unmake_move",
+    "shogi_search_null_move",
+    # T10: material, declaration, repetition.
+    "validate_material",
+    "declaration_points",
+    "shogi_is_declaration_win",
+    "shogi_repetition_result",
 ]
 
 # Layout numbers exported as Lean constants (for building MiniC memories
@@ -67,6 +100,13 @@ LAYOUT_EXPORTS = [
     ("off_hand", "offsetof(ShogiPosition, hand)"),
     ("off_side", "offsetof(ShogiPosition, side)"),
     ("off_king_square", "offsetof(ShogiPosition, king_square)"),
+    ("off_move_number", "offsetof(ShogiPosition, move_number)"),
+    ("off_hash", "offsetof(ShogiPosition, hash)"),
+    ("off_history_length", "offsetof(ShogiPosition, history_length)"),
+    ("off_history", "offsetof(ShogiPosition, history)"),
+    ("off_history_mover", "offsetof(ShogiPosition, history_mover)"),
+    ("off_history_check", "offsetof(ShogiPosition, history_check)"),
+    ("sizeof_ShogiUndo", "sizeof(ShogiUndo)"),
 ]
 
 # File-scope `static const` objects the verified functions read. Each gets
@@ -78,7 +118,15 @@ GLOBALS = [
     "attack_rays",
     "attack_ray_length",
     "attack_ray_masks",
+    # Filled once by shogi_init() and only read afterwards ("after-init"
+    # globals): dumped by the probe after calling shogi_init(). The
+    # translator rejects every store rooted at a global.
+    "zobrist_board",
+    "zobrist_hand",
+    "zobrist_side",
+    "fast_check_bookkeeping",
 ]
+AFTER_INIT = {"zobrist_board", "zobrist_hand", "zobrist_side", "fast_check_bookkeeping"}
 GLOBAL_BLOCK = 8192
 
 # String literals live in one read-only block at this index.
@@ -220,14 +268,58 @@ def scalar_ty(t, node=None):
     return f"(.int {lean_intty(w, s)})"
 
 
+# Record field lists by type name (typedef or tag): [(field, type)].
+RECORD_FIELDS = {}
+# Functions returning a struct: translated with a hidden first parameter
+# (pointer to the caller's result object), like the usual `sret` ABI.
+SRET_FUNCS = set()
+
+U64 = "⟨64, false⟩"
+I32 = "⟨32, true⟩"
+
+
+def strip_implicit(n):
+    while n["kind"] in ("ParenExpr",) or (n["kind"] == "ImplicitCastExpr"
+                                           and n["castKind"] in ("NoOp", "LValueToRValue")):
+        n = n["inner"][0]
+    return n
+
+
+def is_array(t):
+    return "[" in strip_quals(t)
+
+
+def walk_nodes(n):
+    if isinstance(n, dict):
+        yield n
+        for v in n.get("inner", []) or []:
+            yield from walk_nodes(v)
+        for key in ("cond", "body"):
+            if isinstance(n.get(key), dict):
+                yield from walk_nodes(n[key])
+
+
 class FnTranslator:
+    """Translates one function. Expressions are put in A-normal form: every
+    call becomes a statement that assigns a fresh local, inserted before the
+    statement that needs it (inside the conditional branch for `&&`, `||`
+    and `?:`), so C's evaluation order and short-circuiting are kept and no
+    call is ever evaluated inside an expression. Locals that are arrays,
+    structs, or have their address taken live in memory blocks (`.alloc`).
+    By-value struct parameters are copied by the callee on entry; struct
+    results are written through a hidden first parameter."""
+
     def __init__(self, ctx, fn, fids):
         self.ctx = ctx
         self.fn = fn
         self.fids = fids
-        self.vars = {}  # decl name+id -> int
+        self.vars = {}
         self.names = []
-        self.loops = []  # hoisted loop statements (name, lean term)
+        self.loops = []
+        self.pre = []
+        self.ntmp = 0
+        self.mem = set()
+        self.sret = None
 
     def var_id(self, decl):
         key = decl.get("id") or decl["name"]
@@ -236,12 +328,41 @@ class FnTranslator:
             self.names.append(decl["name"])
         return self.vars[key]
 
+    def fresh(self, hint="t"):
+        self.ntmp += 1
+        return self.var_id({"id": f"__{hint}{self.ntmp}", "name": f"__{hint}{self.ntmp}"})
+
     def ref_var(self, ref, node):
-        # referencedDecl has the declaration id; match by id
         key = ref.get("id")
         if key in self.vars:
             return self.vars[key]
         die(f"reference to unknown local '{ref.get('name')}'", node)
+
+    def emit(self, st):
+        if not self.pre:
+            die("internal: no statement context")
+        self.pre[-1].append(st)
+
+    def with_pre(self, f):
+        self.pre.append([])
+        out = f()
+        pre = self.pre.pop()
+        return pre, out
+
+    def sizeof(self, t, node=None):
+        return self.ctx.layout.sizeof(strip_quals(t), node)
+
+    # ---- pre-scan --------------------------------------------------------
+    def prescan(self):
+        for n in walk_nodes(self.fn):
+            if n.get("kind") in ("VarDecl", "ParmVarDecl") and n.get("type"):
+                t = ctype(n)
+                if is_array(t) or is_struct(t):
+                    self.mem.add(n["id"])
+            if n.get("kind") == "UnaryOperator" and n.get("opcode") == "&":
+                x = strip_implicit(n["inner"][0])
+                if x["kind"] == "DeclRefExpr" and x["referencedDecl"]["kind"] in ("VarDecl", "ParmVarDecl"):
+                    self.mem.add(x["referencedDecl"]["id"])
 
     # ---- lvalues -------------------------------------------------------
     def lvalue(self, n):
@@ -254,15 +375,15 @@ class FnTranslator:
                 name = ref.get("name")
                 if name not in GLOBALS:
                     die(f"reference to global '{name}' outside GLOBALS", n)
-                if "const" not in ctype(n) and "const" not in n.get("type", {}).get("qualType", ""):
+                if name not in AFTER_INIT and "const" not in n.get("type", {}).get("qualType", ""):
                     die(f"global '{name}' is not const", n)
                 self.ctx.used_globals.add(name)
                 return ("mem", f"(.const (.ptr {GLOBAL_BLOCK + GLOBALS.index(name)} 0))", ctype(n))
             if ref["kind"] in ("VarDecl", "ParmVarDecl"):
-                if is_struct(ctype(n)):
-                    # lowered to a pointer to the caller's object
-                    return ("mem", f"(.var {self.ref_var(ref, n)})", ctype(n))
-                return ("var", self.ref_var(ref, n))
+                vid = self.ref_var(ref, n)
+                if ref["id"] in self.mem:
+                    return ("mem", f"(.var {vid})", ctype(n))
+                return ("var", vid)
             die(f"unsupported lvalue ref kind {ref['kind']}", n)
         if k == "MemberExpr":
             base = n["inner"][0]
@@ -274,14 +395,21 @@ class FnTranslator:
                 die("member of non-memory struct", n)
             return ("mem", f"(.field {lv[1]} {off})", ctype(n))
         if k == "StringLiteral":
-            # `"data:"[i]` / decayed literal used as an lvalue: address it
             return ("mem", self.string_literal(n), ctype(n))
         if k == "ArraySubscriptExpr":
             base, idx = n["inner"]
-            elem = self.ctx.layout.sizeof(ctype(n), n)
-            return ("mem", f"(.index {self.rvalue(base)} {self.rvalue(idx)} {elem})", ctype(n))
+            elem = self.sizeof(ctype(n), n)
+            b = self.rvalue(base)
+            i = self.rvalue(idx)
+            return ("mem", f"(.index {b} {i} {elem})", ctype(n))
         if k == "UnaryOperator" and n["opcode"] == "*":
             return ("mem", self.rvalue(n["inner"][0]), ctype(n))
+        if k == "CompoundLiteralExpr":
+            t = ctype(n)
+            tmp = self.fresh("lit")
+            self.emit(f"(.alloc {tmp} {self.sizeof(t, n)})")
+            self.init_mem(f"(.var {tmp})", t, n["inner"][0])
+            return ("mem", f"(.var {tmp})", t)
         die(f"unsupported lvalue {k}", n)
 
     def member_offset(self, n):
@@ -292,6 +420,41 @@ class FnTranslator:
                 die("arrow on non-pointer", n)
             bt = strip_quals(bt[:-1])
         return self.ctx.layout.offsetof(bt, n["name"], n)
+
+    def addr_of_struct(self, n):
+        """Address of a struct-valued expression (lvalue or compound literal)."""
+        x = strip_implicit(n)
+        lv = self.lvalue(x)
+        if lv[0] != "mem":
+            die("struct not in memory", n)
+        return lv[1]
+
+    # ---- initialisers ----------------------------------------------------
+    def init_mem(self, addr, t, init):
+        """Store an initialiser into zero-filled memory at `addr`."""
+        t = strip_quals(t)
+        k = init["kind"]
+        if k == "ImplicitValueInitExpr":
+            return
+        if k == "InitListExpr":
+            subs = init.get("inner", [])
+            if is_array(t):
+                for i, sub in enumerate(subs):
+                    st = ctype(sub)
+                    a = f"(.index {addr} (.const (.int {U64} {i})) {self.sizeof(st, sub)})"
+                    self.init_mem(a, st, sub)
+                return
+            fields = RECORD_FIELDS.get(t)
+            if fields is None:
+                die(f"initialiser for unknown record {t}", init)
+            for (fname, ft), sub in zip(fields, subs):
+                off = self.ctx.layout.offsetof(t, fname, init)
+                self.init_mem(f"(.field {addr} {off})", ft, sub)
+            return
+        if is_struct(t):
+            self.emit(f"(.memcpy {addr} {self.addr_of_struct(init)} (.const (.int {U64} {self.sizeof(t, init)})))")
+            return
+        self.emit(f"(.store {scalar_ty(t, init)} {addr} {self.rvalue(init)})")
 
     # ---- rvalues -------------------------------------------------------
     def rvalue(self, n):
@@ -314,10 +477,15 @@ class FnTranslator:
                 w, s = int_ty(ctype(n), n)
                 return f"(.const (.int {lean_intty(w, s)} {v % (1 << w)}))"
             die("DeclRefExpr used as rvalue without LValueToRValue", n)
+        if k == "UnaryExprOrTypeTraitExpr" and n.get("name") == "sizeof":
+            t = n.get("argType", {}).get("qualType") or ctype(n["inner"][0])
+            return f"(.const (.int {U64} {self.sizeof(t, n)}))"
         if k in ("ImplicitCastExpr", "CStyleCastExpr"):
             ck = n["castKind"]
             inner = n["inner"][0]
             if ck == "LValueToRValue":
+                if is_struct(ctype(n)):
+                    die("struct value used in an expression", n)
                 lv = self.lvalue(inner)
                 if lv[0] == "var":
                     return f"(.var {lv[1]})"
@@ -328,7 +496,6 @@ class FnTranslator:
             if ck in ("NoOp", "BitCast"):
                 return self.rvalue(inner)
             if ck == "IntegralToBoolean":
-                # C11 6.3.1.2: the result is 0 if the value compares equal to 0, else 1
                 w, s_ = int_ty(ctype(inner), n)
                 return (f"(.cast {lean_intty(8, False)} (.bin .ne (some {lean_intty(w, s_)}) "
                         f"{self.rvalue(inner)} (.const (.int {lean_intty(w, s_)} 0))))")
@@ -347,10 +514,22 @@ class FnTranslator:
         if k == "BinaryOperator":
             op = n["opcode"]
             a, b = n["inner"]
-            if op == "&&":
-                return f"(.land {self.rvalue(a)} {self.rvalue(b)})"
-            if op == "||":
-                return f"(.lor {self.rvalue(a)} {self.rvalue(b)})"
+            if op in ("&&", "||"):
+                va = self.rvalue(a)
+                pre_b, vb = self.with_pre(lambda: self.rvalue(b))
+                form = "land" if op == "&&" else "lor"
+                if not pre_b:
+                    return f"(.{form} {va} {vb})"
+                # `b` contains calls: evaluate it only on the branch that needs it
+                tmp = self.fresh()
+                one = f"(.const (.int {I32} 1))"
+                zero = f"(.const (.int {I32} 0))"
+                rhs = self.seq(pre_b + [f"(.set {tmp} (.{form} {zero if op == '||' else one} {vb}))"])
+                if op == "&&":
+                    self.emit(f"(.ite {va} {rhs} (.set {tmp} {zero}))")
+                else:
+                    self.emit(f"(.ite {va} (.set {tmp} {one}) {rhs})")
+                return f"(.var {tmp})"
             ops = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod",
                    "<<": "shl", ">>": "shr", "&": "band", "|": "bor", "^": "bxor",
                    "<": "lt", "<=": "le", ">": "gt", ">=": "ge", "==": "eq", "!=": "ne"}
@@ -381,18 +560,44 @@ class FnTranslator:
             if op == "&":
                 lv = self.lvalue(a)
                 if lv[0] != "mem":
-                    die("address of a local", n)
+                    die("address of a register local", n)
                 return lv[1]
+            if op in ("++", "--"):
+                lv = self.lvalue(a)
+                cur = f"(.var {lv[1]})" if lv[0] == "var" else f"(.load {scalar_ty(lv[2], n)} {lv[1]})"
+                old = self.fresh()
+                self.emit(f"(.set {old} {cur})")
+                self.emit(self.incdec(lv, f"(.var {old})", n))
+                if n.get("isPostfix"):
+                    return f"(.var {old})"
+                new = self.fresh()
+                cur2 = f"(.var {lv[1]})" if lv[0] == "var" else f"(.load {scalar_ty(lv[2], n)} {lv[1]})"
+                self.emit(f"(.set {new} {cur2})")
+                return f"(.var {new})"
             die(f"unsupported unary operator {op} in expression", n)
         if k == "ConditionalOperator":
             c, a, b = n["inner"]
-            return f"(.cond {self.rvalue(c)} {self.rvalue(a)} {self.rvalue(b)})"
+            vc = self.rvalue(c)
+            pa, va = self.with_pre(lambda: self.rvalue(a))
+            pb, vb = self.with_pre(lambda: self.rvalue(b))
+            if not pa and not pb:
+                return f"(.cond {vc} {va} {vb})"
+            tmp = self.fresh()
+            self.emit(f"(.ite {vc} {self.seq(pa + [f'(.set {tmp} {va})'])} "
+                      f"{self.seq(pb + [f'(.set {tmp} {vb})'])})")
+            return f"(.var {tmp})"
         if k == "CallExpr":
             builtin = self.builtin_call(n)
             if builtin is not None:
                 return builtin
-            fid, args = self.call_parts(n)
-            return f"(.call {fid} [{', '.join(args)}])"
+            name, fid, args = self.call_parts(n)
+            if name in SRET_FUNCS:
+                die("struct-returning call used as a value", n)
+            if strip_quals(ctype(n)) == "void":
+                die("void call used as a value", n)
+            tmp = self.fresh()
+            self.emit(f"(.call (some {tmp}) {fid} [{', '.join(args)}])")
+            return f"(.var {tmp})"
         if k in ("MemberExpr", "ArraySubscriptExpr"):
             lv = self.lvalue(n)
             if lv[0] != "mem":
@@ -404,38 +609,50 @@ class FnTranslator:
             die("string literal used as a value", n)
         die(f"unsupported expression {k}", n)
 
+    def incdec(self, lv, cur, n):
+        w, s = int_ty(ctype(n), n)
+        pw, ps = (32, True) if w < 32 else (w, s)
+        op = "add" if n["opcode"] == "++" else "sub"
+        val = (f"(.cast {lean_intty(w, s)} (.bin .{op} (some {lean_intty(pw, ps)}) "
+               f"(.cast {lean_intty(pw, ps)} {cur}) (.const (.int {lean_intty(pw, ps)} 1))))")
+        return self.assign(lv, val, n)
+
     def string_literal(self, n):
         data = n["value"].encode("utf-8")
         off = self.ctx.literal(data)
         return f"(.const (.ptr {LIT_BLOCK} {off}))"
 
-    def builtin_call(self, n):
-        """Maps the C library calls the verified core uses onto MiniC forms."""
+    def callee_name(self, n):
         callee = n["inner"][0]
         while callee["kind"] in ("ImplicitCastExpr", "ParenExpr"):
             callee = callee["inner"][0]
         if callee["kind"] != "DeclRefExpr":
             return None
-        name = callee["referencedDecl"].get("name")
-        args = [self.rvalue(x) for x in n["inner"][1:]]
-        if name in ("memcmp", "__builtin_memcmp", "tg3__memcmp"):
-            if len(args) != 3:
-                die("memcmp arity", n)
+        return callee["referencedDecl"].get("name")
+
+    def builtin_call(self, n):
+        """C library calls and builtins used as values."""
+        name = self.callee_name(n)
+        if name is None:
+            return None
+        if name in ("memcmp", "__builtin_memcmp"):
+            args = [self.rvalue(x) for x in n["inner"][1:]]
             return f"(.memcmp {args[0]} {args[1]} {args[2]})"
-        if name == "abs":
-            # C11 7.22.6.1; abs(INT_MIN) is UB, as is the negation below
-            if len(args) != 1:
-                die("abs arity", n)
-            i32 = lean_intty(32, True)
-            return (f"(.cond (.bin .lt (some {i32}) {args[0]} (.const (.int {i32} 0))) "
-                    f"(.un .neg {i32} {args[0]}) {args[0]})")
-        if name in ("strlen", "__builtin_strlen", "tg3__strlen"):
-            if len(args) != 1:
-                die("strlen arity", n)
+        if name in ("strlen", "__builtin_strlen"):
+            args = [self.rvalue(x) for x in n["inner"][1:]]
             return f"(.strlen {args[0]})"
+        if name == "abs":
+            (x,) = [self.rvalue(x) for x in n["inner"][1:]]
+            return (f"(.cond (.bin .lt (some {I32}) {x} (.const (.int {I32} 0))) "
+                    f"(.un .neg {I32} {x}) {x})")
+        if name == "__builtin_ctz":
+            (x,) = [self.rvalue(x) for x in n["inner"][1:]]
+            return f"(.un .ctz ⟨32, false⟩ {x})"
+        if name in ("memset", "memcpy"):
+            die(f"{name} used as a value", n)
         return None
 
-    def call_parts(self, n):
+    def call_parts(self, n, sret_ptr=None):
         callee = n["inner"][0]
         while callee["kind"] in ("ImplicitCastExpr", "ParenExpr"):
             callee = callee["inner"][0]
@@ -444,15 +661,31 @@ class FnTranslator:
         name = callee["referencedDecl"]["name"]
         if name not in self.fids:
             die(f"call to untranslated function {name}", n)
-        return self.fids[name], [self.rvalue(x) for x in n["inner"][1:]]
+        args = []
+        for x in n["inner"][1:]:
+            if is_struct(ctype(x)):
+                args.append(self.addr_of_struct(x))   # callee copies on entry
+            else:
+                args.append(self.rvalue(x))
+        if name in SRET_FUNCS:
+            if sret_ptr is None:
+                die("struct-returning call without destination", n)
+            args = [sret_ptr] + args
+        return name, self.fids[name], args
 
     # ---- statements ----------------------------------------------------
     def assign(self, lv, rhs_lean, n):
+        if lv[0] == "mem" and "(.const (.ptr " in lv[1]:
+            die("store into a global or string literal", n)
         if lv[0] == "var":
-            return f"(.set {lv[0+1]} {rhs_lean})"
+            return f"(.set {lv[1]} {rhs_lean})"
         return f"(.store {scalar_ty(lv[2], n)} {lv[1]} {rhs_lean})"
 
     def stmt(self, n):
+        pre, body = self.with_pre(lambda: self.stmt_core(n))
+        return self.seq(pre + [body])
+
+    def stmt_core(self, n):
         if not n:
             return ".skip"
         k = n["kind"]
@@ -461,19 +694,18 @@ class FnTranslator:
         if k == "NullStmt":
             return ".skip"
         if k == "DeclStmt":
-            out = []
             for d in n["inner"]:
-                if d["kind"] != "VarDecl":
-                    die("unsupported declaration", d)
-                if d.get("storageClass") == "static":
-                    die("static local", d)
-                vid = self.var_id(d)
-                if "inner" in d:
-                    out.append(f"(.set {vid} {self.rvalue(d['inner'][0])})")
-            return self.seq(out)
+                self.decl(d)
+            return ".skip"
         if k == "ReturnStmt":
             if "inner" in n:
-                return f"(.ret (some {self.rvalue(n['inner'][0])}))"
+                e = n["inner"][0]
+                if self.sret is not None:
+                    size = self.sizeof(ctype(e), n)
+                    self.emit(f"(.memcpy (.var {self.sret}) {self.addr_of_struct(e)} "
+                              f"(.const (.int {U64} {size})))")
+                    return "(.ret none)"
+                return f"(.ret (some {self.rvalue(e)}))"
             return "(.ret none)"
         if k == "BreakStmt":
             return ".brk"
@@ -487,58 +719,94 @@ class FnTranslator:
             return f"(.ite {c} {a} {b})"
         if k == "WhileStmt":
             c, body = n["inner"]
-            return self.hoist(f"(.loop (.ite {self.rvalue(c)} {self.stmt(body)} .brk) .skip)")
+            pc, vc = self.with_pre(lambda: self.rvalue(c))
+            return self.hoist(f"(.loop {self.seq(pc + [f'(.ite {vc} {self.stmt(body)} .brk)'])} .skip)")
         if k == "ForStmt":
             init, condvar, cond, inc, body = n["inner"]
             if condvar:
                 die("for with condition variable", n)
-            init_s = self.stmt(init) if init else ".skip"   # declares the loop variables
-            c = self.rvalue(cond) if cond else "(.const (.int ⟨32, true⟩ 1))"
-            return self.seq([init_s,
-                             self.hoist(f"(.loop (.ite {c} {self.stmt(body)} .brk) {self.stmt(inc) if inc else '.skip'})")])
+            init_s = self.stmt(init) if init else ".skip"
+            if cond:
+                pc, vc = self.with_pre(lambda: self.rvalue(cond))
+            else:
+                pc, vc = [], "(.const (.int ⟨32, true⟩ 1))"
+            body_s = self.stmt(body)
+            inc_s = self.stmt(inc) if inc else ".skip"
+            return self.seq([init_s, self.hoist(
+                f"(.loop {self.seq(pc + [f'(.ite {vc} {body_s} .brk)'])} {inc_s})")])
         if k == "SwitchStmt":
             return self.switch(n)
         if k == "BinaryOperator" and n["opcode"] == ",":
-            # comma operator in statement position (e.g. `r += dr, c += dc`)
             return self.seq([self.stmt(x) for x in n["inner"]])
         if k == "BinaryOperator" and n["opcode"] == "=":
             lhs, rhs = n["inner"]
-            lv = self.lvalue(lhs)
+            if is_struct(ctype(lhs)):
+                dst = self.lvalue(lhs)[1]
+                src = self.addr_of_struct(rhs)
+                size = self.sizeof(ctype(lhs), n)
+                return f"(.memcpy {dst} {src} (.const (.int {U64} {size})))"
             r = rhs
             while r["kind"] == "ParenExpr" or (r["kind"] == "ImplicitCastExpr" and r["castKind"] == "NoOp"):
                 r = r["inner"][0]
-            if r["kind"] == "CallExpr" and lv[0] == "var" and ctype(r) == ctype(lhs):
-                fid, args = self.call_parts(r)
-                return f"(.call (some {lv[1]}) {fid} [{', '.join(args)}])"
-            return self.assign(lv, self.rvalue(rhs), n)
+            val = self.rvalue(rhs)
+            lv = self.lvalue(lhs)
+            return self.assign(lv, val, n)
         if k == "CompoundAssignOperator":
             lhs, rhs = n["inner"]
-            lv = self.lvalue(lhs)
             ops = {"+=": "add", "-=": "sub", "*=": "mul", "|=": "bor", "&=": "band",
                    "^=": "bxor", "<<=": "shl", ">>=": "shr"}
             op = ops.get(n["opcode"]) or die(f"unsupported {n['opcode']}", n)
             ct = int_ty(ctype(n["computeResultType"]), n)
             lt = int_ty(ctype(lhs), n)
+            rv = self.rvalue(rhs)
+            lv = self.lvalue(lhs)
             cur = f"(.var {lv[1]})" if lv[0] == "var" else f"(.load {scalar_ty(lv[2], n)} {lv[1]})"
-            rhs_c = self.rvalue(rhs) if op in ("shl", "shr") else f"(.cast {lean_intty(*ct)} {self.rvalue(rhs)})"
+            rhs_c = rv if op in ("shl", "shr") else f"(.cast {lean_intty(*ct)} {rv})"
             val = f"(.cast {lean_intty(*lt)} (.bin .{op} (some {lean_intty(*ct)}) (.cast {lean_intty(*ct)} {cur}) {rhs_c}))"
             return self.assign(lv, val, n)
         if k == "UnaryOperator" and n["opcode"] in ("++", "--"):
             lv = self.lvalue(n["inner"][0])
-            w, s = int_ty(ctype(n), n)
-            # integer promotion: types narrower than int are promoted to int
-            pw, ps = (32, True) if w < 32 else (w, s)
             cur = f"(.var {lv[1]})" if lv[0] == "var" else f"(.load {scalar_ty(lv[2], n)} {lv[1]})"
-            op = "add" if n["opcode"] == "++" else "sub"
-            val = (f"(.cast {lean_intty(w, s)} (.bin .{op} (some {lean_intty(pw, ps)}) "
-                   f"(.cast {lean_intty(pw, ps)} {cur}) (.const (.int {lean_intty(pw, ps)} 1))))")
-            return self.assign(lv, val, n)
+            return self.incdec(lv, cur, n)
         if k == "CallExpr":
-            fid, args = self.call_parts(n)
+            name = self.callee_name(n)
+            if name in ("memset", "memcpy"):
+                a = [self.rvalue(x) for x in n["inner"][1:]]
+                if a[0].startswith("(.const (.ptr "):
+                    die(f"{name} into a global or string literal", n)
+                return f"(.{name} {a[0]} {a[1]} {a[2]})"
+            if self.builtin_call(n) is not None:
+                return ".skip"
+            _, fid, args = self.call_parts(n)
             return f"(.call none {fid} [{', '.join(args)}])"
         if k in ("CStyleCastExpr",) and n["castKind"] == "ToVoid":
             return ".skip"
         die(f"unsupported statement {k}", n)
+
+    def decl(self, d):
+        if d["kind"] != "VarDecl":
+            die("unsupported declaration", d)
+        t = ctype(d)
+        if d.get("storageClass") == "static":
+            # a `static const` local is only read: an initialised copy per call
+            # has the same behaviour
+            if "const" not in d.get("type", {}).get("qualType", "") or not is_array(t):
+                die("static local", d)
+        vid = self.var_id(d)
+        init = d["inner"][0] if "inner" in d else None
+        if d["id"] in self.mem:
+            self.emit(f"(.alloc {vid} {self.sizeof(t, d)})")
+            if init is None:
+                return
+            ri = strip_implicit(init)
+            if ri["kind"] == "CallExpr" and self.callee_name(ri) in SRET_FUNCS:
+                _, fid, args = self.call_parts(ri, sret_ptr=f"(.var {vid})")
+                self.emit(f"(.call none {fid} [{', '.join(args)}])")
+                return
+            self.init_mem(f"(.var {vid})", t, init)
+            return
+        if init is not None:
+            self.emit(f"(.set {vid} {self.rvalue(init)})")
 
     def hoist(self, term):
         """Loops become named definitions so proofs can treat them opaquely."""
@@ -548,8 +816,6 @@ class FnTranslator:
 
     @staticmethod
     def terminates(node):
-        """True if control never falls out of `node` (last statement returns
-        or breaks)."""
         while node is not None:
             k = node["kind"]
             if k in ("ReturnStmt", "BreakStmt"):
@@ -562,15 +828,12 @@ class FnTranslator:
         return False
 
     def switch(self, n):
-        """`switch` with grouped case labels; supports fallthrough and
-        `default`. Every case must terminate (return/break) or fall through."""
-        if "cond" in n:
-            cond, body = n["cond"], n["body"]
-        else:
-            cond, body = n["inner"][0], n["inner"][1]
+        """`switch` with grouped case labels; supports fallthrough, `default`,
+        and statements that follow a case label as siblings (e.g. `break`)."""
+        cond, body = n["inner"][0], n["inner"][1]
         sel = self.rvalue(cond)
         st = lean_intty(*int_ty(ctype(cond), n))
-        groups = []  # (label or None, [statements])
+        groups = []  # [labels, stmts]
 
         def absorb(node):
             labels = []
@@ -580,43 +843,67 @@ class FnTranslator:
                     labels.append(None)
                     rest = subs
                 else:
-                    if not subs:
-                        die("case label without value", node)
                     labels.append(const_int(subs[0]))
                     rest = subs[1:]
-                if (len(rest) == 1 and rest[0]["kind"] in ("CaseStmt", "DefaultStmt")):
+                if len(rest) == 1 and rest[0]["kind"] in ("CaseStmt", "DefaultStmt"):
                     node = rest[0]
                     continue
-                return labels, rest
+                return labels, list(rest)
 
         for c in body.get("inner", []):
-            if c["kind"] not in ("CaseStmt", "DefaultStmt"):
-                die(f"unexpected {c['kind']} inside switch", c)
-            labels, stmts = absorb(c)
-            for lab in labels:
-                groups.append((lab, stmts))
+            if c["kind"] in ("CaseStmt", "DefaultStmt"):
+                labels, stmts = absorb(c)
+                groups.append([labels, stmts])
+            elif groups:
+                groups[-1][1].append(c)
+            else:
+                die(f"statement before the first case label", c)
         if not groups:
             return ".skip"
-        bodies = [self.seq([self.stmt(x) for x in stmts] or [".skip"]) for _, stmts in groups]
+        # break inside a case leaves the switch: translate each group body as a
+        # one-shot loop so `.brk` exits it (and `continue` is rejected).
+        bodies = []
+        for _, stmts in groups:
+            for x in stmts:
+                for y in walk_nodes(x):
+                    if y.get("kind") == "ContinueStmt":
+                        die("continue inside switch", y)
+            bodies.append(self.seq([self.stmt(x) for x in stmts] or [".skip"]))
         fall = [None] * len(groups)
         nxt = ".skip"
         for idx in range(len(groups) - 1, -1, -1):
-            _, stmts = groups[idx]
+            stmts = groups[idx][1]
             term = bool(stmts) and self.terminates(stmts[-1])
             fall[idx] = bodies[idx] if term else self.seq([bodies[idx], nxt])
             nxt = fall[idx]
         default = ".skip"
-        for idx, (label, _) in enumerate(groups):
-            if label is None:
+        for idx, (labels, _) in enumerate(groups):
+            if None in labels:
                 default = fall[idx]
         chain = default
         for idx in range(len(groups) - 1, -1, -1):
-            label, _ = groups[idx]
-            if label is None:
-                continue
-            chain = (f"(.ite (.bin .eq (some {st}) {sel} (.const (.int {st} {label}))) "
-                     f"{fall[idx]} {chain})")
+            for label in reversed([l for l in groups[idx][0] if l is not None]):
+                chain = (f"(.ite (.bin .eq (some {st}) {sel} (.const (.int {st} {label}))) "
+                         f"{fall[idx]} {chain})")
+        # `break` statements in the chain exit this loop (one iteration)
+        if any(y.get("kind") == "BreakStmt" for g in groups for x in g[1] for y in walk_nodes(x)
+               if not self._inside_loop(x, y)):
+            return f"(.loop (.seq {chain} .brk) .skip)"
         return chain
+
+    @staticmethod
+    def _inside_loop(root, target):
+        """True if `target` lies inside a loop nested in `root`."""
+        def go(n, in_loop):
+            if n is target:
+                return in_loop
+            for v in n.get("inner", []) or []:
+                if isinstance(v, dict):
+                    r = go(v, in_loop or n.get("kind") in ("ForStmt", "WhileStmt", "DoStmt", "SwitchStmt"))
+                    if r is not None:
+                        return r
+            return None
+        return bool(go(root, False))
 
     def seq(self, items):
         items = [x for x in items if x != ".skip"]
@@ -628,11 +915,29 @@ class FnTranslator:
         return out
 
     def translate(self):
+        self.prescan()
         params = [x for x in self.fn["inner"] if x["kind"] == "ParmVarDecl"]
-        pids = [self.var_id(p) for p in params]
+        pids = []
+        if self.fn["name"] in SRET_FUNCS:
+            self.sret = self.fresh("sret")
+            pids.append(self.sret)
+        pids += [self.var_id(p) for p in params]
         body = [x for x in self.fn["inner"] if x["kind"] == "CompoundStmt"][0]
+        prologue = []
+        for p in params:
+            if p["id"] in self.mem:
+                vid = self.vars[p["id"]]
+                t = ctype(p)
+                incoming = self.fresh("in")
+                prologue.append(f"(.set {incoming} (.var {vid}))")
+                prologue.append(f"(.alloc {vid} {self.sizeof(t, p)})")
+                if is_struct(t):
+                    prologue.append(f"(.memcpy (.var {vid}) (.var {incoming}) "
+                                    f"(.const (.int {U64} {self.sizeof(t, p)})))")
+                else:
+                    prologue.append(f"(.store {scalar_ty(t, p)} (.var {vid}) (.var {incoming}))")
         b = self.stmt(body)
-        return pids, b
+        return pids, self.seq(prologue + [b])
 
 
 class Layout:
@@ -667,7 +972,7 @@ class Layout:
                 for t in sorted(ENUM_CHECKS):
                     f.write(f'_Static_assert(sizeof({t}) == 4 && ({t})-1 > 0, '
                             f'"{t} must be a 32-bit unsigned enum");\n')
-                f.write("int main(void) {\n")
+                f.write("int main(void) {\n    shogi_init();\n")
                 for q in self.queries:
                     f.write(f'    printf("%zu\\n", (size_t){q});\n')
                 for g in self.globals:
@@ -713,7 +1018,25 @@ def collect_enums(ast):
 
 
 def collect_records(ast):
-    """Names of struct/union types (tags and typedefs of records)."""
+    """Names of struct/union types (tags and typedefs of records), their
+    field lists, and the functions that return a struct."""
+    by_id = {}
+    for n in walk_nodes(ast):
+        if n.get("kind") == "RecordDecl":
+            by_id[n["id"]] = n
+    for n in walk_nodes(ast):
+        if n.get("kind") == "TypedefDecl":
+            for x in walk_nodes(n):
+                if x.get("kind") == "RecordType" and x.get("decl", {}).get("id") in by_id:
+                    rec = by_id[x["decl"]["id"]]
+                    RECORD_FIELDS[n["name"]] = [(f["name"], ctype(f)) for f in rec.get("inner", [])
+                                               if f.get("kind") == "FieldDecl"]
+                    break
+    for n in walk_nodes(ast):
+        if n.get("kind") == "FunctionDecl":
+            ret = n.get("type", {}).get("qualType", "").split("(")[0].strip()
+            if ret in RECORD_FIELDS or ret.startswith("struct "):
+                SRET_FUNCS.add(n["name"])
     def walk(n):
         if isinstance(n, dict):
             k = n.get("kind")
@@ -782,8 +1105,13 @@ def generate():
         lines.append("")
     for i, g in enumerate(GLOBALS):
         data = layout.global_bytes[g]
+        # 1 KiB chunks keep each literal within the elaborator's limits
+        chunks = [data[k:k + 1024] for k in range(0, len(data), 1024)] or [[]]
+        for ci, ch in enumerate(chunks):
+            lines.append(f"def global_{g}_{ci} : List UInt8 := {ch!r}".replace(", ", ","))
         lines.append(f"/-- Initial bytes of `{g}` (block {GLOBAL_BLOCK + i}), dumped by the probe. -/")
-        lines.append(f"def global_{g} : List UInt8 := {data!r}".replace(", ", ","))
+        lines.append(f"def global_{g} : List UInt8 := "
+                     + " ++ ".join(f"global_{g}_{ci}" for ci in range(len(chunks))))
         lines.append("")
     for name, q in LAYOUT_EXPORTS:
         lines.append(f"/-- `{q}`, measured by the probe. -/")

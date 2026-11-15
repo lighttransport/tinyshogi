@@ -19,6 +19,16 @@ static int hexval(int c) {
     return -1;
 }
 
+/* Live state equal (see Shogi.C.activeState). */
+static int same_active(const ShogiPosition *a, const ShogiPosition *b) {
+    if (memcmp(a, b, offsetof(ShogiPosition, king_square) + 2) != 0 ||
+        a->history_length != b->history_length) return 0;
+    size_t n = a->history_length;
+    return memcmp(a->history, b->history, n * sizeof(a->history[0])) == 0 &&
+           memcmp(a->history_mover, b->history_mover, n) == 0 &&
+           memcmp(a->history_check, b->history_check, n) == 0;
+}
+
 static int cmp_str(const void *a, const void *b) {
     return strcmp((const char *)a, (const char *)b);
 }
@@ -89,6 +99,26 @@ int main(void) {
                 for (int t = 0; t < SHOGI_SQUARES; ++t)
                     putchar(shogi_piece_attacks_square(&position, (uint8_t)f, (uint8_t)t) ? '1' : '0');
             printf("\n");
+        } else if (cmd == 'H' && arg) {
+            if (shogi_parse_and_make_move(&position, arg) &&
+                shogi_position_to_sfen(&position, out, sizeof(out)))
+                printf("%s %llu\n", out, (unsigned long long)position.hash);
+            else printf("ILLEGAL\n");
+        } else if ((cmd == 'U' || cmd == 'V') && arg) {
+            ShogiMove legal[SHOGI_MAX_MOVES], req;
+            static ShogiPosition before;
+            size_t count = shogi_generate_legal(&position, legal, SHOGI_MAX_MOVES), i;
+            int found = 0;
+            if (shogi_parse_usi_move(arg, &req))
+                for (i = 0; i < count; ++i)
+                    if (same_move(req, legal[i])) { req = legal[i]; found = 1; break; }
+            if (!found) { printf("ILLEGAL\n"); fflush(stdout); continue; }
+            ShogiUndo undo;
+            before = position;
+            int ok = cmd == 'V' ? shogi_make_move_undo_fast(&position, req, &undo)
+                                : shogi_make_move_undo(&position, req, &undo);
+            ok = ok && shogi_unmake_move(&position, &undo);
+            printf(ok ? (same_active(&before, &position) ? "RESTORED\n" : "CHANGED\n") : "FAILED\n");
         } else if (cmd == 'P' && arg) {
             printf("%llu\n", perft(&position, atoi(arg)));
         } else {

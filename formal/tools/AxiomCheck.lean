@@ -40,3 +40,8 @@ import Shogi
 #print axioms Shogi.C.Proofs.attack_ray_masks_refine
 #print axioms Shogi.Tables.probes_uncapped
 #print axioms Shogi.Position.legalAux_stable
+#print axioms Shogi.Position.reachable_material
+#print axioms Shogi.Position.reachable_materialOk
+#print axioms Shogi.Position.play_familyCount
+#print axioms Shogi.Sfen.parse_print
+#print axioms Shogi.Sfen.parse_print_reachable

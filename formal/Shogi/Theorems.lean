@@ -412,3 +412,147 @@ theorem reachable_kings {p : Position} (h : Reachable p) (c : Color) : p.kingCou
     rw [play_kingCount (reachable_inv hr).1 (legalMoves_pseudo hm)]; exact ih
 
 end Shogi.Position
+
+namespace Shogi
+namespace Position
+
+/-- Family-`i` indicator of a square's content. -/
+def famP (i : Fin 7) (x : Option Piece) : Bool :=
+  match x with
+  | some pc => pc.type.unpromote.handIndex == some i
+  | none => false
+
+theorem familyCount_eq (p : Position) (i : Fin 7) :
+    p.familyCount i = p.board.countP (famP i) + p.hand .black i + p.hand .white i := rfl
+
+theorem unpromote_promote_any (t : PieceType) : t.promote.unpromote = t.unpromote := by
+  cases t <;> rfl
+
+theorem famP_moved (i : Fin 7) (c : Color) (t : PieceType) (pr : Bool) :
+    famP i (some ⟨c, if pr then t.promote else t⟩) = famP i (some ⟨c, t⟩) := by
+  cases pr <;> simp [famP, unpromote_promote_any]
+
+theorem Hands.get_set_len {h : Hands} (hb : h.black.length = 7) (hw : h.white.length = 7)
+    (c c' : Color) (i j : Fin 7) (n : Nat) :
+    (h.set c i n).get c' j = if c = c' ∧ i = j then n else h.get c' j := by
+  by_cases hc : c = c'
+  · subst hc
+    by_cases hij : i = j
+    · subst hij
+      cases c <;> simp [Hands.set, Hands.get, List.getD, hb, hw, i.isLt]
+    · simp only [hij, and_false, ite_false]; exact Hands.get_set_ne hij
+  · simp only [hc, false_and, ite_false]
+    cases c <;> cases c' <;> first | exact absurd rfl hc | rfl
+
+/-- `countP` after `set`, in additive form (no truncated subtraction). -/
+theorem countP_set_add {b : List (Option Piece)} {k : Nat} (hk : k < b.length)
+    (x : Option Piece) (P : Option Piece → Bool) :
+    (b.set k x).countP P + (if P b[k] then 1 else 0) = b.countP P + (if P x then 1 else 0) := by
+  rw [List.countP_set hk]
+  have : (if P b[k] = true then 1 else 0) ≤ b.countP P := by
+    split
+    · exact List.countP_pos_iff.mpr ⟨_, List.getElem_mem hk, ‹_›⟩
+    · exact Nat.zero_le _
+  split <;> split <;> simp_all <;> omega
+
+/-- **Material conservation**: a pseudo-legal move preserves, for every
+    unpromoted family, the number of pieces on the board plus in hand. -/
+theorem play_familyCount {p : Position} (hs : p.Shaped) {m : Move} (hm : m ∈ p.pseudoMoves)
+    (i : Fin 7) : (p.play m).familyCount i = p.familyCount i := by
+  obtain ⟨hb, hbw, hww⟩ := hs
+  rw [familyCount_eq, familyCount_eq]
+  rcases mem_pseudoMoves hm with ⟨s, pc, hs0, hc0, hbm⟩ | hd
+  · obtain ⟨d, pr, rfl, _, _, hcap⟩ := boardMoves_normal hbm
+    obtain ⟨pcc, pct⟩ := pc
+    simp only at hc0
+    subst hc0
+    have hs0' : p.board.getD s.val none = some ⟨p.side, pct⟩ := hs0
+    have hsl : s.val < p.board.length := by rw [hb]; exact s.isLt
+    have hdl : d.val < p.board.length := by rw [hb]; exact d.isLt
+    have e1 : p.board[s.val] = some ⟨p.side, pct⟩ := getElem_of_getD hsl hs0'
+    have hdl' : d.val < (p.board.set s.val none).length := by simpa using hdl
+    have h1 := countP_set_add hsl none (famP i)
+    have h2 := countP_set_add hdl' (some ⟨p.side, if pr then pct.promote else pct⟩) (famP i)
+    rw [famP_moved] at h2
+    rw [e1] at h1
+    have hn : famP i none = false := rfl
+    rw [hn] at h1
+    have hd' : (p.board.set s.val none)[d.val] =
+        if s.val = d.val then none else p.board[d.val] := by
+      rw [List.getElem_set]
+    have hboard : (p.play (.normal s d pr)).board =
+        (p.board.set s.val none).set d.val (some ⟨p.side, if pr then pct.promote else pct⟩) := by
+      simp only [play, pieceAt]; rw [hs0']; simp [setSq]
+    rw [hboard]
+    cases hq : p.board[d.val] with
+    | none =>
+      have hq' : p.board.getD d.val none = none := by simp [List.getD, hdl, hq]
+      have hhands : (p.play (.normal s d pr)).hands = p.hands := by
+        simp only [play, pieceAt]; rw [hs0', hq']
+      have hb1 : famP i ((p.board.set s.val none)[d.val]) = false := by
+        rw [hd']; split <;> simp [hq, famP]
+      rw [hb1] at h2
+      simp only [hand, hhands]
+      simp only [Bool.false_eq_true, ite_false, Nat.add_zero] at h1 h2
+      omega
+    | some q =>
+      have hq' : p.board.getD d.val none = some q := by simp [List.getD, hdl, hq]
+      have hcq := hcap q (by simpa [pieceAt] using hq')
+      obtain ⟨qc, qt⟩ := q
+      simp only at hcq
+      have hj : ∃ j, qt.unpromote.handIndex = some j := by
+        cases qt <;> simp_all [PieceType.unpromote, PieceType.handIndex]
+      obtain ⟨j, hj⟩ := hj
+      have hhands : (p.play (.normal s d pr)).hands =
+          p.hands.set p.side j (p.hand p.side j + 1) := by
+        simp only [play, pieceAt]; rw [hs0', hq']; simp [hj]
+      have hsd : s.val ≠ d.val := by
+        intro e
+        have : p.board[d.val] = some ⟨p.side, pct⟩ := by simp only [← e]; exact e1
+        rw [this] at hq; cases hq
+        exact hcq.1 rfl
+      rw [hd', if_neg hsd, hq] at h2
+      have hfq : famP i (some ⟨qc, qt⟩) = (j == i) := by simp [famP, hj]
+      rw [hfq] at h2
+      simp only [hand, hhands]
+      rw [Hands.get_set_len hbw hww, Hands.get_set_len hbw hww]
+      cases hside : p.side <;> by_cases hji : j = i <;>
+        simp_all [Hands.get, hand] <;> omega
+  · obtain ⟨k, d, rfl, hh, ha⟩ := mem_dropMoves hd
+    simp only [play, PieceType.handIndex_ofHandIndex, setSq, hand]
+    have hdl : d.val < p.board.length := by rw [hb]; exact d.isLt
+    have he : p.board[d.val] = none := by
+      simp only [dropAllowed, Bool.and_eq_true, isEmpty, pieceAt, Option.isNone_iff_eq_none] at ha
+      exact getElem_of_getD hdl ha.1.1
+    have h := countP_set_add hdl (some ⟨p.side, PieceType.ofHandIndex k⟩) (famP i)
+    rw [he] at h
+    have hf : famP i (some ⟨p.side, PieceType.ofHandIndex k⟩) = (k == i) := by
+      have := PieceType.handIndex_ofHandIndex k
+      have hu : (PieceType.ofHandIndex k).unpromote = PieceType.ofHandIndex k :=
+        (by decide : ∀ k : Fin 7, (PieceType.ofHandIndex k).unpromote = PieceType.ofHandIndex k) k
+      simp [famP, hu, this]
+    rw [hf] at h
+    simp only [famP, Bool.false_eq_true, ite_false, Nat.add_zero] at h
+    rw [Hands.get_set_len hbw hww, Hands.get_set_len hbw hww]
+    simp only [hand] at hh
+    cases hside : p.side <;> by_cases hki : k = i <;> simp_all [Hands.get] <;> omega
+
+theorem start_familyCount : ∀ i : Fin 7, Position.start.familyCount i = PieceType.handMax i := by
+  decide
+
+/-- **Invariant**: every reachable position has exactly a full set of each
+    unpromoted family (board plus both hands), so `validate_material` holds. -/
+theorem reachable_material {p : Position} (h : Reachable p) (i : Fin 7) :
+    p.familyCount i = PieceType.handMax i := by
+  induction h with
+  | start => exact start_familyCount i
+  | step hr hm ih => rw [play_familyCount (reachable_inv hr).1 (legalMoves_pseudo hm)]; exact ih
+
+theorem reachable_materialOk {p : Position} (h : Reachable p) : p.materialOk = true := by
+  unfold materialOk
+  rw [List.all_eq_true]
+  intro i _
+  simp [reachable_material h i]
+
+end Position
+end Shogi

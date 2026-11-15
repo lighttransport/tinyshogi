@@ -98,6 +98,26 @@ def answer (cmd : Char) (payload : String) : String :=
     else if cmd == 'a' then miniAttacked p
     else if cmd == 'X' then specPieceAttacks p
     else if cmd == 'x' then miniPieceAttacks p
+    else if cmd == 'h' then
+      match Usi.parse arg with
+      | none => "ILLEGAL"
+      | some m =>
+        if !p.legalMoves.contains m then "ILLEGAL" else
+        match Shogi.C.miniMake 10000000 p m with
+        | some (q, h) => Sfen.print q ++ " " ++ toString h
+        | none => "MINIC-UB"
+    else if cmd == 'u' || cmd == 'v' then
+      match Usi.parse arg with
+      | none => "ILLEGAL"
+      | some m =>
+        if !p.legalMoves.contains m then "ILLEGAL" else
+        match Shogi.C.miniUndoRoundTrip 10000000 (cmd == 'v') p m with
+        | some b => if b then "RESTORED" else "CHANGED"
+        | none => "MINIC-UB"
+    else if cmd == 'l' then
+      match Shogi.C.miniLegal 10000000 p with
+      | some ms => " ".intercalate (sortStrings (ms.map usiOf))
+      | none => "MINIC-UB"
     else "BADCMD"
 
 partial def loop (h : IO.FS.Stream) (o : IO.FS.Stream) : IO Unit := do

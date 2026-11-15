@@ -29,10 +29,15 @@ def toLower (c : Char) : Char := if isUpper c then Char.ofNat (c.toNat + 32) els
 def toUpper (c : Char) : Char :=
   if 'a' ≤ c && c ≤ 'z' then Char.ofNat (c.toNat - 32) else c
 
-/-- `strtok_r` with the delimiter set `" \t\r\n"`. -/
-def fields (cs : List Char) : List (List Char) :=
-  (cs.splitBy (fun a b => isSpace a == isSpace b)).filter
-    (fun g => match g with | c :: _ => !isSpace c | [] => false)
+/-- `strtok_r` with the delimiter set `" \t\r\n"`: maximal runs of
+    non-delimiters, in order (`cur` is the token being read, reversed). -/
+def tokens : List Char → List Char → List (List Char)
+  | [], cur => if cur.isEmpty then [] else [cur.reverse]
+  | c :: cs, cur =>
+    if isSpace c then (if cur.isEmpty then tokens cs [] else cur.reverse :: tokens cs [])
+    else tokens cs (c :: cur)
+
+def fields (cs : List Char) : List (List Char) := tokens cs []
 
 /-! ## Board -/
 
@@ -77,24 +82,18 @@ def handLetter? (c : Char) : Option PieceType :=
   | some .king => none
   | t => t
 
-/-- Read a run of digits, failing as soon as the count exceeds 18. -/
-def readCount : List Char → Nat → Option (Nat × List Char)
-  | c :: cs, n =>
+/-- `parse_sfen_hands` after the `"-"` case, one character at a time.
+    `pend` is the count read so far (`none`: no digit since the last letter).
+    A count above 18 fails at once; a count of 0 means 1; input ending in
+    digits fails (the C would read the terminating NUL as the letter). -/
+def handsGo : List Char → Option Nat → Hands → Option Hands
+  | [], none, h => some h
+  | [], some _, _ => none
+  | c :: cs, pend, h =>
     if isDigit c then
-      let n' := n * 10 + digitVal c
-      if n' > 18 then none else readCount cs n'
-    else some (n, c :: cs)
-  | [], n => some (n, [])
-
-/-- `parse_sfen_hands` after the `"-"` case. -/
-def parseHandsAux : (fuel : Nat) → List Char → Hands → Option Hands
-  | 0, _, _ => none
-  | _ + 1, [], h => some h
-  | fuel + 1, cs, h =>
-    match readCount cs 0 with
-    | none => none
-    | some (_, []) => none     -- the letter would be the terminating NUL
-    | some (count, c :: rest) =>
+      let n := pend.getD 0 * 10 + digitVal c
+      if n > 18 then none else handsGo cs (some n) h
+    else
       let color := if isUpper c then Color.black else Color.white
       match handLetter? (toLower c) with
       | none => none
@@ -102,13 +101,12 @@ def parseHandsAux : (fuel : Nat) → List Char → Hands → Option Hands
         match t.handIndex with
         | none => none
         | some i =>
-          let count := if count == 0 then 1 else count
+          let count := match pend with | none => 1 | some 0 => 1 | some n => n
           let cur := h.get color i
-          if cur + count > 18 then none
-          else parseHandsAux fuel rest (h.set color i (cur + count))
+          if cur + count > 18 then none else handsGo cs none (h.set color i (cur + count))
 
 def parseHands (cs : List Char) : Option Hands :=
-  if cs == ['-'] then some Hands.empty else parseHandsAux (cs.length + 1) cs Hands.empty
+  if cs == ['-'] then some Hands.empty else handsGo cs none Hands.empty
 
 /-! ## Move number: `strtoul(s, &end, 10)` then range checks -/
 
@@ -119,12 +117,16 @@ def digitsVal : List Char → Nat → Nat
   | [], n => n
   | c :: cs, n => digitsVal cs (n * 10 + digitVal c)
 
+/-- Optional sign: (negative?, rest). -/
+def signSplit : List Char → Bool × List Char
+  | '+' :: r => (false, r)
+  | '-' :: r => (true, r)
+  | r => (false, r)
+
 /-- Value of the whole field under `strtoul`, or `none` if `*end != '\0'`. -/
 def strtoulField (cs : List Char) : Option Nat :=
-  let (neg, ds) := match cs with
-    | '+' :: r => (false, r)
-    | '-' :: r => (true, r)
-    | r => (false, r)
+  let neg := (signSplit cs).1
+  let ds := (signSplit cs).2
   if ds.isEmpty || !ds.all isDigit then none
   else
     let v := digitsVal ds 0
@@ -159,12 +161,17 @@ def parse (s : String) : Option Position :=
 
 /-! ## Printing (`write_sfen`) -/
 
+/-- The decimal digit character for `d < 10`. -/
+def digitChar : Nat → Char
+  | 0 => '0' | 1 => '1' | 2 => '2' | 3 => '3' | 4 => '4'
+  | 5 => '5' | 6 => '6' | 7 => '7' | 8 => '8' | _ => '9'
+
 /-- Decimal digits of `n` (structural, so the kernel can evaluate it). -/
 def natDigits : (fuel n : Nat) → List Char
   | 0, _ => []
   | fuel + 1, n =>
-    if n < 10 then [Char.ofNat ('0'.toNat + n)]
-    else natDigits fuel (n / 10) ++ [Char.ofNat ('0'.toNat + n % 10)]
+    if n < 10 then [digitChar n]
+    else natDigits fuel (n / 10) ++ [digitChar (n % 10)]
 
 def showNat (n : Nat) : List Char := natDigits 20 n
 
@@ -174,14 +181,20 @@ def pieceChars (pc : Piece) : List Char :=
     [if pc.color == .black then toUpper l else l]
 
 def rowChars : List (Option Piece) → Nat → List Char
-  | [], e => if e > 0 then [Char.ofNat ('0'.toNat + e)] else []
+  | [], e => if e > 0 then [digitChar e] else []
   | none :: r, e => rowChars r (e + 1)
   | some pc :: r, e =>
-    (if e > 0 then [Char.ofNat ('0'.toNat + e)] else []) ++ pieceChars pc ++ rowChars r 0
+    (if e > 0 then [digitChar e] else []) ++ pieceChars pc ++ rowChars r 0
 
-def boardChars (b : List (Option Piece)) : List Char :=
-  let rows := (List.range 9).map fun r => (b.drop (r * 9)).take 9
-  ((rows.map (rowChars · 0)).intersperse ['/']).flatten
+def boardRow (b : List (Option Piece)) (r : Nat) : List (Option Piece) := (b.drop (r * 9)).take 9
+
+/-- Rows `r, r+1, …` (`k` of them), separated by `/`. -/
+def rowsChars (b : List (Option Piece)) (r : Nat) : Nat → List Char
+  | 0 => []
+  | 1 => rowChars (boardRow b r) 0
+  | k + 2 => rowChars (boardRow b r) 0 ++ '/' :: rowsChars b (r + 1) (k + 1)
+
+def boardChars (b : List (Option Piece)) : List Char := rowsChars b 0 9
 
 /-- Hand print order R B G S N L P (slots 6 5 4 3 2 1 0). -/
 def handOrder : List (Fin 7) := [6, 5, 4, 3, 2, 1, 0]

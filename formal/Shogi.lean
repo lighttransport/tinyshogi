@@ -12,3 +12,4 @@ import Shogi.C.Proofs.Tables
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
+import Shogi.SfenTheorems
