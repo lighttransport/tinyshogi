@@ -166,6 +166,14 @@ theorem ExS.seq_brk {a b s1} (ha : ExS p s a .brk s1) : ExS p s (.seq a b) .brk 
   exact ⟨K1 + 1, shift fun n hn => by
     simp only [execStmt, h1 n (by omega), Res.bind_eq, Res.bind_ok]; rfl⟩
 
+/-- (tinyshogi addition) `continue` leaves a sequence. -/
+theorem ExS.seq_cont {a b s1} (ha : ExS p s a .cont s1) : ExS p s (.seq a b) .cont s1 := by
+  obtain ⟨K1, h1⟩ := ha
+  exact ⟨K1 + 1, shift fun n hn => by
+    simp only [execStmt, h1 n (by omega), Res.bind_eq, Res.bind_ok]; rfl⟩
+
+theorem ExS.cont : ExS p s .cont .cont s := ⟨1, shift (K := 0) fun _ _ => rfl⟩
+
 theorem ExS.ite {c a b vc bc r s'} (hc : EvE p s c vc) (hbc : truthy vc = .ok bc)
     (h : ExS p s (if bc then a else b) r s') : ExS p s (.ite c a b) r s' := by
   obtain ⟨K1, h1⟩ := hc

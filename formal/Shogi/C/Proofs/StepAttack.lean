@@ -436,8 +436,8 @@ theorem step_loop (p : Position) (c : Color) (t : Fin 81) :
     s.locals 4 = some (.int IntTy.u8 i) →
     s.mem posBlock = some (encode p) → s.mem 8192 = some Gen.global_step_attack_probes →
     s.mem 8193 = some Gen.global_step_attack_probe_count →
-    if hitsFrom p c t i then ∃ s', ExS Gen.prog s Gen.step_square_attacked_loop0 (.ret (some true8)) s'
-    else ∃ s', ExS Gen.prog s Gen.step_square_attacked_loop0 .normal s' := by
+    if hitsFrom p c t i then ∃ s', ExS Gen.prog s Gen.step_square_attacked_loop0 (.ret (some true8)) s' ∧ s'.mem = s.mem
+    else ∃ s', ExS Gen.prog s Gen.step_square_attacked_loop0 .normal s' ∧ s'.mem = s.mem := by
   intro d
   induction d with
   | zero =>
@@ -447,7 +447,7 @@ theorem step_loop (p : Position) (c : Color) (t : Fin 81) :
     rw [hitsFrom_end]
     simp only [Bool.false_eq_true, ite_false]
     have hcl := cnt_le c t
-    refine ⟨s, ?_⟩
+    refine ⟨s, ?_, rfl⟩
     unfold Gen.step_square_attacked_loop0
     apply ExS.loop_brk
     exact ExS.ite (bc := false) (EvE_of_eval (evCnt c t s _ (by omega) h4 h2 h1 hG2))
@@ -492,7 +492,7 @@ theorem step_loop (p : Position) (c : Color) (t : Fin 81) :
     rw [hitsFrom_step p c t i hi]
     by_cases hh : probeHit p c (prb c t i) = true
     · simp only [hh, Bool.true_or, ite_true]
-      refine ⟨s6, ?_⟩
+      refine ⟨s6, ?_, rfl⟩
       unfold Gen.step_square_attacked_loop0
       apply ExS.loop_ret
       refine ExS.ite (bc := true) hcond (by simp [truthy_boolVal, hi]) ?_
@@ -529,12 +529,12 @@ theorem step_loop (p : Position) (c : Color) (t : Fin 81) :
       split at ihs
       · rename_i hhit
         rw [if_pos hhit]
-        obtain ⟨s', hs'⟩ := ihs
-        exact ⟨s', ExS.loop_next hbody (Or.inl rfl) hstep hs'⟩
+        obtain ⟨s', hs', hmem⟩ := ihs
+        exact ⟨s', ExS.loop_next hbody (Or.inl rfl) hstep hs', hmem⟩
       · rename_i hhit
         rw [if_neg hhit]
-        obtain ⟨s', hs'⟩ := ihs
-        exact ⟨s', ExS.loop_next hbody (Or.inl rfl) hstep hs'⟩
+        obtain ⟨s', hs', hmem⟩ := ihs
+        exact ⟨s', ExS.loop_next hbody (Or.inl rfl) hstep hs', hmem⟩
 
 /-- **`step_square_attacked` refines the spec's step attacks.** For every
     position, target square and attacker: no UB, terminates, returns 1 iff
@@ -545,7 +545,7 @@ theorem step_square_attacked_refines (p : Position) (t : Square) (c : Color) (m 
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.step_square_attacked.params
         [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx], m, false⟩
       Gen.step_square_attacked.body
-      (.ret (some (if stepAttacked p t c then true8 else false8))) s' := by
+      (.ret (some (if stepAttacked p t c then true8 else false8))) s' ∧ s'.mem = m := by
   have hci : c.idx < 2 := by cases c <;> decide
   let L0 := frameLocals Gen.step_square_attacked.params [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx]
   let s0 : State := ⟨L0, m, false⟩
@@ -567,11 +567,11 @@ theorem step_square_attacked_refines (p : Position) (t : Square) (c : Color) (m 
   split
   · rename_i hh
     rw [if_pos hh] at hloop
-    obtain ⟨s', hs'⟩ := hloop
-    exact ⟨s', ExS.seq hset3 (ExS.seq_ret (ExS.seq hset4 hs'))⟩
+    obtain ⟨s', hs', hmem⟩ := hloop
+    exact ⟨s', ExS.seq hset3 (ExS.seq_ret (ExS.seq hset4 hs')), hmem⟩
   · rename_i hh
     rw [if_neg hh] at hloop
-    obtain ⟨s', hs'⟩ := hloop
-    exact ⟨s', ExS.seq hset3 (ExS.seq (ExS.seq hset4 hs') (ExS.ret (EvE_of_eval (n := 5) rfl)))⟩
+    obtain ⟨s', hs', hmem⟩ := hloop
+    exact ⟨s', ExS.seq hset3 (ExS.seq (ExS.seq hset4 hs') (ExS.ret (EvE_of_eval (n := 5) rfl))), hmem⟩
 
 end Shogi.C.Proofs

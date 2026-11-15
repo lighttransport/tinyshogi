@@ -13,6 +13,7 @@ import Shogi.C.Proofs.Helpers
 import Shogi.C.Proofs.Tables
 import Shogi.C.Proofs.FindKing
 import Shogi.C.Proofs.StepAttack
+import Shogi.C.Proofs.SquareAttack
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
