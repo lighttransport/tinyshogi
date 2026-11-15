@@ -1,7 +1,44 @@
 # tinyshogi `formal/` — plan for a Lean 4 formalization of the shogi rules
 
-Status: T0 done, T1 in progress (see `README.md`). No C changes so far.
-This file answers the brief in `plan.md` (kept out of the tree).
+Status (2026-11-15): T0–T6 and T11 done, T7 layer 1 proven. T7 layer 2 to T10
+are translated and differentially tested through their MiniC models; their
+symbolic proofs are the main remaining work. See "Progress" below and the
+status table in `README.md`. This file answers the brief in `plan.md`, which is
+kept out of the tree.
+
+## Progress against this plan
+
+| Item | State | Notes / deviations |
+|---|---|---|
+| T0 scaffold, CI, axiom policy | done | `.github/workflows/formal.yml`; `tools/axiomcheck.sh` (no `sorry`/`native_decide`/`bv_decide`, three standard axioms) |
+| T1 SFEN/USI | done | `Sfen.parse_print`, `parse_print_reachable`, `Usi.parse_print`. The spec copies the C's tolerances (dead pieces accepted, `0P` = one pawn, `strtoul` signs). `cdiff` confirms agreement on 30k+ inputs |
+| T2 rules spec | done | `legalMoves_iff` (fuel-free legality incl. recursive uchifuzume), `legalAux_stable` (pawn-measure budget is adequate), king safety, no king/self capture, forced promotion, drop rules |
+| T3 invariants | done (proofs) | `reachable_inv` (shape, no dead pieces), `reachable_kings`, `reachable_material(Ok)`. make/unmake round trip: four-way tested, not proved |
+| T4 perft | done | Kernel: perft 1 (≈10 s) and one fixture per rule (5–25 s). perft 2–5 compiled, as anticipated in §7.3 |
+| T5 MiniC/translator | done for the rules core | E1–E3, E5, E7, E8 and E10 as planned. E4 is extended with "after-init" globals (Zobrist keys, dumped after `shogi_init`). E6 (aggregates) is realised in the **translator** (callee copy, hidden result pointer, `memcpy`) rather than as a MiniC value form, which keeps the trusted semantics smaller. E9 (`strcmp`) is not needed yet. Also added: calls hoisted out of expressions (A-normal form), and fuel monotonicity (`MiniC.Fuel`). 60/72 functions translate |
+| T6 Lean → C tables | done | R2 landed: `src/shogi_tables.h` generated; `*_refine` prove equality with the Lean tables; `probes_uncapped`. perft 5 unchanged (1.198 → 1.185 s median), NPS within noise |
+| T7 helpers / attacks | layer 1 proved; layer 2 tested | 17 helper refinements for every input. `square_attacked`, `shogi_piece_attacks_square`: four-way tested |
+| T8–T10 | translated, tested | MiniC model of the C legal generator, make-move (incl. 64-bit hash) and make/unmake round trips agree with compiled C and the spec. **Remaining: symbolic refinement proofs** (loop invariants over symbolic board bytes) |
+| T11 differential testing | done | Adds python-shogi `--oracle`. Found a python-shogi 1.1.1 pawn-drop-mate bug (pinned capturer); kept as a kernel-checked fixture |
+| T12 shared package | not started | The fork has diverged (A-normal form, E5/E7/E8, `Fuel.lean`). Upstream candidates for tinygltf: the `collect_enums` crash, the `for`-init scoping bug, and the vendored `Hoare.lean` namespace issue |
+
+C changes so far: `src/shogi.c` reads the generated tables, and one probe is
+read through a `const` pointer (`step_square_attacked`). No other C changes.
+
+### Remaining work, in order
+
+1. Memory and loop lemmas for MiniC: reading `encode p`, reading table bytes
+   through `*_refine`, and a counted-loop rule. Then `step_square_attacked`,
+   `square_attacked` and `shogi_piece_attacks_square` refine `attacked`.
+2. Generators: `add_step`/`add_slide`/`add_pseudo_drops` write `pseudoMoves`
+   (as an ordered list) into the move buffer.
+3. Legality: `king_safety_prepare` gives sound pins (`shortcut_sound`);
+   `generate_legal_mut_internal` refines `legalMoves`, reusing the
+   pawn-drop measure for the recursion.
+4. make/unmake: board, hand and side refinement; hash parametric in the
+   Zobrist bytes; repetition under `NoCollision`.
+5. Speed up the MiniC interpreter's memory (lists → arrays) so the
+   differential runs can use more positions.
 
 The goal is a Lean 4 project under `formal/` that
 
