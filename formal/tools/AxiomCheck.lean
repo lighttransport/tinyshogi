@@ -51,3 +51,4 @@ import Shogi
 #print axioms Shogi.Position.attacked_eq
 #print axioms Shogi.Position.slide_eq_ray
 #print axioms Shogi.C.Proofs.square_attacked_refines
+#print axioms Shogi.C.Proofs.shogi_is_in_check_refines
