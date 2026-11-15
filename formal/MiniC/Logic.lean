@@ -174,6 +174,19 @@ theorem ExS.seq_cont {a b s1} (ha : ExS p s a .cont s1) : ExS p s (.seq a b) .co
 
 theorem ExS.cont : ExS p s .cont .cont s := ⟨1, shift (K := 0) fun _ _ => rfl⟩
 
+/-- tinyshogi: `memcpy` between non-overlapping ranges. -/
+theorem ExS.memcpy {d src len bd od bs os t k bytes m'} (hd : EvE p s d (.ptr bd od))
+    (hs : EvE p s src (.ptr bs os)) (hn : EvE p s len (.int t k)) (hro : s.ro = false)
+    (hov : (bd ≠ bs || od + k ≤ os || os + k ≤ od) = true)
+    (hr : readBytes s.mem bs os k = .ok bytes) (hw : writeBytes s.mem bd od bytes = .ok m') :
+    ExS p s (.memcpy d src len) .normal { s with mem := m' } := by
+  obtain ⟨K1, h1⟩ := hd
+  obtain ⟨K2, h2⟩ := hs
+  obtain ⟨K3, h3⟩ := hn
+  exact ⟨max K1 (max K2 K3) + 1, shift fun n hn => by
+    simp only [execStmt, h1 n (by omega), h2 n (by omega), h3 n (by omega), Res.bind_eq,
+      Res.bind_ok, hro, guard, Bool.not_false, ite_true, hov, hr, hw]; rfl⟩
+
 theorem ExS.ite {c a b vc bc r s'} (hc : EvE p s c vc) (hbc : truthy vc = .ok bc)
     (h : ExS p s (if bc then a else b) r s') : ExS p s (.ite c a b) r s' := by
   obtain ⟨K1, h1⟩ := hc
