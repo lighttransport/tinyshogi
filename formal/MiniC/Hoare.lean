@@ -1,5 +1,5 @@
 /- Vendored from syoyo/tinygltf formal/GlTF/C/Hoare.lean @ 97789b3 (MIT, see
-   MiniC/LICENSE-MIT). Modified: namespace GlTF.C -> MiniC. -/
+   MiniC/LICENSE-MIT). Modified: namespace GlTF.C -> MiniC (incl. qualified C.store). -/
 /-
   A total-correctness Hoare logic over MiniC, derived from `ExS`/`EvE`.
 
@@ -38,7 +38,7 @@ theorem set {P : State → Prop} {Q : Outcome → State → Prop} {i e}
 
 theorem store {P : State → Prop} {Q : Outcome → State → Prop} {ty a e}
     (h : ∀ s, P s → ∃ pa v m', EvE p s a pa ∧ EvE p s e v ∧ s.ro = false ∧
-      C.store s.mem ty pa v = .ok m' ∧ Q .normal { s with mem := m' }) :
+      MiniC.store s.mem ty pa v = .ok m' ∧ Q .normal { s with mem := m' }) :
     Triple p P (.store ty a e) Q := by
   intro s hs
   obtain ⟨pa, v, m', ha, he, hro, hm, hq⟩ := h s hs

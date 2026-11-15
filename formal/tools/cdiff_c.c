@@ -7,7 +7,8 @@
  *                     "<result> <sfen>" or "ILLEGAL <index>"
  * Hex payloads let any byte except NUL be tested. Output is flushed per
  * line so the driver can walk games interactively. */
-#include "../../src/shogi.h"
+/* Included (not linked) so the static rules functions can be called. */
+#include "../../src/shogi.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,6 +79,16 @@ int main(void) {
             else if (shogi_position_to_sfen(&position, out, sizeof(out)))
                 printf("%s %s\n", names[shogi_game_result(&position)], out);
             else printf("REJECT\n");
+        } else if (cmd == 'A' || cmd == 'a') {
+            for (int c = 0; c < 2; ++c)
+                for (int t = 0; t < SHOGI_SQUARES; ++t)
+                    putchar(square_attacked(&position, (uint8_t)t, (ShogiColor)c) ? '1' : '0');
+            printf("\n");
+        } else if (cmd == 'X' || cmd == 'x') {
+            for (int f = 0; f < SHOGI_SQUARES; ++f)
+                for (int t = 0; t < SHOGI_SQUARES; ++t)
+                    putchar(shogi_piece_attacks_square(&position, (uint8_t)f, (uint8_t)t) ? '1' : '0');
+            printf("\n");
         } else if (cmd == 'P' && arg) {
             printf("%llu\n", perft(&position, atoi(arg)));
         } else {

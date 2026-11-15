@@ -330,6 +330,8 @@ def main():
     ap.add_argument("--plies", type=int, default=120)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--games", type=int, default=200)
+    ap.add_argument("--mini", type=int, default=40,
+                    help="positions for the MiniC-model attack checks (four-way)")
     ap.add_argument("--oracle", action="store_true", help="also compare with python-shogi 1.1.1")
     args = ap.parse_args()
     rng = random.Random(args.seed)
@@ -341,7 +343,7 @@ def main():
         exe = os.path.join(d, "cdiff_c")
         subprocess.check_call([CC, "-std=c11", "-O1", "-g", "-fsanitize=address,undefined",
                                "-fno-sanitize-recover=all", "-o", exe,
-                               os.path.join(HERE, "cdiff_c.c"), os.path.join(ROOT, "src", "shogi.c")])
+                               os.path.join(HERE, "cdiff_c.c")])
         subprocess.check_call(["lake", "build", "cdiff"], cwd=FORMAL, stdout=subprocess.DEVNULL)
         lean_exe = os.path.join(FORMAL, ".lake", "build", "bin", "cdiff")
         c, lean = Proc([exe]), Proc([lean_exe])
@@ -364,13 +366,22 @@ def main():
                 starts += [l.strip() for l in f if l.strip()]
         for k in range(args.walks):
             bad += walk(rng, c, lean, rng.choice(starts) if k else start, args.plies, args.oracle)
+        # Four-way on the attack layer: compiled C == MiniC model of the same
+        # C (Shogi.C.Gen) == spec, for every target square / colour, and for
+        # every (from, to) pair of shogi_piece_attacks_square.
+        mini = (EDGE + gen)[:args.mini]
+        for cmd_spec, cmd_mini in (("A", "a"), ("X", "x")):
+            cs = c.batch(cmd_spec, mini)
+            bad += compare(cmd_spec + " spec", mini, cs, lean.batch(cmd_spec, mini))
+            bad += compare(cmd_mini + " MiniC", mini, cs, lean.batch(cmd_mini, mini))
         gbad, results = game_tests(rng, c, lean, args.games)
         bad += gbad
         c.close()
         lean.close()
     print(f"cdiff: {len(inputs)} SFEN inputs ({accepted} accepted), "
           f"{len(legal_inputs)} legal-move positions, {args.walks} walks x {args.plies} plies, "
-          f"games {results}, {bad} mismatches")
+          f"games {results}, MiniC attack checks on {len((EDGE + gen)[:args.mini])} positions, "
+          f"{bad} mismatches")
     if args.oracle:
         print(f"python-shogi: {ORACLE['checked']} positions compared, "
               f"{ORACLE['skipped']} skipped (side not to move in check), "

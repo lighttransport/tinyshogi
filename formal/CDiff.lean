@@ -3,6 +3,7 @@ import Shogi.Sfen
 import Shogi.Usi
 import Shogi.Rules
 import Shogi.Game
+import Shogi.C.Model
 
 open Shogi
 
@@ -31,6 +32,42 @@ def sortStrings (xs : List String) : List String := xs.foldr insertSorted []
 
 def sameMove (a b : Move) : Bool := a == b
 
+open Shogi.C in
+/-- MiniC result as a C-style string: "0"/"1", or "U" for UB / time-out. -/
+def bitOf : Option (Option MiniC.Val) → String
+  | some (some (.int _ 0)) => "0"
+  | some (some (.int _ _)) => "1"
+  | _ => "U"
+
+def b2s (b : Bool) : String := if b then "1" else "0"
+
+def colorsC : List Shogi.Color := [.black, .white]
+
+open Shogi.C in
+def miniAttacked (p : Position) : String :=
+  let m := memOf p
+  String.join (colorsC.flatMap fun c => (List.finRange 81).map fun t =>
+    bitOf (runC 100000 Gen.fid_square_attacked
+      [posPtr, .int MiniC.IntTy.u8 t.val, .int MiniC.IntTy.u32 c.idx] m))
+
+def specAttacked (p : Position) : String :=
+  String.join (colorsC.flatMap fun c => (List.finRange 81).map fun t => b2s (p.attacked t c))
+
+/-- `shogi_piece_attacks_square(p, from, to)` for all from ≠ to, as the spec
+    states it: the piece on `from` attacks `to` geometrically. -/
+def specPieceAttacks (p : Position) : String :=
+  String.join ((List.finRange 81).flatMap fun f => (List.finRange 81).map fun t =>
+    b2s (f != t && match p.pieceAt f with
+      | some pc => (p.attackSquares f pc).contains t
+      | none => false))
+
+open Shogi.C in
+def miniPieceAttacks (p : Position) : String :=
+  let m := memOf p
+  String.join ((List.finRange 81).flatMap fun f => (List.finRange 81).map fun t =>
+    bitOf (runC 100000 Gen.fid_shogi_piece_attacks_square
+      [posPtr, .int MiniC.IntTy.u8 f.val, .int MiniC.IntTy.u8 t.val] m))
+
 def answer (cmd : Char) (payload : String) : String :=
   if cmd == 'S' then ((Sfen.parse payload).map Sfen.print).getD "REJECT" else
   let (sfen, arg) := splitArg payload
@@ -57,6 +94,10 @@ def answer (cmd : Char) (payload : String) : String :=
           | none => "ILLEGAL " ++ toString i
       go moves 0 (Game.init p)
     else if cmd == 'P' then toString (Position.perft arg.toNat! p)
+    else if cmd == 'A' then specAttacked p
+    else if cmd == 'a' then miniAttacked p
+    else if cmd == 'X' then specPieceAttacks p
+    else if cmd == 'x' then miniPieceAttacks p
     else "BADCMD"
 
 partial def loop (h : IO.FS.Stream) (o : IO.FS.Stream) : IO Unit := do

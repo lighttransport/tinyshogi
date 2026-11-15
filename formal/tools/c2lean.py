@@ -34,12 +34,52 @@ TARGET = "x86_64-linux-gnu"
 
 # Functions forming the verified core, in dependency order.
 FUNCTIONS = [
-    # T0: functions the unmodified translator already accepts.
+    # T0/T7 layer 1: piece and square helpers (pure, scalar arguments).
     "shogi_piece",
+    "shogi_piece_color",
+    "shogi_piece_type",
+    "shogi_is_promoted",
+    "shogi_unpromoted_type",
+    "shogi_can_promote",
+    "promoted_type",
     "row_of",
     "col_of",
+    "on_board",
     "square_at",
+    "in_promotion_zone",
+    "forced_promotion",
+    "hand_index",
+    "piece_letter",
+    # T7 layer 2: attacks and king lookup (read the board and const tables).
+    "step_piece_attacks",
+    "step_square_attacked",
+    "square_attacked",
+    "shogi_piece_attacks_square",
+    "find_king",
+    "same_king_ray",
 ]
+
+# Layout numbers exported as Lean constants (for building MiniC memories
+# from positions in tests and proofs): (Lean name, C expression).
+LAYOUT_EXPORTS = [
+    ("sizeof_ShogiPosition", "sizeof(ShogiPosition)"),
+    ("off_board", "offsetof(ShogiPosition, board)"),
+    ("off_hand", "offsetof(ShogiPosition, hand)"),
+    ("off_side", "offsetof(ShogiPosition, side)"),
+    ("off_king_square", "offsetof(ShogiPosition, king_square)"),
+]
+
+# File-scope `static const` objects the verified functions read. Each gets
+# its own memory block; its initial bytes are dumped by the layout probe
+# (compiled by the same clang), so they are the bytes the compiler emits.
+GLOBALS = [
+    "step_attack_probes",
+    "step_attack_probe_count",
+    "attack_rays",
+    "attack_ray_length",
+    "attack_ray_masks",
+]
+GLOBAL_BLOCK = 8192
 
 # String literals live in one read-only block at this index.
 LIT_BLOCK = 4096
@@ -50,7 +90,7 @@ INT_TYPES = {
     "unsigned int": (32, False), "int": (32, True),
     "unsigned long": (64, False), "long": (64, True),
     "unsigned long long": (64, False), "long long": (64, True),
-    "_Bool": (8, False),
+    "_Bool": (8, False), "bool": (8, False),
 }
 
 
@@ -63,6 +103,10 @@ def const_int(node):
                 return int(node["value"])
             except (TypeError, ValueError):
                 pass
+        if node["kind"] == "DeclRefExpr":
+            ref = node.get("referencedDecl", {})
+            if ref.get("kind") == "EnumConstantDecl" and ref.get("id") in ENUM_VALUES:
+                return ENUM_VALUES[ref["id"]]
         if node["kind"] == "UnaryOperator" and node.get("opcode") == "-":
             return -const_int(node["inner"][0])
         if node["kind"] == "BinaryOperator" and node.get("opcode") == "+":
@@ -75,6 +119,12 @@ def const_int(node):
             except Unsupported:
                 pass
     raise Unsupported("cannot evaluate case label")
+
+
+# Enumerator values by declaration id (filled by collect_enums) and the
+# typedef names of enum types (filled by collect_records).
+ENUM_VALUES = {}
+ENUM_TYPEDEFS = set()
 
 
 class Unsupported(Exception):
@@ -107,6 +157,7 @@ class Ctx:
         self.enums = enums
         self.layout = layout
         self.literals = []          # list of bytes strings
+        self.used_globals = set()
         self.literal_offsets = {}   # bytes -> offset
 
     def literal(self, data):
@@ -128,8 +179,12 @@ def int_ty(t, node=None, enums=None):
     if t in INT_TYPES:
         w, s = INT_TYPES[t]
         return w, s
-    if t.startswith("enum ") or t.startswith("tg3_error_code"):
-        return 32, False  # every enum used here has only non-negative values
+    if t.startswith("enum ") or t in ENUM_TYPEDEFS:
+        # The probe asserts that each enum typedef is a 32-bit unsigned type
+        # (clang/GCC pick `unsigned int` when no enumerator is negative).
+        if t in ENUM_TYPEDEFS:
+            ENUM_CHECKS.add(t)
+        return 32, False
     die(f"unsupported integer type '{t}'", node)
 
 
@@ -138,6 +193,7 @@ def lean_intty(w, s):
 
 
 RECORDS = set()
+ENUM_CHECKS = set()
 
 
 def is_ptr(t):
@@ -194,6 +250,14 @@ class FnTranslator:
             return self.lvalue(n["inner"][0])
         if k == "DeclRefExpr":
             ref = n["referencedDecl"]
+            if ref["kind"] == "VarDecl" and ref.get("id") not in self.vars:
+                name = ref.get("name")
+                if name not in GLOBALS:
+                    die(f"reference to global '{name}' outside GLOBALS", n)
+                if "const" not in ctype(n) and "const" not in n.get("type", {}).get("qualType", ""):
+                    die(f"global '{name}' is not const", n)
+                self.ctx.used_globals.add(name)
+                return ("mem", f"(.const (.ptr {GLOBAL_BLOCK + GLOBALS.index(name)} 0))", ctype(n))
             if ref["kind"] in ("VarDecl", "ParmVarDecl"):
                 if is_struct(ctype(n)):
                     # lowered to a pointer to the caller's object
@@ -263,6 +327,13 @@ class FnTranslator:
                 return f"(.cast {lean_intty(w, s)} {self.rvalue(inner)})"
             if ck in ("NoOp", "BitCast"):
                 return self.rvalue(inner)
+            if ck == "IntegralToBoolean":
+                # C11 6.3.1.2: the result is 0 if the value compares equal to 0, else 1
+                w, s_ = int_ty(ctype(inner), n)
+                return (f"(.cast {lean_intty(8, False)} (.bin .ne (some {lean_intty(w, s_)}) "
+                        f"{self.rvalue(inner)} (.const (.int {lean_intty(w, s_)} 0))))")
+            if ck == "NullToPointer":
+                return "(.const .null)"
             if ck == "ArrayToPointerDecay":
                 if inner["kind"] == "StringLiteral":
                     return self.string_literal(inner)
@@ -288,7 +359,9 @@ class FnTranslator:
             if op in ("<", "<=", ">", ">=", "==", "!="):
                 ot = strip_quals(ctype(a))
                 if is_ptr(ot):
-                    die("pointer comparison", n)
+                    if op not in ("==", "!="):
+                        die("ordered pointer comparison", n)
+                    return f"(.bin .{ops[op]} none {self.rvalue(a)} {self.rvalue(b)})"
                 t = "none" if ot == "double" else f"(some {lean_intty(*int_ty(ot, n))})"
             else:
                 rt = strip_quals(ctype(n))
@@ -349,6 +422,13 @@ class FnTranslator:
             if len(args) != 3:
                 die("memcmp arity", n)
             return f"(.memcmp {args[0]} {args[1]} {args[2]})"
+        if name == "abs":
+            # C11 7.22.6.1; abs(INT_MIN) is UB, as is the negation below
+            if len(args) != 1:
+                die("abs arity", n)
+            i32 = lean_intty(32, True)
+            return (f"(.cond (.bin .lt (some {i32}) {args[0]} (.const (.int {i32} 0))) "
+                    f"(.un .neg {i32} {args[0]}) {args[0]})")
         if name in ("strlen", "__builtin_strlen", "tg3__strlen"):
             if len(args) != 1:
                 die("strlen arity", n)
@@ -412,11 +492,15 @@ class FnTranslator:
             init, condvar, cond, inc, body = n["inner"]
             if condvar:
                 die("for with condition variable", n)
+            init_s = self.stmt(init) if init else ".skip"   # declares the loop variables
             c = self.rvalue(cond) if cond else "(.const (.int ⟨32, true⟩ 1))"
-            return self.seq([self.stmt(init) if init else ".skip",
+            return self.seq([init_s,
                              self.hoist(f"(.loop (.ite {c} {self.stmt(body)} .brk) {self.stmt(inc) if inc else '.skip'})")])
         if k == "SwitchStmt":
             return self.switch(n)
+        if k == "BinaryOperator" and n["opcode"] == ",":
+            # comma operator in statement position (e.g. `r += dr, c += dc`)
+            return self.seq([self.stmt(x) for x in n["inner"]])
         if k == "BinaryOperator" and n["opcode"] == "=":
             lhs, rhs = n["inner"]
             lv = self.lvalue(lhs)
@@ -555,8 +639,10 @@ class Layout:
     """Field offsets and sizes, measured with the real compiler."""
 
     def __init__(self):
-        self.queries = {}
+        self.queries = {q: None for _, q in LAYOUT_EXPORTS}
         self.results = None
+        self.globals = list(GLOBALS)
+        self.global_bytes = {}
 
     def _q(self, expr):
         if self.results is not None:
@@ -578,14 +664,24 @@ class Layout:
             exe = os.path.join(d, "probe")
             with open(c, "w") as f:
                 f.write(f'#include "{SRC}"\n#include <stddef.h>\n#include <stdio.h>\n')
+                for t in sorted(ENUM_CHECKS):
+                    f.write(f'_Static_assert(sizeof({t}) == 4 && ({t})-1 > 0, '
+                            f'"{t} must be a 32-bit unsigned enum");\n')
                 f.write("int main(void) {\n")
                 for q in self.queries:
                     f.write(f'    printf("%zu\\n", (size_t){q});\n')
+                for g in self.globals:
+                    f.write(f'    for (size_t i = 0; i < sizeof({g}); ++i) '
+                            f'printf("%u ", (unsigned)((const unsigned char *)&{g})[i]);\n')
+                    f.write('    printf("\\n");\n')
                 f.write("    return 0;\n}\n")
             subprocess.check_call([CLANG, f"--target={TARGET}", "-std=c11", "-w",
                                    f"-I{ROOT}", "-o", exe, c])
-            vals = subprocess.check_output([exe]).decode().split()
-        self.results = dict(zip(self.queries, (int(v) for v in vals)))
+            lines = subprocess.check_output([exe]).decode().splitlines()
+        nq = len(self.queries)
+        self.results = dict(zip(self.queries, (int(v) for v in lines[:nq])))
+        self.global_bytes = {g: [int(x) for x in line.split()]
+                             for g, line in zip(self.globals, lines[nq:])}
 
 
 def load_ast():
@@ -609,6 +705,7 @@ def collect_enums(ast):
                         inner = k.get("inner")
                         value = int(inner[0]["value"]) if inner else value + 1
                         enums[k["id"]] = value
+                        ENUM_VALUES[k["id"]] = value
             for v in n.get("inner", []):
                 walk(v)
     walk(ast)
@@ -627,6 +724,8 @@ def collect_records(ast):
                 t = inner[0].get("type", {}).get("qualType", "") if inner else ""
                 if t.startswith("struct ") or t.startswith("union "):
                     RECORDS.add(n["name"])
+                elif t.startswith("enum "):
+                    ENUM_TYPEDEFS.add(n["name"])
                 elif t in RECORDS:
                     RECORDS.add(n["name"])
             for v in n.get("inner", []):
@@ -681,6 +780,19 @@ def generate():
         lines.append(f"  params := {pids}")
         lines.append(f"  body := {body}")
         lines.append("")
+    for i, g in enumerate(GLOBALS):
+        data = layout.global_bytes[g]
+        lines.append(f"/-- Initial bytes of `{g}` (block {GLOBAL_BLOCK + i}), dumped by the probe. -/")
+        lines.append(f"def global_{g} : List UInt8 := {data!r}".replace(", ", ","))
+        lines.append("")
+    for name, q in LAYOUT_EXPORTS:
+        lines.append(f"/-- `{q}`, measured by the probe. -/")
+        lines.append(f"def {name} : Nat := {layout.results[q]}")
+        lines.append("")
+    lines.append("/-- The translated globals, as (block, bytes). -/")
+    lines.append("def globals : List (Nat × List UInt8) := ["
+                 + ", ".join(f"({GLOBAL_BLOCK + i}, global_{g})" for i, g in enumerate(GLOBALS)) + "]")
+    lines.append("")
     lit = ctx.literal_bytes()
     lines.append("/-- String literals referenced by the translated functions. -/")
     lines.append("def literals : List UInt8 := " + repr(lit).replace("'", '"'))

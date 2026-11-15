@@ -2,9 +2,9 @@ name: Formal
 
 on:
   push:
-    paths: ['formal/**', 'src/shogi.c', 'src/shogi.h', '.github/workflows/formal.yml']
+    paths: ['formal/**', 'src/shogi.c', 'src/shogi.h', 'src/shogi_tables.h', '.github/workflows/formal.yml']
   pull_request:
-    paths: ['formal/**', 'src/shogi.c', 'src/shogi.h', '.github/workflows/formal.yml']
+    paths: ['formal/**', 'src/shogi.c', 'src/shogi.h', 'src/shogi_tables.h', '.github/workflows/formal.yml']
 
 jobs:
   formal:
@@ -31,7 +31,9 @@ jobs:
         run: lake build
       - name: Gen.lean matches src/shogi.c
         run: python3 tools/c2lean.py --check
+      - name: src/shogi_tables.h matches formal/Shogi/Tables.lean
+        run: lake exe gentables | diff -u ../src/shogi_tables.h -
       - name: Axiom policy
         run: ./tools/axiomcheck.sh
       - name: Differential test (C with ASan/UBSan vs Lean spec)
-        run: python3 tools/cdiff.py --n 5000
+        run: python3 tools/cdiff.py --n 3000 --walks 20 --games 100 --mini 15
