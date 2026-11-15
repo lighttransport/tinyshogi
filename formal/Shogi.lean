@@ -5,6 +5,7 @@ import Shogi.Usi
 import Shogi.Rules
 import Shogi.Tables
 import Shogi.TablesSpec
+import Shogi.AttackSpec
 import Shogi.Declaration
 import Shogi.Game
 import Shogi.C.Gen

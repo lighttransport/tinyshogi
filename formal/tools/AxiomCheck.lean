@@ -48,3 +48,5 @@ import Shogi
 #print axioms Shogi.C.Proofs.find_king_refines
 #print axioms Shogi.C.Proofs.step_square_attacked_refines
 #print axioms Shogi.Tables.probesAgree_all
+#print axioms Shogi.Position.attacked_eq
+#print axioms Shogi.Position.slide_eq_ray
