@@ -97,8 +97,8 @@ theorem ev_true8 (s : State) :
     evalExpr Gen.prog 5 s (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.const (.int ⟨32, true⟩ 1))
       (.const (.int ⟨32, true⟩ 0)))) = .ok true8 := by rfl
 
-theorem ev_succ (s : State) (k : Nat) (hk : k < 81) (h8 : s.locals 8 = some (.int IntTy.u8 k)) :
-    evalExpr Gen.prog 5 s (.cast ⟨8, false⟩ (.bin .add (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 8))
+theorem ev_succ {v : Nat} (s : State) (k : Nat) (hk : k < 81) (h8 : s.locals v = some (.int IntTy.u8 k)) :
+    evalExpr Gen.prog 5 s (.cast ⟨8, false⟩ (.bin .add (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var v))
       (.const (.int ⟨32, true⟩ 1)))) = .ok (.int IntTy.u8 (k + 1)) := by
   simp [evalExpr, evalBin, evalCast, evalBinInt, binInt, isPtr, intOf, IntTy.toInt, IntTy.wrap,
     IntTy.modulus, IntTy.u8, Res.bind, h8, arith, IntTy.inRange, IntTy.minVal, IntTy.maxVal,

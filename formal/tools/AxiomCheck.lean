@@ -46,3 +46,5 @@ import Shogi
 #print axioms Shogi.Sfen.parse_print
 #print axioms Shogi.Sfen.parse_print_reachable
 #print axioms Shogi.C.Proofs.find_king_refines
+#print axioms Shogi.C.Proofs.step_square_attacked_refines
+#print axioms Shogi.Tables.probesAgree_all

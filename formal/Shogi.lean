@@ -4,12 +4,14 @@ import Shogi.Sfen
 import Shogi.Usi
 import Shogi.Rules
 import Shogi.Tables
+import Shogi.TablesSpec
 import Shogi.Declaration
 import Shogi.Game
 import Shogi.C.Gen
 import Shogi.C.Proofs.Helpers
 import Shogi.C.Proofs.Tables
 import Shogi.C.Proofs.FindKing
+import Shogi.C.Proofs.StepAttack
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
