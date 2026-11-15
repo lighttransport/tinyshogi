@@ -1,0 +1,37 @@
+name: Formal
+
+on:
+  push:
+    paths: ['formal/**', 'src/shogi.c', 'src/shogi.h', '.github/workflows/formal.yml']
+  pull_request:
+    paths: ['formal/**', 'src/shogi.c', 'src/shogi.h', '.github/workflows/formal.yml']
+
+jobs:
+  formal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: formal
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: formal/.lake
+          key: lake-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-${{ hashFiles('formal/**/*.lean') }}
+          restore-keys: lake-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-
+      - name: Build spec, MiniC and proofs
+        run: lake build
+      - name: Gen.lean matches src/shogi.c
+        run: python3 tools/c2lean.py --check
+      - name: Axiom policy
+        run: ./tools/axiomcheck.sh
+      - name: Differential test (C with ASan/UBSan vs Lean spec)
+        run: python3 tools/cdiff.py --n 5000

@@ -1,7 +1,7 @@
 # tinyshogi `formal/` — plan for a Lean 4 formalization of the shogi rules
 
-Status: **plan for review**. No proofs or C changes are in this PR. This file
-answers the brief in `plan.md` (kept out of the tree).
+Status: T0 done, T1 in progress (see `README.md`). No C changes so far.
+This file answers the brief in `plan.md` (kept out of the tree).
 
 The goal is a Lean 4 project under `formal/` that
 
