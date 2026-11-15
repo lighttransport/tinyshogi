@@ -110,5 +110,31 @@ theorem callFunc_mono {f args m} {n : Nat} (h : retOf (callFunc p n f args m) = 
       rw [execStmt_mono p hne k hk]
       exact h
     · simp [retOf] at h
+theorem EvE_of_eval {p : Prog} {s : State} {e : Expr} {v : Val} {n : Nat}
+    (h : evalExpr p n s e = .ok v) : EvE p s e v := by
+  refine ⟨n, fun k hk => ?_⟩
+  obtain ⟨d, rfl⟩ : ∃ d, k = n + d := ⟨k - n, by omega⟩
+  clear hk
+  induction d with
+  | zero => exact h
+  | succ d ih =>
+    rw [← Nat.add_assoc]
+    rcases (fuel_mono_step p (n + d)).1 s e with h' | h'
+    · rw [ih] at h'; cases h'
+    · rw [← h', ih]
+
+theorem EvArgs_of_eval {p : Prog} {s : State} {es : List Expr} {vs : List Val} {n : Nat}
+    (h : evalArgs p n s es = .ok vs) : EvArgs p s es vs := by
+  refine ⟨n, fun k hk => ?_⟩
+  obtain ⟨d, rfl⟩ : ∃ d, k = n + d := ⟨k - n, by omega⟩
+  clear hk
+  induction d with
+  | zero => exact h
+  | succ d ih =>
+    rw [← Nat.add_assoc]
+    rcases (fuel_mono_step p (n + d)).2.1 s es with h' | h'
+    · rw [ih] at h'; cases h'
+    · rw [← h', ih]
+
 end
 end MiniC

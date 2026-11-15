@@ -45,3 +45,4 @@ import Shogi
 #print axioms Shogi.Position.play_familyCount
 #print axioms Shogi.Sfen.parse_print
 #print axioms Shogi.Sfen.parse_print_reachable
+#print axioms Shogi.C.Proofs.find_king_refines

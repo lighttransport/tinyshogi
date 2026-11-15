@@ -9,6 +9,7 @@ import Shogi.Game
 import Shogi.C.Gen
 import Shogi.C.Proofs.Helpers
 import Shogi.C.Proofs.Tables
+import Shogi.C.Proofs.FindKing
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
