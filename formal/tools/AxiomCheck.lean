@@ -1,0 +1,47 @@
+/- Run with `lake env lean tools/AxiomCheck.lean`; tools/axiomcheck.sh fails
+   if any theorem depends on an axiom other than propext, Classical.choice,
+   Quot.sound (in particular `sorryAx` or `Lean.ofReduceBool`). -/
+import Shogi
+#print axioms Shogi.Usi.parse_print
+#print axioms Shogi.Usi.square_fileRank
+#print axioms Shogi.PieceType.handIndex_ofHandIndex
+#print axioms Shogi.PieceType.unpromote_promote
+#print axioms Shogi.Position.legalMoves_iff
+#print axioms Shogi.Position.legalAux_stable
+#print axioms Shogi.Position.legalMoves_safe
+#print axioms Shogi.Position.legalMoves_target
+#print axioms Shogi.Position.legalMoves_forced
+#print axioms Shogi.Position.legalMoves_drop
+#print axioms Shogi.Position.reachable_inv
+#print axioms Shogi.Position.reachable_kings
+#print axioms Shogi.RuleTests.perft1
+#print axioms Shogi.C.Proofs.shogi_piece_refines
+#print axioms Shogi.C.Proofs.shogi_piece_type_total
+#print axioms Shogi.C.Proofs.shogi_piece_color_total
+#print axioms Shogi.C.Proofs.shogi_piece_type_refines
+#print axioms Shogi.C.Proofs.shogi_piece_color_refines
+#print axioms Shogi.C.Proofs.shogi_is_promoted_refines
+#print axioms Shogi.C.Proofs.shogi_can_promote_refines
+#print axioms Shogi.C.Proofs.promoted_type_refines
+#print axioms Shogi.C.Proofs.shogi_unpromoted_type_refines
+#print axioms Shogi.C.Proofs.hand_index_refines
+#print axioms Shogi.C.Proofs.piece_letter_refines
+#print axioms Shogi.C.Proofs.row_of_refines
+#print axioms Shogi.C.Proofs.col_of_refines
+#print axioms Shogi.C.Proofs.square_at_refines
+#print axioms Shogi.C.Proofs.on_board_refines
+#print axioms Shogi.C.Proofs.in_promotion_zone_refines
+#print axioms Shogi.C.Proofs.forced_promotion_refines
+#print axioms MiniC.fuel_mono_step
+#print axioms Shogi.C.Proofs.step_attack_probes_refine
+#print axioms Shogi.C.Proofs.step_attack_probe_count_refine
+#print axioms Shogi.C.Proofs.attack_rays_refine
+#print axioms Shogi.C.Proofs.attack_ray_length_refine
+#print axioms Shogi.C.Proofs.attack_ray_masks_refine
+#print axioms Shogi.Tables.probes_uncapped
+#print axioms Shogi.Position.legalAux_stable
+#print axioms Shogi.Position.reachable_material
+#print axioms Shogi.Position.reachable_materialOk
+#print axioms Shogi.Position.play_familyCount
+#print axioms Shogi.Sfen.parse_print
+#print axioms Shogi.Sfen.parse_print_reachable
