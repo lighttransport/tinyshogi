@@ -61,3 +61,69 @@ theorem pure_ret {f : Nat} {fn : Func} {e : Expr} {args : List Val} {v : Val}
   rw [evalExpr_pure Gen.prog 63 e _ m m0 ro false hp]; exact h63
 
 end Shogi.C.Proofs
+
+namespace Shogi.C.Proofs
+open MiniC Shogi Shogi.C
+
+/-- `if`/`return` trees over pure expressions. -/
+def pureS : Stmt → Bool
+  | .ret (some e) => pureE e
+  | .ite c a b => pureE c && pureS a && pureS b
+  | _ => false
+
+theorem execStmt_pureS (p : Prog) : ∀ (n : Nat) (st : Stmt) (l : Locals) (m m' : Mem) (ro ro' : Bool)
+    (o : Outcome) (s0 : State), pureS st = true →
+    execStmt p n ⟨l, m, ro⟩ st = .ok (o, s0) → execStmt p n ⟨l, m', ro'⟩ st = .ok (o, ⟨l, m', ro'⟩) := by
+  intro n
+  induction n with
+  | zero => intro st l m m' ro ro' o s0 _ h; simp [execStmt] at h
+  | succ n ih =>
+    intro st l m m' ro ro' o s0 h hx
+    cases st with
+    | ret oe =>
+      cases oe with
+      | none => simp [pureS] at h
+      | some e =>
+        simp only [pureS] at h
+        simp only [execStmt] at hx ⊢
+        rw [evalExpr_pure p n e l m' m ro' ro h]
+        cases he : evalExpr p n ⟨l, m, ro⟩ e <;> simp_all [Res.bind, pure]
+    | ite c a b =>
+      simp only [pureS, Bool.and_eq_true] at h
+      obtain ⟨⟨hc, ha⟩, hb⟩ := h
+      simp only [execStmt] at hx ⊢
+      rw [evalExpr_pure p n c l m' m ro' ro hc]
+      cases hv : evalExpr p n ⟨l, m, ro⟩ c with
+      | ok v =>
+        rw [hv] at hx
+        simp only [Res.bind_eq, Res.bind_ok] at hx ⊢
+        cases ht : truthy v with
+        | ok bc =>
+          simp only [ht, Res.bind_ok] at hx ⊢
+          cases bc
+          · simp only [Bool.false_eq_true, ite_false] at hx ⊢; exact ih b l m m' ro ro' o s0 hb hx
+          · simp only [ite_true] at hx ⊢; exact ih a l m m' ro ro' o s0 ha hx
+        | _ => simp [Res.bind, ht] at hx
+      | _ => rw [hv] at hx; simp [Res.bind] at hx
+    | _ => simp [pureS] at h
+
+/-- Calling a helper whose body is a pure `if`/`return` tree. -/
+theorem pure_callS {f : Nat} {fn : Func} {args : List Val} {v : Val}
+    (hf : Gen.prog f = some fn) (hp : pureS fn.body = true)
+    (hlen : fn.params.length = args.length) (hrun : run f args = some (some v)) (m : Mem) (ro : Bool) :
+    ExS Gen.prog ⟨frameLocals fn.params args, m, ro⟩ fn.body (.ret (some v))
+      ⟨frameLocals fn.params args, m, ro⟩ := by
+  unfold run callFunc at hrun
+  rw [hf] at hrun; simp only [hlen, ite_true] at hrun
+  cases h : execStmt Gen.prog 64 ⟨frameLocals fn.params args, m0, false⟩ fn.body with
+  | ok r =>
+    obtain ⟨o, s0⟩ := r
+    rw [h] at hrun
+    cases o <;> simp [retOf] at hrun
+    rename_i ov
+    cases ov <;> simp at hrun
+    subst hrun
+    exact ExS_of_execStmt (p := Gen.prog) (execStmt_pureS Gen.prog 64 fn.body _ m0 m false ro _ _ hp h)
+  | _ => rw [h] at hrun; simp [retOf] at hrun
+
+end Shogi.C.Proofs
