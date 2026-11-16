@@ -81,8 +81,8 @@ theorem buf_empty {m : Mem} {mb cb : Nat} {R C : Block} (hm : m mb = some R) (hc
 /-- The prologue of `generate_legal_mut_internal`: `pseudo` (600 moves) and
     `pseudo_count = 0` are allocated, giving an empty move buffer. -/
 theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 2 < 2 ^ 64) (hro : s.ro = false) :
-    ∃ s', ExS Gen.prog s (.seq (.alloc 4 3000) (.seq (.alloc 5 8)
-        (.store (.int ⟨64, false⟩) (.var 5) (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0)))))) .normal s' ∧
+    ∃ s1 s', ExS Gen.prog s (.alloc 4 3000) .normal s1 ∧ ExS Gen.prog s1 (.seq (.alloc 5 8)
+        (.store (.int ⟨64, false⟩) (.var 5) (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0))))) .normal s' ∧
       Buf s'.mem n 0 (n + 1) 0 600 [] ∧ Fresh s'.mem (n + 2) ∧
       s'.locals 4 = some (.ptr n 0) ∧ s'.locals 5 = some (.ptr (n + 1) 0) ∧
       (∀ x, x ≠ 4 → x ≠ 5 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
@@ -107,7 +107,7 @@ theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 2 <
     · simp [evalExpr, evalCast, IntTy.wrap, IntTy.toInt, IntTy.modulus]
     · simp only [store, Ty.size, IntTy.bytes]
       exact writeBytes_ok g1 (by simp [encodeLE_length])
-  refine ⟨_, ExS.seq e1 (ExS.seq e2 es), ?_, ?_, by simp [L2, Locals.upd], by simp [L2, Locals.upd],
+  refine ⟨_, _, e1, ExS.seq e2 es, ?_, ?_, by simp [L2, Locals.upd], by simp [L2, Locals.upd],
     fun x a b => by simp [L2, Locals.upd, a, b], rfl, fun b a c d => ?_⟩
   · refine buf_empty (R := R) (C := encodeLE 8 0) ?_ ?_ (by omega) rfl (by omega) hf.2.1 (by omega)
     · show (M2.write (n + 1) 0 _) n = _
@@ -185,8 +185,8 @@ theorem legal_count_init {s : State} {n mb mo cap : Nat} {blk : Block} (hf : Fre
 theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = some posPtr)
     (hm : s.mem posBlock = some (encode p)) (ht : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 2 < 2 ^ 64)
     (hro : s.ro = false) :
-    ∃ s', ExS Gen.prog s (.seq (.set 7 (.load (.int ⟨32, false⟩) (.field (.var 0) 96)))
-        (.seq (.alloc 8 84) (.call none 31 [(.var 8), (.var 0), (.var 7)]))) .normal s' ∧
+    ∃ s1 s', ExS Gen.prog s (.set 7 (.load (.int ⟨32, false⟩) (.field (.var 0) 96))) .normal s1 ∧
+      ExS Gen.prog s1 (.seq (.alloc 8 84) (.call none 31 [(.var 8), (.var 0), (.var 7)])) .normal s' ∧
       s'.mem n = some (ksRec p p.side) ∧ s'.locals 7 = some (u32 p.side.idx) ∧
       s'.locals 8 = some (.ptr n 0) ∧ (∀ x, x ≠ 7 → x ≠ 8 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
       (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → s'.mem b = s.mem b) ∧ Fresh s'.mem (n + 2) := by
@@ -217,7 +217,7 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
     hf1 (by omega) hn0 hnp
   let s2 : State := { s1 with mem := M, locals := s1.locals.upd 8 (.ptr n 0) }
   have h7 : s2.locals 7 = some (u32 p.side.idx) := by simp [s2, s1, Locals.upd]
-  refine ⟨{ s2 with mem := sk.mem }, ExS.seq e1 (ExS.seq e2 (ExS.call (vs := [.ptr n 0, posPtr, u32 p.side.idx])
+  refine ⟨_, { s2 with mem := sk.mem }, e1, (ExS.seq e2 (ExS.call (vs := [.ptr n 0, posPtr, u32 p.side.idx])
     (EvArgs.cons (EvE.var (by simp [s2, Locals.upd])) (EvArgs.cons (EvE.var (by simp [s2, s1, Locals.upd, h0]))
       (EvArgs.cons (EvE.var h7) EvArgs.nil))) rfl rfl (by simp only [s2, s1]; rw [hro]; exact ek) (Or.inr rfl))),
     hk, h7, by simp [s2, Locals.upd], fun x a b => by simp [s2, s1, Locals.upd, a, b], rfl, fun b a c d => ?_,

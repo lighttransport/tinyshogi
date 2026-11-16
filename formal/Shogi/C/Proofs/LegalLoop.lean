@@ -31,7 +31,8 @@ theorem legal_loop {p : Position} {fuel : Nat} {Ms : List Move} {pb cntb Sb mb m
       Buf s.mem mb mo cb co cap L → TablesIn s.mem → Fresh s.mem n →
       n + (d + 5) * RB + 4000000200 < 2 ^ 64 → s.ro = false →
       ∃ s', ExS Gen.prog s (.loop lpBody lpStep) .normal s' ∧
-        Buf s'.mem mb mo cb co cap (L ++ keepBytes p fuel (Ms.drop i)) ∧ s'.mem posBlock = some (encode p) := by
+        Buf s'.mem mb mo cb co cap (L ++ keepBytes p fuel (Ms.drop i)) ∧ s'.mem posBlock = some (encode p) ∧
+        s'.locals 6 = s.locals 6 := by
   have hcond : ∀ (s : State) (i : Nat), s.locals 9 = some (.int IntTy.u64 i) → s.locals 5 = some (.ptr cntb 0) →
       readBytes s.mem cntb 0 8 = .ok (encodeLE 8 Ms.length) →
       EvE Gen.prog s lpCond (boolVal (decide (i < Ms.length))) := by
@@ -48,7 +49,7 @@ theorem legal_loop {p : Position} {fuel : Nat} {Ms : List Move} {pb cntb Sb mb m
     intro i s L n hd h0 h1 h2 h3 h4 h5 h6 h7 h8 h9 hp hpb hSb hcb hrc hb ht hf h64 hro
     have : i = Ms.length := by omega
     subst this
-    refine ⟨s, ExS.loop_brk (ExS.ite (bc := false) (hcond s _ h9 h5 hrc) (by simp [truthy_boolVal]) ExS.brk), ?_, hp⟩
+    refine ⟨s, ExS.loop_brk (ExS.ite (bc := false) (hcond s _ h9 h5 hrc) (by simp [truthy_boolVal]) ExS.brk), ?_, hp, rfl⟩
     simpa [keepBytes] using hb
   | succ d ih =>
     intro i s L n hd h0 h1 h2 h3 h4 h5 h6 h7 h8 h9 hp hpb hSb hcb hrc hb ht hf h64 hro
@@ -80,13 +81,13 @@ theorem legal_loop {p : Position} {fuel : Nat} {Ms : List Move} {pb cntb Sb mb m
         by rw [k _ (by decide) (by decide) (by rw [ht.g3]; simp)]; exact ht.g3,
         by rw [k _ (by decide) (by decide) (by rw [ht.g4]; simp)]; exact ht.g4,
         by rw [k _ (by decide) (by decide) (by rw [ht.g5]; simp)]; exact ht.g5⟩
-    obtain ⟨s', e', hb', hp'⟩ := ih (i + 1) s2 _ f (by omega)
+    obtain ⟨s', e', hb', hp', h6'⟩ := ih (i + 1) s2 _ f (by omega)
       (by rw [hl2 0 (by omega)]; exact h0) (by rw [hl2 1 (by omega)]; exact h1) (by rw [hl2 2 (by omega)]; exact h2)
       (by rw [hl2 3 (by omega)]; exact h3) (by rw [hl2 4 (by omega)]; exact h4) (by rw [hl2 5 (by omega)]; exact h5)
       (by rw [hl2 6 (by omega)]; exact h6) (by rw [hl2 7 (by omega)]; exact h7) (by rw [hl2 8 (by omega)]; exact h8)
       (by simp [s2, Locals.upd]) hp1 hpb2 hSb2 hcb2 hrc2 hb1 ht2 hf1 (by unfold RB at h64 ⊢; omega) hro1
     refine ⟨s', ExS.loop_next (ExS.ite (bc := true) (hcond s i h9 h5 hrc) (by simp [truthy_boolVal, hi]) e1) ho es e',
-      ?_, hp'⟩
+      ?_, hp', by rw [h6', hl2 6 (by omega)]⟩
     have hdrop : keepBytes p fuel (Ms.drop i) =
         (if specKeep p fuel m then [moveBytes p m] else []) ++ keepBytes p fuel (Ms.drop (i + 1)) := by
       rw [List.drop_eq_getElem_cons hi]; unfold keepBytes; simp only [List.filterMap_cons]

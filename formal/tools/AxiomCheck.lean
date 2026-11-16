@@ -94,3 +94,5 @@ import Shogi
 #print axioms Shogi.C.Proofs.legal_return
 #print axioms Shogi.C.Proofs.legal_index_init
 #print axioms Shogi.C.Proofs.buf_bridge
+#print axioms Shogi.C.Proofs.generate_legal_main
+#print axioms Shogi.C.Proofs.generate_legal_refines
