@@ -79,7 +79,8 @@ theorem exec_alloc {s : State} {n : Nat} (ha : AllocAt s.mem n) (i size : Nat) :
 theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (ha : AllocAt m n) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.shogi_is_in_check.params [posPtr, .int IntTy.u32 c.idx], m, false⟩
-      Gen.shogi_is_in_check.body (.ret (some (if p.inCheck c then true8 else false8))) s' := by
+      Gen.shogi_is_in_check.body (.ret (some (if p.inCheck c then true8 else false8))) s' ∧
+      (∀ x, x ≠ 0 → x ≠ n → s'.mem x = m x) ∧ s'.mem 0 = some (encodeLE 8 (n + 1)) ∧ (s'.mem n).isSome := by
   have hci : c.idx < 2 := by cases c <;> decide
   have ⟨_, hn0, _, hfree⟩ := ha
   have hnpos : n ≠ posBlock := fun e => by rw [e, hm] at hfree; cases hfree
@@ -120,8 +121,8 @@ theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
     have htF : TablesIn sF.mem := by rw [hmF]; exact ht1.upd_not _ (ht.fresh hfree)
     have hnF : sF.mem n = some [sq.val.toUInt8] := by
       rw [hmF, Mem.upd_eq]; simp [encodeLE, Nat.mod_eq_of_lt (show sq.val < 256 by omega)]
-    obtain ⟨sA, hsA⟩ := square_attacked_refines p sq c.opp sF.mem hmF' htF.g1 htF.g2 htF.g3 htF.g4 htF.g5
-    show ∃ s', ExS Gen.prog _ _ (.ret (some (if p.attacked sq c.opp then true8 else false8))) s'
+    obtain ⟨sA, hsA, hsAm⟩ := square_attacked_refines p sq c.opp sF.mem hmF' htF.g1 htF.g2 htF.g3 htF.g4 htF.g5
+    show ∃ s', ExS Gen.prog _ _ (.ret (some (if p.attacked sq c.opp then true8 else false8))) s' ∧ _
     generalize p.attacked sq c.opp = att at hsA ⊢
     let v4 := if att then true8 else false8
     let s3 : State := { s2 with mem := sA.mem, locals := s2.locals.upd 4 v4 }
@@ -154,9 +155,14 @@ theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
       ExS.ite (vc := .int IntTy.i32 1) (bc := true) (EvE_of_eval (n := 2) (by
         simp [evalExpr, s2, Locals.upd, true8, evalCast, IntTy.wrap, IntTy.modulus]; rfl)) rfl
         (ExS.seq hcall2 hset5)
-    refine ⟨s4, ExS.seq hguard (ExS.seq halloc (ExS.seq hcall1 (ExS.seq hite (ExS.ret ?_))))⟩
-    apply EvE_of_eval (n := 4)
-    cases att <;> rfl
+    have hm4 : s4.mem = m1.upd n (encodeLE 1 sq.val ++ (List.replicate 1 (0 : UInt8)).drop 1) := by
+      show sA.mem = _; rw [hsAm, hmF]
+    refine ⟨s4, ExS.seq hguard (ExS.seq halloc (ExS.seq hcall1 (ExS.seq hite (ExS.ret ?_)))), ?_, ?_, ?_⟩
+    · apply EvE_of_eval (n := 4)
+      cases att <;> rfl
+    · intro x a b; rw [hm4, Mem.upd_ne b]; simp only [m1]; rw [Mem.upd_ne b, Mem.upd_ne a]
+    · rw [hm4, Mem.upd_ne hn0.symm]; simp only [m1]; rw [Mem.upd_ne hn0.symm, Mem.upd_eq]
+    · rw [hm4, Mem.upd_eq]; rfl
   | none =>
     intro ⟨sF, hsF, hmem⟩
     let s2 : State := { s1 with mem := sF.mem, locals := s1.locals.upd 3 false8 }
@@ -171,7 +177,11 @@ theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
       ExS.ite (vc := .int IntTy.i32 0) (bc := false) (EvE_of_eval (n := 2) (by
         simp [evalExpr, s2, Locals.upd, false8, evalCast, IntTy.wrap, IntTy.modulus]; rfl)) rfl
         (ExS.set (EvE.const _))
-    exact ⟨s4, ExS.seq hguard (ExS.seq halloc (ExS.seq hcall1 (ExS.seq hite
-      (ExS.ret (EvE_of_eval (n := 4) rfl)))))⟩
+    have hm4 : s4.mem = m1 := hmem
+    refine ⟨s4, ExS.seq hguard (ExS.seq halloc (ExS.seq hcall1 (ExS.seq hite
+      (ExS.ret (EvE_of_eval (n := 4) rfl))))), ?_, ?_, ?_⟩
+    · intro x a b; rw [hm4]; simp only [m1]; rw [Mem.upd_ne b, Mem.upd_ne a]
+    · rw [hm4]; simp only [m1]; rw [Mem.upd_ne hn0.symm, Mem.upd_eq]
+    · rw [hm4, hob]; rfl
 
 end Shogi.C.Proofs

@@ -7,6 +7,7 @@
   form of the spec (`attacked_eq`, AttackSpec.lean).
 -/
 import Shogi.C.Proofs.StepAttack
+import Shogi.C.Proofs.NoWrite
 import Shogi.AttackSpec
 
 namespace Shogi.C.Proofs
@@ -562,7 +563,7 @@ theorem square_attacked_refines (p : Position) (t : Square) (c : Color) (m : Mem
     (hG5 : m 8196 = some Gen.global_attack_ray_masks) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.square_attacked.params
         [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx], m, false⟩
-      Gen.square_attacked.body (.ret (some (if p.attacked t c then true8 else false8))) s' := by
+      Gen.square_attacked.body (.ret (some (if p.attacked t c then true8 else false8))) s' ∧ s'.mem = m := by
   have hci : c.idx < 2 := by cases c <;> decide
   let L0 := frameLocals Gen.square_attacked.params [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx]
   let s0 : State := ⟨L0, m, false⟩
@@ -577,7 +578,7 @@ theorem square_attacked_refines (p : Position) (t : Square) (c : Color) (m : Mem
   simp only
   by_cases hst : stepAttacked p t c = true
   · simp only [hst, Bool.true_or, ite_true]
-    refine ⟨s1, ExS.seq_ret (ExS.seq hcall ?_)⟩
+    refine ⟨s1, ExS.seq_ret (ExS.seq hcall ?_), hs1m⟩
     refine ExS.ite (vc := v3) (bc := true) (EvE_of_eval (n := 2) (by simp [evalExpr, s1, Locals.upd]))
       (by simp [v3, hst, true8]; rfl) ?_
     exact ExS.ret (EvE_of_eval (ev_true8 _))
@@ -604,11 +605,13 @@ theorem square_attacked_refines (p : Position) (t : Square) (c : Color) (m : Mem
     · rename_i hr
       rw [if_pos hr] at hloop
       obtain ⟨s', hs'⟩ := hloop
-      exact ⟨s', ExS.seq (ExS.seq hcall hite) (ExS.seq hset4 (ExS.seq_ret (ExS.seq hset5 hs')))⟩
+      have hw := (ExS_noWrite (by decide) hs').1
+      exact ⟨s', ExS.seq (ExS.seq hcall hite) (ExS.seq hset4 (ExS.seq_ret (ExS.seq hset5 hs'))), by rw [hw]; exact hs1m⟩
     · rename_i hr
       rw [if_neg hr] at hloop
       obtain ⟨s', hs'⟩ := hloop
+      have hw := (ExS_noWrite (by decide) hs').1
       exact ⟨s', ExS.seq (ExS.seq hcall hite) (ExS.seq hset4 (ExS.seq (ExS.seq hset5 hs')
-        (ExS.ret (EvE_of_eval (n := 5) rfl))))⟩
+        (ExS.ret (EvE_of_eval (n := 5) rfl)))), by rw [hw]; exact hs1m⟩
 
 end Shogi.C.Proofs
