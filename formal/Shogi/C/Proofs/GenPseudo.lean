@@ -55,3 +55,16 @@ theorem pseudoC_moves (p : Position) (hw : ∀ i, p.hand p.side i < 256) :
   perm_map_inv (moveBytes p) _ _ (pseudoC_spec p hw)
 
 end Shogi.C.Proofs
+
+namespace Shogi.C.Proofs
+
+/-- Filtering any permutation of `pseudoMoves` with the spec's test gives the
+    spec's legal moves, up to order. -/
+theorem keepBytes_perm (p : Position) (fuel : Nat) {Ms : List Move} (h : Ms.Perm p.pseudoMoves) :
+    (keepBytes p fuel Ms).Perm ((Position.legalAux (fuel + 1) p).map (moveBytes p)) := by
+  have e : (Position.legalAux (fuel + 1) p).map (moveBytes p) = keepBytes p fuel p.pseudoMoves := by
+    simp only [Position.legalAux, keepBytes]
+    rw [map_filter_eq_filterMap]; rfl
+  rw [e]; unfold keepBytes; exact h.filterMap _
+
+end Shogi.C.Proofs

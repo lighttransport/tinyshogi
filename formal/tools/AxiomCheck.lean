@@ -86,3 +86,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.legal_loop
 #print axioms Shogi.C.Proofs.generate_pseudo_wrap
 #print axioms Shogi.C.Proofs.pseudoC_moves
+#print axioms Shogi.C.Proofs.keepBytes_perm
