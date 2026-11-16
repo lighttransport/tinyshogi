@@ -96,3 +96,6 @@ import Shogi
 #print axioms Shogi.C.Proofs.buf_bridge
 #print axioms Shogi.C.Proofs.generate_legal_main
 #print axioms Shogi.C.Proofs.generate_legal_refines
+#print axioms Shogi.C.Proofs.checkingPawnDrop_unique
+#print axioms Shogi.C.Proofs.checkingPawnDrops_le_one
+#print axioms Shogi.C.Proofs.dropMoves_nodup

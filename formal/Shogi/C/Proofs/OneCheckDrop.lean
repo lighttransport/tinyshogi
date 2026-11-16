@@ -278,11 +278,229 @@ theorem flatMap_single {α β : Type} (l : List α) (a₀ : α) (g : α → List
 theorem ofHandIndex_eq_pawn (i : Fin 7) : PieceType.ofHandIndex i = .pawn ↔ i.val = 0 := by
   revert i; decide
 
-/-
-The counting lemma `checkingPawnDrops_le_one` (all checking pawn drops are
-the same move, and `dropMoves` emits each drop value once) is work in
-progress: the geometric core `checkingPawnDrop_unique` above is complete;
-the remaining list plumbing (Nodup of `dropMoves` from per-square filterMap
-injectivity, then length ≤ 1 from Nodup + all-equal) still needs its final
-tactic pass. Tracked for the next session.
--/
+theorem filterMap_nodup_of_inj {α β : Type} (f : α → Option β) (l : List α)
+    (hnd : l.Nodup) (hinj : ∀ a b y, f a = some y → f b = some y → a = b) :
+    (l.filterMap f).Nodup := by
+  induction l with
+  | nil => simp
+  | cons a l ih =>
+    cases h : f a with
+    | none =>
+      rw [List.filterMap_cons, h]
+      exact ih (List.nodup_cons.mp hnd).2
+    | some w =>
+      rw [List.filterMap_cons, h, List.nodup_cons]
+      refine ⟨?_, ih (List.nodup_cons.mp hnd).2⟩
+      intro hmem
+      rw [List.mem_filterMap] at hmem
+      obtain ⟨b, hb, hbw⟩ := hmem
+      exact absurd (hinj a b w h hbw) (by
+        intro e; subst e; exact (List.nodup_cons.mp hnd).1 hb)
+
+def dropCell (p : Position) (x : Square) (i : Fin 7) : Option Move :=
+  if p.hand p.side i > 0 && p.dropAllowed p.side (PieceType.ofHandIndex i) x then
+    some (.drop (PieceType.ofHandIndex i) x) else none
+
+theorem dropMoves_eq (p : Position) :
+    p.dropMoves = (List.finRange 81).flatMap (fun x => (List.finRange 7).filterMap (dropCell p x)) := rfl
+
+theorem dropCell_val {p : Position} {x : Square} {i : Fin 7} {w : Move}
+    (h : dropCell p x i = some w) : w = .drop (PieceType.ofHandIndex i) x := by
+  unfold dropCell at h
+  split at h
+  · exact (Option.some_inj.mp h).symm
+  · simp at h
+
+theorem dropCell_inj {p : Position} {x : Square} {i j : Fin 7} {w : Move}
+    (h1 : dropCell p x i = some w) (h2 : dropCell p x j = some w) : i = j := by
+  have e1 := dropCell_val h1
+  have e2 := dropCell_val h2
+  have h : Move.drop (PieceType.ofHandIndex i) x = Move.drop (PieceType.ofHandIndex j) x :=
+    e1.symm.trans e2
+  have hinj := Move.drop.inj h
+  have hh : (PieceType.ofHandIndex i).handIndex = (PieceType.ofHandIndex j).handIndex := by
+    rw [hinj.1]
+  rw [PieceType.handIndex_ofHandIndex, PieceType.handIndex_ofHandIndex] at hh
+  exact Option.some_inj.mp hh
+
+theorem cell_nodup (p : Position) (x : Square) :
+    ((List.finRange 7).filterMap (dropCell p x)).Nodup := by
+  refine filterMap_nodup_of_inj (dropCell p x) (List.finRange 7) (List.nodup_finRange 7) ?_
+  intro a b y h1 h2
+  exact dropCell_inj h1 h2
+
+/-- A move in a cell determined by square `x` has destination `x`. -/
+theorem cell_dst {p : Position} {x : Square} {w : Move}
+    (h : w ∈ (List.finRange 7).filterMap (dropCell p x)) : w.dst = x := by
+  rw [List.mem_filterMap] at h
+  obtain ⟨i, _, hi⟩ := h
+  rw [dropCell_val hi]; rfl
+
+
+
+/-- Distinct squares give disjoint cell move sets (a drop's destination is its
+    square). -/
+theorem cells_disjoint {p : Position} {x y : Square} (hxy : x ≠ y) {w : Move}
+    (hx : w ∈ (List.finRange 7).filterMap (dropCell p x))
+    (hy : w ∈ (List.finRange 7).filterMap (dropCell p y)) : False := by
+  have e1 := cell_dst hx
+  have e2 := cell_dst hy
+  exact hxy (e1.symm.trans e2)
+
+
+
+theorem flatMap_nodup {α β : Type} (l : List α) (g : α → List β)
+    (hnd : l.Nodup)
+    (hcell : ∀ x ∈ l, (g x).Nodup)
+    (hdisj : ∀ x ∈ l, ∀ y ∈ l, x ≠ y → ∀ a ∈ g x, ∀ b ∈ g y, a ≠ b) :
+    (l.flatMap g).Nodup := by
+  induction l with
+  | nil => simp
+  | cons a t ih =>
+    rw [List.flatMap_cons, List.nodup_append]
+    have hnd' := List.nodup_cons.mp hnd
+    refine ⟨hcell a List.mem_cons_self, ?_, ?_⟩
+    · exact ih hnd'.2
+        (fun x hx => hcell x (List.mem_cons_of_mem a hx))
+        (fun x hx y hy hxy => hdisj x (List.mem_cons_of_mem a hx)
+          y (List.mem_cons_of_mem a hy) hxy)
+    · intro p hp q hq
+      rw [List.mem_flatMap] at hq
+      obtain ⟨y, hy, hqy⟩ := hq
+      exact hdisj a List.mem_cons_self y (List.mem_cons_of_mem a hy)
+        (fun e => hnd'.1 (e ▸ hy)) p hp q hqy
+
+
+
+theorem dropMoves_nodup (p : Position) : p.dropMoves.Nodup := by
+  rw [dropMoves_eq]
+  exact flatMap_nodup (List.finRange 81)
+    (fun x => (List.finRange 7).filterMap (dropCell p x))
+    (List.nodup_finRange 81) (fun x _ => cell_nodup p x)
+    (fun x _ y _ hxy a ha b hb heq => by
+      rw [heq] at ha
+      exact cells_disjoint hxy ha hb)
+
+
+
+/-- A Nodup list whose elements are all equal has length at most one. -/
+theorem nodup_all_eq_len_le {α : Type} {l : List α} {v : α}
+    (hnd : l.Nodup) (h : ∀ a ∈ l, a = v) : l.length ≤ 1 := by
+  cases l with
+  | nil => simp
+  | cons a t =>
+    cases t with
+    | nil => simp
+    | cons b t' =>
+      exfalso
+      have hnb : a ∉ b :: t' := (List.nodup_cons.mp hnd).1
+      have hab : a = b := (h a List.mem_cons_self).trans
+        (h b (List.mem_cons_of_mem a List.mem_cons_self)).symm
+      exact hnb (hab ▸ List.mem_cons_self)
+
+theorem boardMoves_normal {p : Position} {s : Square} {pc : Piece} {m : Move}
+    (h : m ∈ p.boardMoves s pc) : ∃ d pr, m = .normal s d pr := by
+  unfold Position.boardMoves at h
+  rw [List.mem_flatMap] at h
+  obtain ⟨d, _, hd⟩ := h
+  cases hpd : p.pieceAt d with
+  | none =>
+    simp only [hpd] at hd
+    rw [List.mem_map] at hd
+    obtain ⟨pr, _, rfl⟩ := hd
+    exact ⟨d, pr, rfl⟩
+  | some q =>
+    simp only [hpd] at hd
+    split at hd
+    · simp at hd
+    · rw [List.mem_map] at hd
+      obtain ⟨pr, _, rfl⟩ := hd
+      exact ⟨d, pr, rfl⟩
+
+theorem checkFilter_eq_dropFilter (p : Position) :
+    (p.pseudoMoves.filter (fun m => Position.isPawnDrop m &&
+      (p.play m).inCheck (p.play m).side))
+    = p.dropMoves.filter (fun m => Position.isPawnDrop m &&
+        (p.play m).inCheck (p.play m).side) := by
+  have key : p.pseudoMoves =
+      (List.finRange 81).flatMap (fun s : Square =>
+        match p.pieceAt s with
+        | some pc => if (pc.color == p.side) = true then p.boardMoves s pc else []
+        | none => []) ++ p.dropMoves := rfl
+  rw [key, List.filter_append]
+  have hboard : ((List.finRange 81).flatMap (fun s : Square =>
+      match p.pieceAt s with
+      | some pc => if (pc.color == p.side) = true then p.boardMoves s pc else []
+      | none => [])).filter (fun m => Position.isPawnDrop m &&
+        (p.play m).inCheck (p.play m).side) = [] := by
+    rw [List.filter_eq_nil_iff.mpr]
+    intro x hx hxc
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hxc
+    have hpd : Position.isPawnDrop x = true := hxc.1
+    rw [List.mem_flatMap] at hx
+    obtain ⟨s, _, hx2⟩ := hx
+    by_cases hpc : p.pieceAt s = none
+    · simp only [hpc] at hx2; simp at hx2
+    · cases hp : p.pieceAt s with
+      | none => simp only [hp] at hx2; simp at hx2
+      | some pc =>
+        simp only [hp] at hx2
+        by_cases hcol : pc.color = p.side
+        · rw [if_pos (show (pc.color == p.side) = true by rw [hcol]; simp)] at hx2
+          obtain ⟨d, pr, rfl⟩ := boardMoves_normal hx2
+          simp [Position.isPawnDrop] at hpd
+        · rw [if_neg (show ¬((pc.color == p.side) = true) by
+            simp [show pc.color ≠ p.side from hcol])] at hx2
+          simp at hx2
+  rw [hboard, List.nil_append]
+
+theorem filter_pawn_check_pair {p : Position} (hS : p.Shaped) (hK : KingsUnique p)
+    (hnc : p.inCheck p.side.opp = false) {a b : Move}
+    (hpd : Position.isPawnDrop a = true)
+    (hca : (p.play a).inCheck (p.play a).side = true)
+    (hpb : Position.isPawnDrop b = true)
+    (hcb : (p.play b).inCheck (p.play b).side = true) : a = b := by
+  cases a with
+  | normal => simp [Position.isPawnDrop] at hpd
+  | drop ta da =>
+    cases b with
+    | normal => simp [Position.isPawnDrop] at hpb
+    | drop tb db =>
+      simp only [Position.isPawnDrop] at hpd hpb
+      cases ta with
+      | pawn =>
+        cases tb with
+        | pawn => exact congrArg _ (checkingPawnDrop_unique hS hK hnc hca hcb)
+        | _ => simp at hpb
+      | _ => simp at hpd
+
+theorem checkingPawnDrops_le_one {p : Position} (hS : p.Shaped) (hK : KingsUnique p)
+    (hnc : p.inCheck p.side.opp = false) :
+    (p.pseudoMoves.filter (fun m => Position.isPawnDrop m &&
+      (p.play m).inCheck (p.play m).side)).length ≤ 1 := by
+  rw [checkFilter_eq_dropFilter p]
+  have hnd : (p.dropMoves.filter (fun m => Position.isPawnDrop m &&
+      (p.play m).inCheck (p.play m).side)).Nodup :=
+    List.Nodup.sublist List.filter_sublist (dropMoves_nodup p)
+  cases hL : (p.dropMoves.filter (fun m => Position.isPawnDrop m &&
+      (p.play m).inCheck (p.play m).side)) with
+  | nil => simp
+  | cons x t =>
+    have hxmem : x ∈ p.dropMoves.filter (fun m => Position.isPawnDrop m &&
+        (p.play m).inCheck (p.play m).side) := by
+      rw [hL]; exact List.mem_cons_self
+    simp only [List.mem_filter, Bool.and_eq_true] at hxmem
+    obtain ⟨hxd, hpx, hcx⟩ := hxmem
+    have hlen : (x :: t).length ≤ 1 := by
+      refine nodup_all_eq_len_le (v := x) ?_ ?_
+      · rw [hL] at hnd; exact hnd
+      · intro a ha
+        have hamem : a ∈ p.dropMoves.filter (fun m => Position.isPawnDrop m &&
+            (p.play m).inCheck (p.play m).side) := by
+          rw [hL]; exact ha
+        simp only [List.mem_filter, Bool.and_eq_true] at hamem
+        obtain ⟨had, hpa, hca⟩ := hamem
+        exact filter_pawn_check_pair hS hK hnc hpa hca hpx hcx
+    simpa using hlen
+
+end Shogi.C.Proofs
