@@ -114,7 +114,7 @@ theorem mul64 (a b : Int) (ha : -8 ≤ a ∧ a ≤ 8) (hb : -8 ≤ b ∧ b ≤ 8
 
 theorem same_king_ray_spec (k f t : Square) (m : Mem) (ro : Bool) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.same_king_ray.params [u8 k.val, u8 f.val, u8 t.val], m, ro⟩
-      Gen.same_king_ray.body (.ret (some (u8 (if sameKingRay k f t then 1 else 0)))) s' := by
+      Gen.same_king_ray.body (.ret (some (u8 (if sameKingRay k f t then 1 else 0)))) s' ∧ s'.mem = m := by
   let s0 : State := ⟨frameLocals Gen.same_king_ray.params [u8 k.val, u8 f.val, u8 t.val], m, ro⟩
   have hk := k.isLt; have hf := f.isLt; have ht := t.isLt
   let KR : Int := (Square.row k : Nat); let KC : Int := (Square.col k : Nat)
@@ -197,16 +197,16 @@ theorem same_king_ray_spec (k f t : Square) (m : Mem) (ro : Bool) :
   let B : Bool := if DR = 0 then decide (XR = 0) else if DC = 0 then decide (XC = 0)
     else decide (iabs DR = iabs DC) && decide (iabs XR = iabs XC) && decide (DR * XC = DC * XR)
   have hab : ∀ z, Sm z → Sm (iabs z) := fun z hz => by unfold Sm iabs at *; split <;> omega
-  obtain ⟨d5, w5, l19⟩ : ∃ d5, ExS Gen.prog d4 (.ite (.bin .eq (some ⟨32, true⟩) (.var 15) (.const (.int ⟨32, true⟩ 0))) (.set 19 (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.bin .eq (some ⟨32, true⟩) (.var 17) (.const (.int ⟨32, true⟩ 0))) (.const (.int ⟨32, true⟩ 0))))) (.ite (.bin .eq (some ⟨32, true⟩) (.var 16) (.const (.int ⟨32, true⟩ 0))) (.set 19 (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.bin .eq (some ⟨32, true⟩) (.var 18) (.const (.int ⟨32, true⟩ 0))) (.const (.int ⟨32, true⟩ 0))))) (.set 19 (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.land (.land (.bin .eq (some ⟨32, true⟩) (.cond (.bin .lt (some ⟨32, true⟩) (.var 15) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 15)) (.var 15)) (.cond (.bin .lt (some ⟨32, true⟩) (.var 16) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 16)) (.var 16))) (.bin .eq (some ⟨32, true⟩) (.cond (.bin .lt (some ⟨32, true⟩) (.var 17) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 17)) (.var 17)) (.cond (.bin .lt (some ⟨32, true⟩) (.var 18) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 18)) (.var 18)))) (.bin .eq (some ⟨32, true⟩) (.bin .mul (some ⟨32, true⟩) (.var 15) (.var 18)) (.bin .mul (some ⟨32, true⟩) (.var 16) (.var 17)))) (.const (.int ⟨32, true⟩ 0))))))) .normal d5 ∧
-      d5.locals = d4.locals.upd 19 (u8 (if B then 1 else 0)) := by
+  obtain ⟨d5, w5, l19, hd5m⟩ : ∃ d5, ExS Gen.prog d4 (.ite (.bin .eq (some ⟨32, true⟩) (.var 15) (.const (.int ⟨32, true⟩ 0))) (.set 19 (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.bin .eq (some ⟨32, true⟩) (.var 17) (.const (.int ⟨32, true⟩ 0))) (.const (.int ⟨32, true⟩ 0))))) (.ite (.bin .eq (some ⟨32, true⟩) (.var 16) (.const (.int ⟨32, true⟩ 0))) (.set 19 (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.bin .eq (some ⟨32, true⟩) (.var 18) (.const (.int ⟨32, true⟩ 0))) (.const (.int ⟨32, true⟩ 0))))) (.set 19 (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.land (.land (.bin .eq (some ⟨32, true⟩) (.cond (.bin .lt (some ⟨32, true⟩) (.var 15) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 15)) (.var 15)) (.cond (.bin .lt (some ⟨32, true⟩) (.var 16) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 16)) (.var 16))) (.bin .eq (some ⟨32, true⟩) (.cond (.bin .lt (some ⟨32, true⟩) (.var 17) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 17)) (.var 17)) (.cond (.bin .lt (some ⟨32, true⟩) (.var 18) (.const (.int ⟨32, true⟩ 0))) (.un .neg ⟨32, true⟩ (.var 18)) (.var 18)))) (.bin .eq (some ⟨32, true⟩) (.bin .mul (some ⟨32, true⟩) (.var 15) (.var 18)) (.bin .mul (some ⟨32, true⟩) (.var 16) (.var 17)))) (.const (.int ⟨32, true⟩ 0))))))) .normal d5 ∧
+      d5.locals = d4.locals.upd 19 (u8 (if B then 1 else 0)) ∧ d5.mem = d4.mem := by
     have c15 := evI_eq v15 zero sD.1 s0'
     by_cases h1 : DR = 0
-    · refine ⟨_, ExS.ite (bc := true) c15 (by simp [truthy_boolVal, h1]) (ExS.set (evB_u8 (evI_eq v17 zero sD.2.2.1 s0'))), ?_⟩
+    · refine ⟨_, ExS.ite (bc := true) c15 (by simp [truthy_boolVal, h1]) (ExS.set (evB_u8 (evI_eq v17 zero sD.2.2.1 s0'))), ?_, rfl⟩
       simp [B, h1]
     · have c16 := evI_eq v16 zero sD.2.1 s0'
       by_cases h2 : DC = 0
       · refine ⟨_, ExS.ite (bc := false) c15 (by simp [truthy_boolVal, h1]) (ExS.ite (bc := true) c16
-          (by simp [truthy_boolVal, h2]) (ExS.set (evB_u8 (evI_eq v18 zero sD.2.2.2 s0')))), ?_⟩
+          (by simp [truthy_boolVal, h2]) (ExS.set (evB_u8 (evI_eq v18 zero sD.2.2.2 s0')))), ?_, rfl⟩
         simp [B, h1, h2]
       · have a15 := evAbs (s := d4) (j := 15) (by simp [d4, d3, d2, d1, Locals.upd]) sD.1
         have a16 := evAbs (s := d4) (j := 16) (by simp [d4, d3, d2, Locals.upd]) sD.2.1
@@ -216,7 +216,7 @@ theorem same_king_ray_spec (k f t : Square) (m : Mem) (ro : Bool) :
           (evI_eq a17 a18 (hab _ sD.2.2.1) (hab _ sD.2.2.2)))
           (evI_eq (evI_mul v15 v18 sD.1 sD.2.2.2) (evI_mul v16 v17 sD.2.1 sD.2.2.1) (sm_mul _ _ b8.1 b8.2.2.2) (sm_mul _ _ b8.2.1 b8.2.2.1)))
         refine ⟨_, ExS.ite (bc := false) c15 (by simp [truthy_boolVal, h1]) (ExS.ite (bc := false) c16
-          (by simp [truthy_boolVal, h2]) (ExS.set hex)), ?_⟩
+          (by simp [truthy_boolVal, h2]) (ExS.set hex)), ?_, rfl⟩
         simp [B, h1, h2]
   have v19 : EvE Gen.prog d5 (.cast ⟨32, true⟩ (.var 19)) (boolVal B) :=
     EvE.cast (EvE.var (v := u8 (if B then 1 else 0)) (by rw [l19]; simp [Locals.upd])) (by cases B <;> rfl)
@@ -234,7 +234,7 @@ theorem same_king_ray_spec (k f t : Square) (m : Mem) (ro : Bool) :
   have hret := evB_u8 (evB_and v19 (evI_gt (evI_add (evI_mul u15 u17 sD.1 sD.2.2.1) (evI_mul u16 u18 sD.2.1 sD.2.2.2)
     m1 m2) zero5 hsum (by simp [Sm])))
   have hspec : sameKingRay k f t = (B && decide (DR * XR + DC * XC > 0)) := rfl
-  refine ⟨d5, ?_⟩
+  refine ⟨d5, ?_, by rw [hd5m]⟩
   rw [hspec]
   exact ExS.seq (ExS.seq x1 (ExS.seq x2 (ExS.seq x3 x4))) (ExS.seq (ExS.seq y1 (ExS.seq y2 (ExS.seq y3 y4)))
     (ExS.seq (ExS.seq z1 (ExS.seq z2 (ExS.seq z3 z4))) (ExS.seq (ExS.seq w1 w2) (ExS.seq (ExS.seq w3 w4)

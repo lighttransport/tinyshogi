@@ -74,3 +74,5 @@ import Shogi
 #print axioms Shogi.C.Proofs.fastpath_sound
 #print axioms Shogi.C.Proofs.skip_sound
 #print axioms Shogi.C.Proofs.cKeep_eq
+#print axioms Shogi.C.Proofs.np_spec
+#print axioms Shogi.C.Proofs.pd_spec
