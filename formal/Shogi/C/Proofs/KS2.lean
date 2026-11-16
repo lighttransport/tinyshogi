@@ -296,4 +296,66 @@ theorem kbody_spec {p : Position} {c a : Color} {t : Square} {r Sb : Nat} {S : L
               (by omega) (by omega)⟩⟩
           rw [hres, hAf]; exact hmS5
 
+theorem kStep9_spec {s : State} {k : Nat} (hk : k < 81) (h9 : s.locals 9 = some (.int IntTy.u8 k)) :
+    ExS Gen.prog s kStep9 .normal { s with locals := s.locals.upd 9 (.int IntTy.u8 (k + 1)) } := by
+  have := sqStep_spec (s := { s with locals := s.locals.upd 6 (.int IntTy.u8 k) }) hk (by simp [Locals.upd, u8])
+  have c1 : evalCast ⟨32, true⟩ (u8 k) = .ok (i32 (k : Int)) := by
+    rw [i32_nat k (by omega)]
+    simp [evalCast, u8, IntTy.u8, IntTy.toInt, IntTy.i32, IntTy.wrap, IntTy.modulus]; omega
+  have c2 : evalCast ⟨8, false⟩ (i32 ((k : Int) + 1)) = .ok (u8 (k + 1)) := by
+    rw [show ((k : Int) + 1) = ((k + 1 : Nat) : Int) by omega, i32_nat (k + 1) (by omega)]
+    simp [evalCast, u8, IntTy.u8, IntTy.toInt, IntTy.i32, IntTy.wrap, IntTy.modulus,
+      show ¬ (2147483648 ≤ k + 1) by omega]; omega
+  exact ExS.set (EvE.cast (EvE.bin (EvE.cast (EvE.var (v := u8 k) h9) c1) (EvE.const (.int ⟨32, true⟩ 1))
+    (add_i32 (k : Int) 1 (by omega) (by omega) (by omega) (by omega) (by omega) (by omega))) c2)
+
+theorem kres_nil (p : Position) (c : Color) (mk : Nat) (own : Option Square) : kres p c mk [] own = (false, none) := by
+  cases own <;> rfl
+
+/-- The scan of one ray. -/
+theorem kray_loop {p : Position} {c a : Color} {t : Square} {r Sb : Nat} {S : List UInt8} (hr : r < 8)
+    (ha : a = c.opp) :
+    ∀ (d k : Nat) (s : State) (own : Option Square), k + d = (ray t (rdir r)).length →
+      KInv p c a t r Sb S s k own →
+      ∃ s', ExS Gen.prog s (.loop kBody0 kStep9) .normal s' ∧
+        s'.mem Sb = some (applyK S (kres p c (rayMask a (rdir r)) ((ray t (rdir r)).drop k) own)) ∧
+        (∀ x, x ≠ Sb → s'.mem x = s.mem x) ∧ s'.ro = s.ro ∧
+        ∀ i, i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 5 ∨ i = 7 → s'.locals i = s.locals i := by
+  have hl8 := ray_length_le t (rdir r)
+  intro d
+  induction d with
+  | zero =>
+    intro k s own hd hI
+    have hk : k = (ray t (rdir r)).length := by omega
+    subst hk
+    have hlen := evRayLen (s := s) hI.l3 hI.mS hI.Sl hI.S0 hr hI.l7 hI.g4
+    have hcond : EvE Gen.prog s kCond (boolVal false) := by
+      refine EvE.bin (EvE.cast (EvE.var hI.l9) rfl) (EvE.cast hlen rfl) ?_
+      simp [evalBin, isPtr, evalBinInt, binInt, intOf, evalCast, IntTy.modulus, IntTy.toInt, Res.bind,
+        Nat.mod_eq_of_lt (show (ray t (rdir r)).length < 4294967296 by omega),
+        show ¬ (2147483648 ≤ (ray t (rdir r)).length) by omega]
+    refine ⟨s, ExS.loop_brk (ExS.ite (bc := false) hcond rfl ExS.brk), ?_, fun _ _ => rfl, rfl, fun _ _ => rfl⟩
+    rw [List.drop_eq_nil_of_le (by omega), kres_nil]; exact hI.mS
+  | succ d ih =>
+    intro k s own hd hI
+    have hk : k < (ray t (rdir r)).length := by omega
+    obtain ⟨o, s1, e1, h⟩ := kbody_spec hr ha hk hI
+    rcases h with ⟨ho, hm1, own', hI1, hres⟩ | ⟨ho, hS1, hm1, hro1, hl1⟩
+    · subst ho
+      let s2 : State := { s1 with locals := s1.locals.upd 9 (.int IntTy.u8 (k + 1)) }
+      have es := kStep9_spec (s := s1) (by omega) hI1.l9
+      have hI2 : KInv p c a t r Sb S s2 (k + 1) own' :=
+        ⟨by simp [s2, Locals.upd]; exact hI1.l1, by simp [s2, Locals.upd]; exact hI1.l2,
+         by simp [s2, Locals.upd]; exact hI1.l3, by simp [s2, Locals.upd]; exact hI1.l5,
+         by simp [s2, Locals.upd]; exact hI1.l7, by simp [s2, Locals.upd]; exact hI1.l8,
+         by simp [s2, Locals.upd], hI1.mp, hI1.mS, hI1.g3, hI1.g4, hI1.g5, hI1.Sl, hI1.S0, hI1.ro, hI1.Sbp, hI1.Sbg⟩
+      obtain ⟨s', e', hS', hm', hro', hl'⟩ := ih (k + 1) s2 own' (by omega) hI2
+      refine ⟨s', ExS.loop_next e1 (Or.inr rfl) es e', by rw [hres]; exact hS', fun x hx => by
+        rw [hm' x hx]; show s1.mem x = _; rw [hm1], by rw [hro']; show s1.ro = _; rw [hI1.ro, hI.ro], fun i hi => ?_⟩
+      rw [hl' i hi]; show s1.locals.upd 9 _ i = _
+      rcases hi with rfl | rfl | rfl | rfl | rfl <;> simp [Locals.upd] <;>
+        first | (rw [hI1.l1, hI.l1]) | (rw [hI1.l2, hI.l2]) | (rw [hI1.l3, hI.l3]) | (rw [hI1.l5, hI.l5]) | (rw [hI1.l7, hI.l7])
+    · subst ho
+      exact ⟨s1, ExS.loop_brk e1, hS1, hm1, hro1, hl1⟩
+
 end Shogi.C.Proofs
