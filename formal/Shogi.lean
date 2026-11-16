@@ -40,6 +40,9 @@ import Shogi.C.Proofs.Probe7
 import Shogi.C.Proofs.Probe8
 import Shogi.C.Proofs.Probe9
 import Shogi.C.Proofs.Unmake
+import Shogi.C.Proofs.KS1
+import Shogi.C.Proofs.KS2
+import Shogi.C.Proofs.KS3
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems

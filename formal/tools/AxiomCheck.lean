@@ -63,3 +63,5 @@ import Shogi
 #print axioms Shogi.C.Proofs.make_probe_spec
 #print axioms Shogi.C.Proofs.unmake_spec
 #print axioms Shogi.C.Proofs.probe_roundtrip
+#print axioms Shogi.C.Proofs.king_safety_spec
+#print axioms Shogi.C.Proofs.ksRec_inCheck
