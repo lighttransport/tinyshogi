@@ -72,3 +72,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.fastpath_along
 #print axioms Shogi.C.Proofs.fastpath_pinned
 #print axioms Shogi.C.Proofs.fastpath_sound
+#print axioms Shogi.C.Proofs.skip_sound
