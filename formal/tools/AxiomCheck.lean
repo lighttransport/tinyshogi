@@ -70,3 +70,5 @@ import Shogi
 #print axioms Shogi.C.Proofs.ksRec_valid
 #print axioms Shogi.C.Proofs.fastpath_unpinned
 #print axioms Shogi.C.Proofs.fastpath_along
+#print axioms Shogi.C.Proofs.fastpath_pinned
+#print axioms Shogi.C.Proofs.fastpath_sound
