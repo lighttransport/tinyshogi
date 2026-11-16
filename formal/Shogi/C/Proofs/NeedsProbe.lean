@@ -84,7 +84,7 @@ theorem np_spec {s : State} {p : Position} {m : Move} {n Sb : Nat} (hm : m ∈ p
     (hl0 : s.locals 0 = some posPtr) (hl8 : s.locals 8 = some (.ptr Sb 0)) (hSb : s.mem Sb = some (ksRec p p.side))
     (hl10 : s.locals 10 = some (.ptr n 0)) (hn : s.mem n = some (moveBytes p m))
     (hpos : s.mem posBlock = some (encode p)) :
-    ∃ s', ExS Gen.prog s npSeg .normal s' ∧ s'.mem = s.mem ∧
+    ∃ s', ExS Gen.prog s npSeg .normal s' ∧ s'.mem = s.mem ∧ s'.ro = s.ro ∧
       s'.locals 11 = some (u8 (if needsProbeC (ksRec p p.side) p m then 1 else 0)) ∧
       (∀ x, x < 11 → s'.locals x = s.locals x) := by
   let R := ksRec p p.side
@@ -120,7 +120,7 @@ theorem np_spec {s : State} {p : Position} {m : Move} {n Sb : Nat} (hm : m ∈ p
   · let t1 : State := { s with locals := s.locals.upd 13 (.int ⟨32, true⟩ 1) }
     have e1 : ExS Gen.prog s (.ite (.lor (.lor (.un .lnot ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.field (.var 8) 1))) (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.field (.var 8) 2)))) (.bin .eq (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.field (.var 10) 0))) (.const (.int ⟨32, true⟩ 255)))) (.set 13 (.const (.int ⟨32, true⟩ 1))) (.seq (.call (some 12) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.load (.int ⟨8, false⟩) (.field (.var 10) 0)) 1))]) (.set 13 (.lor (.const (.int ⟨32, true⟩ 0)) (.bin .eq (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.var 12)) (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 8)))))))) .normal t1 :=
       ExS.ite (bc := true) c1 (by rw [truthy_boolVal]; exact congrArg _ hC) (ExS.set (EvE.const _))
-    refine ⟨_, ExS.seq e1 (tail1 t1 (by simp [t1, Locals.upd])), rfl, ?_, fun x hx => ?_⟩
+    refine ⟨_, ExS.seq e1 (tail1 t1 (by simp [t1, Locals.upd])), rfl, rfl, ?_, fun x hx => ?_⟩
     · simp only [Locals.upd, if_true]
       congr 2
       have : needsProbeC R p m = true := by
@@ -191,7 +191,7 @@ theorem np_spec {s : State} {p : Position} {m : Move} {n Sb : Nat} (hm : m ∈ p
       by_cases hkg : pc.type = .king
       · have hnp : needsProbeC R p (.normal sq d pr) = true := by
           simp [needsProbeC, hpc, hkg]
-        refine ⟨_, ExS.seq e1 (tail1 t2 (by simp [t2, Locals.upd, hkg]; rfl)), rfl, ?_, fun x hx => ?_⟩
+        refine ⟨_, ExS.seq e1 (tail1 t2 (by simp [t2, Locals.upd, hkg]; rfl)), rfl, rfl, ?_, fun x hx => ?_⟩
         · have hnp' : needsProbeC (ksRec p p.side) p (.normal sq d pr) = true := hnp
           simp only [Locals.upd, if_true, hnp']
         · simp [Locals.upd, show x ≠ 11 by omega, show x ≠ 16 by omega]; exact hsame x hx
@@ -218,8 +218,8 @@ theorem np_spec {s : State} {p : Position} {m : Move} {n Sb : Nat} (hm : m ∈ p
           rw [hk', hpb', Bool.false_or]
           cases PS <;> rfl
         -- the pinned branch
-        obtain ⟨t5, e5, e5m, l15, e5l⟩ : ∃ t5, ExS Gen.prog t2 (.ite (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.index (.field (.var 8) 3) (.load (.int ⟨8, false⟩) (.field (.var 10) 0)) 1))) (.seq (.call (some 14) 20 [(.load (.int ⟨8, false⟩) (.field (.var 8) 0)), (.load (.int ⟨8, false⟩) (.field (.var 10) 0)), (.load (.int ⟨8, false⟩) (.field (.var 10) 1))]) (.set 15 (.land (.const (.int ⟨32, true⟩ 1)) (.un .lnot ⟨32, true⟩ (.var 14))))) (.set 15 (.const (.int ⟨32, true⟩ 0)))) .normal t5 ∧
-            t5.mem = t2.mem ∧ t5.locals 15 = some (boolVal (PS && !SK)) ∧
+        obtain ⟨t5, e5, e5m, e5r, l15, e5l⟩ : ∃ t5, ExS Gen.prog t2 (.ite (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.index (.field (.var 8) 3) (.load (.int ⟨8, false⟩) (.field (.var 10) 0)) 1))) (.seq (.call (some 14) 20 [(.load (.int ⟨8, false⟩) (.field (.var 8) 0)), (.load (.int ⟨8, false⟩) (.field (.var 10) 0)), (.load (.int ⟨8, false⟩) (.field (.var 10) 1))]) (.set 15 (.land (.const (.int ⟨32, true⟩ 1)) (.un .lnot ⟨32, true⟩ (.var 14))))) (.set 15 (.const (.int ⟨32, true⟩ 0)))) .normal t5 ∧
+            t5.mem = t2.mem ∧ t5.ro = t2.ro ∧ t5.locals 15 = some (boolVal (PS && !SK)) ∧
             (∀ x, x < 11 → t5.locals x = t2.locals x) := by
           by_cases hps : PS = true
           · have hR0' := ev_blk_u8 l8 hSb2 (k := 0) (by omega)
@@ -238,19 +238,20 @@ theorem np_spec {s : State} {p : Position} {m : Move} {n Sb : Nat} (hm : m ∈ p
             have hsk : (!((if SK then 1 else 0 : Nat) != 0)) = !SK := by cases SK <;> rfl
             rw [hsk] at hv15
             refine ⟨_, ExS.ite (bc := true) hpinv (by rw [hpb]; simp [PS] at hps ⊢; simp [hps]; rfl)
-              (ExS.seq ecall (ExS.set hv15)), by simp [t3, hmsb], by simp [Locals.upd, hps], fun x hx => ?_⟩
+              (ExS.seq ecall (ExS.set hv15)), by simp [t3, hmsb], rfl, by simp [Locals.upd, hps], fun x hx => ?_⟩
             simp [t3, Locals.upd, show x ≠ 15 by omega, show x ≠ 14 by omega]
           · have hpsf : PS = false := by simpa using hps
             refine ⟨_, ExS.ite (bc := false) hpinv (by rw [hpb]; simp [PS] at hpsf ⊢; simp [hpsf]; rfl)
-              (ExS.set (EvE.const _)), rfl, by simp [Locals.upd, hpsf]; rfl, fun x hx => ?_⟩
+              (ExS.set (EvE.const _)), rfl, rfl, by simp [Locals.upd, hpsf]; rfl, fun x hx => ?_⟩
             simp [Locals.upd, show x ≠ 15 by omega]
         have h16 := evB_or' (s := t5) (b1 := false) (EvE.const (.int ⟨32, true⟩ 0)) rfl (EvE.var l15) (truthy_boolVal _)
         simp only [Bool.false_or] at h16
         let t6 : State := { t5 with locals := t5.locals.upd 16 (boolVal (PS && !SK)) }
         have h11 := evB_u8 (s := t6) (x := PS && !SK) (e1 := .var 16) (EvE.var (by simp [t6, Locals.upd]))
         refine ⟨_, ExS.seq e1 (ExS.seq (ExS.ite (bc := false) (EvE.var l13) (truthy_boolVal _)
-          (ExS.seq e5 (ExS.set h16))) (ExS.set h11)), ?_, ?_, fun x hx => ?_⟩
+          (ExS.seq e5 (ExS.set h16))) (ExS.set h11)), ?_, ?_, ?_, fun x hx => ?_⟩
         · show t5.mem = s.mem; rw [e5m]
+        · show t5.ro = s.ro; rw [e5r]
         · have hnp' : needsProbeC (ksRec p p.side) p (.normal sq d pr) = (PS && !SK) := hnp
           simp [Locals.upd, hnp']
         · simp [t6, Locals.upd, show x ≠ 11 by omega, show x ≠ 16 by omega]

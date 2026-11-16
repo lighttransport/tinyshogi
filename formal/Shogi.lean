@@ -49,6 +49,7 @@ import Shogi.C.Proofs.Geom
 import Shogi.C.Proofs.Geom2
 import Shogi.C.Proofs.FastGlue
 import Shogi.C.Proofs.NeedsProbe
+import Shogi.C.Proofs.LegalIter
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
