@@ -39,6 +39,7 @@ import Shogi.C.Proofs.Probe6
 import Shogi.C.Proofs.Probe7
 import Shogi.C.Proofs.Probe8
 import Shogi.C.Proofs.Probe9
+import Shogi.C.Proofs.Unmake
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
