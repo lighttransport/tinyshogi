@@ -180,4 +180,48 @@ theorem legal_count_init {s : State} {n mb mo cap : Nat} {blk : Block} (hf : Fre
   · show (M.write n 0 _) b = _
     rw [Mem.write_ne c]; exact gb b a c
 
+/-- `mover = position->side_to_move; king_safety_prepare(&safety, position, mover)`
+    in `generate_legal_mut_internal`. -/
+theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = some posPtr)
+    (hm : s.mem posBlock = some (encode p)) (ht : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 2 < 2 ^ 64)
+    (hro : s.ro = false) :
+    ∃ s', ExS Gen.prog s (.seq (.set 7 (.load (.int ⟨32, false⟩) (.field (.var 0) 96)))
+        (.seq (.alloc 8 84) (.call none 31 [(.var 8), (.var 0), (.var 7)]))) .normal s' ∧
+      s'.mem n = some (ksRec p p.side) ∧ s'.locals 7 = some (u32 p.side.idx) ∧
+      s'.locals 8 = some (.ptr n 0) ∧ (∀ x, x ≠ 7 → x ≠ 8 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
+      (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → s'.mem b = s.mem b) := by
+  have hside : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.field (.var 0) 96)) (u32 p.side.idx) := by
+    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr, hm, encode_length])) ?_
+    simp only [load, readBytes, hm, encode_length, Ty.size, IntTy.bytes]
+    rw [if_pos (by omega), encode_enc, enc_side]
+    simp only [Res.bind_eq, Res.bind_ok, pure]
+    rw [decode_le32 _ (by cases p.side <;> decide)]; rfl
+  let s1 : State := { s with locals := s.locals.upd 7 (u32 p.side.idx) }
+  have e1 : ExS Gen.prog s (.set 7 (.load (.int ⟨32, false⟩) (.field (.var 0) 96))) .normal s1 := ExS.set hside
+  have e2 := exec_alloc (s := s1) (hf.allocAt (by omega)) 8 84
+  have hn0 := hf.2.1
+  have hnp : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hm; cases hm
+  have hgn : ∀ g, s.mem g ≠ none → g ≠ n := fun g hg e => by rw [e, hf.2.2 n (Nat.le_refl _)] at hg; exact hg rfl
+  generalize hM : (s1.mem.upd 0 (encodeLE 8 (n + 1))).upd n (List.replicate 84 0) = M at e2
+  have hMg : ∀ g, g ≠ 0 → g ≠ n → M g = s.mem g := fun g a c => by rw [← hM, Mem.upd_ne c, Mem.upd_ne a]
+  have hMn : M n = some (List.replicate 84 0) := by rw [← hM]; exact Mem.upd_eq
+  have hf1 : Fresh M (n + 1) := by rw [← hM]; exact hf.after_alloc _
+  have hmM : M posBlock = some (encode p) := by rw [hMg _ (by decide) (Ne.symm hnp)]; exact hm
+  have tg : ∀ g, 8192 ≤ g → g ≤ 8196 → M g = s.mem g := fun g a b => hMg g (by omega)
+    (hgn g (by
+      rcases (show g = 8192 ∨ g = 8193 ∨ g = 8194 ∨ g = 8195 ∨ g = 8196 by omega) with h | h | h | h | h <;>
+        subst h <;> simp [ht.g1, ht.g2, ht.g3, ht.g4, ht.g5]))
+  obtain ⟨sk, ek, hk, hkf⟩ := king_safety_spec p p.side hmM hMn (by simp) (by rw [tg _ (by decide) (by decide)]; exact ht.g1)
+    (by rw [tg _ (by decide) (by decide)]; exact ht.g2) (by rw [tg _ (by decide) (by decide)]; exact ht.g3)
+    (by rw [tg _ (by decide) (by decide)]; exact ht.g4) (by rw [tg _ (by decide) (by decide)]; exact ht.g5)
+    hf1 (by omega) hn0 hnp
+  let s2 : State := { s1 with mem := M, locals := s1.locals.upd 8 (.ptr n 0) }
+  have h7 : s2.locals 7 = some (u32 p.side.idx) := by simp [s2, s1, Locals.upd]
+  refine ⟨{ s2 with mem := sk.mem }, ExS.seq e1 (ExS.seq e2 (ExS.call (vs := [.ptr n 0, posPtr, u32 p.side.idx])
+    (EvArgs.cons (EvE.var (by simp [s2, Locals.upd])) (EvArgs.cons (EvE.var (by simp [s2, s1, Locals.upd, h0]))
+      (EvArgs.cons (EvE.var h7) EvArgs.nil))) rfl rfl (by simp only [s2, s1]; rw [hro]; exact ek) (Or.inr rfl))),
+    hk, h7, by simp [s2, Locals.upd], fun x a b => by simp [s2, s1, Locals.upd, a, b], rfl, fun b a c d => ?_⟩
+  show sk.mem b = _
+  rw [hkf b a d c, hMg b a c]
+
 end Shogi.C.Proofs
