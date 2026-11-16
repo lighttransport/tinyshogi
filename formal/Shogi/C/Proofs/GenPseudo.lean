@@ -28,3 +28,30 @@ theorem generate_pseudo_wrap {p : Position} {m : Mem} {mb mo cb co cap n : Nat}
       (EvArgs.cons (EvE.var rfl) (EvArgs.cons (EvE.var rfl) EvArgs.nil))))) rfl rfl eg (Or.inl rfl), hb, hf', hn', hfr⟩
 
 end Shogi.C.Proofs
+
+namespace Shogi.C.Proofs
+
+theorem perm_map_inv {α β : Type} [DecidableEq α] (f : α → β) :
+    ∀ (l : List β) (L : List α), l.Perm (L.map f) → ∃ M : List α, M.Perm L ∧ l = M.map f := by
+  intro l; induction l with
+  | nil =>
+    intro L h
+    have : L.map f = [] := List.Perm.nil_eq h |>.symm
+    have hL : L = [] := List.map_eq_nil_iff.mp this
+    exact ⟨[], by rw [hL], rfl⟩
+  | cons a l ih =>
+    intro L h
+    have ha : a ∈ L.map f := h.subset (by simp)
+    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
+    have hL : L.Perm (x :: L.erase x) := List.perm_cons_erase hx
+    have h2 : (f x :: l).Perm (f x :: (L.erase x).map f) := h.trans (by simpa using hL.map f)
+    obtain ⟨M', hM', rfl⟩ := ih (L.erase x) (List.Perm.cons_inv h2)
+    exact ⟨x :: M', (hM'.cons x).trans hL.symm, rfl⟩
+
+/-- The C's pseudo-move bytes are the bytes of a list of moves that is a
+    permutation of the spec's `pseudoMoves`. -/
+theorem pseudoC_moves (p : Position) (hw : ∀ i, p.hand p.side i < 256) :
+    ∃ Ms : List Move, Ms.Perm p.pseudoMoves ∧ pseudoC p p.side = Ms.map (moveBytes p) :=
+  perm_map_inv (moveBytes p) _ _ (pseudoC_spec p hw)
+
+end Shogi.C.Proofs
