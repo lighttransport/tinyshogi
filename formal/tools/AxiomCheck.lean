@@ -52,3 +52,14 @@ import Shogi
 #print axioms Shogi.Position.slide_eq_ray
 #print axioms Shogi.C.Proofs.square_attacked_refines
 #print axioms Shogi.C.Proofs.shogi_is_in_check_refines
+#print axioms Shogi.C.Proofs.add_move_spec
+#print axioms Shogi.C.Proofs.add_normal_move_spec
+#print axioms Shogi.C.Proofs.add_step_spec
+#print axioms Shogi.C.Proofs.add_slide_spec
+#print axioms Shogi.C.Proofs.add_pseudo_drops_spec
+#print axioms Shogi.C.Proofs.dropsC_spec
+#print axioms Shogi.C.Proofs.generate_pseudo_spec
+#print axioms Shogi.C.Proofs.pseudoC_spec
+#print axioms Shogi.C.Proofs.make_probe_spec
+#print axioms Shogi.C.Proofs.unmake_spec
+#print axioms Shogi.C.Proofs.probe_roundtrip
