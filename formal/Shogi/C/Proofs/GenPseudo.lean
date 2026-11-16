@@ -8,14 +8,14 @@ namespace Shogi.C.Proofs
 open MiniC Shogi Shogi.C
 
 theorem generate_pseudo_wrap {p : Position} {m : Mem} {mb mo cb co cap n : Nat}
-    {L : List (List UInt8)} (hbuf : Buf m mb mo cb co cap L) (hf : Fresh m n) (h64 : n + 40000 < 2 ^ 64)
+    {L : List (List UInt8)} (hbuf : Buf m mb mo cb co cap L) (hf : Fresh m n) (h64 : n + 4000000100 < 2 ^ 64)
     (hm : m posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s' n', ExS Gen.prog ⟨frameLocals Gen.generate_pseudo.params
         [posPtr, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
       Gen.generate_pseudo.body .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ pseudoC p p.side) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧
       Frame m s'.mem mb cb := by
-  obtain ⟨sg, n', eg, hb, hf', hn', hfr⟩ := generate_pseudo_spec (p := p) (c := p.side) hbuf hf h64 hm hpm hpc
+  obtain ⟨sg, n', eg, hb, hf', hn', hfr⟩ := generate_pseudo_spec (p := p) (c := p.side) hbuf hf (by omega) hm hpm hpc
   let s0 : State := ⟨frameLocals Gen.generate_pseudo.params [posPtr, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
   have hside : EvE Gen.prog s0 (.load (.int ⟨32, false⟩) (.field (.var 0) 96)) (u32 p.side.idx) := by
     refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var rfl) (by simp [s0, ptrAddN, posPtr, hm, encode_length])) ?_
@@ -73,24 +73,24 @@ namespace Shogi.C.Proofs
 open MiniC Shogi Shogi.C
 
 theorem buf_empty {m : Mem} {mb cb : Nat} {R C : Block} (hm : m mb = some R) (hc : m cb = some C)
-    (hR : 3000 ≤ R.length) (hC : C = encodeLE 8 0) (hne : mb ≠ cb) (h1 : mb ≠ 0) (h2 : cb ≠ 0) :
-    Buf m mb 0 cb 0 600 [] :=
+    (hR : 36000 ≤ R.length) (hC : C = encodeLE 8 0) (hne : mb ≠ cb) (h1 : mb ≠ 0) (h2 : cb ≠ 0) :
+    Buf m mb 0 cb 0 7200 [] :=
   ⟨⟨C, hc, by simp [hC, encodeLE_length], by rw [hC]; simp [List.take_of_length_le, encodeLE_length]⟩,
     ⟨R, hm, by omega, by simp⟩, by simp, hne, h1, h2, by decide⟩
 
-/-- The prologue of `generate_legal_mut_internal`: `pseudo` (600 moves) and
+/-- The prologue of `generate_legal_mut_internal`: `pseudo` (7200 moves) and
     `pseudo_count = 0` are allocated, giving an empty move buffer. -/
-theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 2 < 2 ^ 64) (hro : s.ro = false) :
-    ∃ s1 s', ExS Gen.prog s (.alloc 4 3000) .normal s1 ∧ ExS Gen.prog s1 (.seq (.alloc 5 8)
+theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 4000000100 < 2 ^ 64) (hro : s.ro = false) :
+    ∃ s1 s', ExS Gen.prog s (.alloc 4 36000) .normal s1 ∧ ExS Gen.prog s1 (.seq (.alloc 5 8)
         (.store (.int ⟨64, false⟩) (.var 5) (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0))))) .normal s' ∧
-      Buf s'.mem n 0 (n + 1) 0 600 [] ∧ Fresh s'.mem (n + 2) ∧
+      Buf s'.mem n 0 (n + 1) 0 7200 [] ∧ Fresh s'.mem (n + 2) ∧
       s'.locals 4 = some (.ptr n 0) ∧ s'.locals 5 = some (.ptr (n + 1) 0) ∧
       (∀ x, x ≠ 4 → x ≠ 5 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
       (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → s'.mem b = s.mem b) := by
-  have e1 := exec_alloc (hf.allocAt (by omega)) 4 3000
-  have hf1 := hf.after_alloc (List.replicate 3000 0)
-  generalize hR : List.replicate 3000 (0 : UInt8) = R at e1 hf1
-  have hRl : R.length = 3000 := by rw [← hR, List.length_replicate]
+  have e1 := exec_alloc (hf.allocAt (by omega)) 4 36000
+  have hf1 := hf.after_alloc (List.replicate 36000 0)
+  generalize hR : List.replicate 36000 (0 : UInt8) = R at e1 hf1
+  have hRl : R.length = 36000 := by rw [← hR, List.length_replicate]
   have e2 := exec_alloc (s := { s with mem := (s.mem.upd 0 (encodeLE 8 (n + 1))).upd n R, locals := s.locals.upd 4 (.ptr n 0) }) (hf1.allocAt (by omega)) 5 8
   have hf2 := hf1.after_alloc (List.replicate 8 0)
   generalize hM2 : (((s.mem.upd 0 (encodeLE 8 (n + 1))).upd n R).upd 0 (encodeLE 8 (n + 1 + 1))).upd (n + 1)
@@ -122,28 +122,28 @@ theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 2 <
   · show (M2.write (n + 1) 0 _) b = _
     rw [Mem.write_ne d]; exact gb b a c d
 
-/-- The `generate_pseudo(position, pseudo, &pseudo_count, 600)` call of
+/-- The `generate_pseudo(position, pseudo, &pseudo_count, 7200)` call of
     `generate_legal_mut_internal`. -/
 theorem legal_call_pseudo {s : State} {p : Position} {mb cb n : Nat}
     (h0 : s.locals 0 = some posPtr) (h4 : s.locals 4 = some (.ptr mb 0)) (h5 : s.locals 5 = some (.ptr cb 0))
-    (hb : Buf s.mem mb 0 cb 0 600 []) (hf : Fresh s.mem n) (h64 : n + 40000 < 2 ^ 64)
+    (hb : Buf s.mem mb 0 cb 0 7200 []) (hf : Fresh s.mem n) (h64 : n + 4000000100 < 2 ^ 64)
     (hm : s.mem posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) (hro : s.ro = false) :
     ∃ s' n', ExS Gen.prog s (.call none 28 [(.var 0), (.var 4), (.var 5),
-        (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 600)))]) .normal s' ∧
+        (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 7200)))]) .normal s' ∧
       s'.locals = s.locals ∧ s'.ro = s.ro ∧
-      Buf s'.mem mb 0 cb 0 600 (pseudoC p p.side) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧
+      Buf s'.mem mb 0 cb 0 7200 (pseudoC p p.side) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧
       Frame s.mem s'.mem mb cb := by
   obtain ⟨sg, n', eg, hb', hf', hn', hfr⟩ := generate_pseudo_wrap (L := []) hb hf h64 hm hpm hpc
-  have hc : EvE Gen.prog s (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 600))) (.int IntTy.u64 600) :=
+  have hc : EvE Gen.prog s (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 7200))) (.int IntTy.u64 7200) :=
     EvE_of_eval (n := 2) (by simp [evalExpr, evalCast, IntTy.wrap, IntTy.toInt, IntTy.modulus, IntTy.u64])
-  refine ⟨{ s with mem := sg.mem }, n', ExS.call (vs := [posPtr, .ptr mb 0, .ptr cb 0, .int IntTy.u64 600])
+  refine ⟨{ s with mem := sg.mem }, n', ExS.call (vs := [posPtr, .ptr mb 0, .ptr cb 0, .int IntTy.u64 7200])
     (EvArgs.cons (EvE.var h0) (EvArgs.cons (EvE.var h4) (EvArgs.cons (EvE.var h5) (EvArgs.cons hc EvArgs.nil))))
     rfl rfl (by rw [hro]; exact eg) (Or.inl rfl), rfl, rfl, by simpa using hb', hf', hn', hfr⟩
 
 /-- `count = 0` in `generate_legal_mut_internal`: with the caller's move
     array this starts the empty output buffer. -/
 theorem legal_count_init {s : State} {n mb mo cap : Nat} {blk : Block} (hf : Fresh s.mem n)
-    (h64 : n + 1 < 2 ^ 64) (hro : s.ro = false) (hmb : s.mem mb = some blk) (hlen : mo + 5 * cap ≤ blk.length)
+    (h64 : n + 4000000100 < 2 ^ 64) (hro : s.ro = false) (hmb : s.mem mb = some blk) (hlen : mo + 5 * cap ≤ blk.length)
     (hmb0 : mb ≠ 0) (hcap : cap < 2 ^ 64) :
     ∃ s', ExS Gen.prog s (.seq (.alloc 6 8)
         (.store (.int ⟨64, false⟩) (.var 6) (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0))))) .normal s' ∧
@@ -183,7 +183,7 @@ theorem legal_count_init {s : State} {n mb mo cap : Nat} {blk : Block} (hf : Fre
 /-- `mover = position->side_to_move; king_safety_prepare(&safety, position, mover)`
     in `generate_legal_mut_internal`. -/
 theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = some posPtr)
-    (hm : s.mem posBlock = some (encode p)) (ht : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 2 < 2 ^ 64)
+    (hm : s.mem posBlock = some (encode p)) (ht : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 4000000100 < 2 ^ 64)
     (hro : s.ro = false) :
     ∃ s1 s', ExS Gen.prog s (.set 7 (.load (.int ⟨32, false⟩) (.field (.var 0) 96))) .normal s1 ∧
       ExS Gen.prog s1 (.seq (.alloc 8 84) (.call none 31 [(.var 8), (.var 0), (.var 7)])) .normal s' ∧
@@ -263,7 +263,7 @@ theorem flatten5_get : ∀ (L : List (List UInt8)), (∀ x ∈ L, x.length = 5) 
 /-- From the pseudo buffer filled with `Ms` (no truncation), the facts the
     legality loop reads: the count and the bytes of each move. -/
 theorem buf_bridge {m : Mem} {mb cb : Nat} {p : Position} {Ms : List Move}
-    (hb : Buf m mb 0 cb 0 600 (Ms.map (moveBytes p))) (h600 : Ms.length ≤ 600) :
+    (hb : Buf m mb 0 cb 0 7200 (Ms.map (moveBytes p))) (h600 : Ms.length ≤ 7200) :
     readBytes m cb 0 8 = .ok (encodeLE 8 Ms.length) ∧
     ∃ PB, m mb = some PB ∧ 5 * Ms.length ≤ PB.length ∧
       ∀ j (hj : j < Ms.length), (PB.drop (5 * j)).take 5 = moveBytes p Ms[j] := by
@@ -275,7 +275,7 @@ theorem buf_bridge {m : Mem} {mb cb : Nat} {p : Position} {Ms : List Move}
   have hlen : ∀ x ∈ Ms.map (moveBytes p), x.length = 5 := hb.len
   have e : (blk.drop (5 * j)).take 5 = ((blk.take (5 * Ms.length)).drop (5 * j)).take 5 := by
     rw [List.drop_take, List.take_take]; congr 1; omega
-  have h6 : (Ms.map (moveBytes p)).take 600 = Ms.map (moveBytes p) := List.take_of_length_le (by simp; omega)
+  have h6 : (Ms.map (moveBytes p)).take 7200 = Ms.map (moveBytes p) := List.take_of_length_le (by simp; omega)
   rw [h6] at hbt
   rw [e, hbt, flatten5_get _ hlen j (by simpa using hj)]; simp
 

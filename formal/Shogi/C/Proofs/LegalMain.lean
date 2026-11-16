@@ -2,6 +2,7 @@
   T8: the whole of `generate_legal_mut_internal(position, moves, capacity, 1)`.
 -/
 import Shogi.C.Proofs.GenPseudo
+import Shogi.MoveCount
 
 namespace Shogi.C.Proofs
 open MiniC Shogi Shogi.C
@@ -20,14 +21,13 @@ theorem readBytes_of_eq {m m' : Mem} {b : Nat} (h : m' b = m b) (o k : Nat) :
     output holds the spec-kept moves of `Ms` (capped at `cap`) and the
     returned value is their count.  Assumes the uchifuzume reply spec
     `RecSpec` for the checking pawn drops only (the C recurses exactly there)
-    and at most 600 pseudo moves. -/
+    and at most 7200 pseudo moves. -/
 theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap : Nat} {blk : Block}
     (hS : p.Shaped) (hK : KingsUnique p) (hw : ∀ i, p.hand p.side i < 256)
-    (h600 : p.pseudoMoves.length ≤ 600)
     (hrec : ∀ mv ∈ p.pseudoMoves, Position.isPawnDrop mv →
       (p.play mv).inCheck (p.play mv).side → RecSpec fuel (p.play mv))
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (hf : Fresh m n)
-    (h64 : n + 700 * RB + 5000000000 < 2 ^ 64)
+    (h64 : n + 8000 * RB + 5000000000 < 2 ^ 64)
     (hmb : m mb = some blk) (hlen : mo + 5 * cap ≤ blk.length) (hmb0 : mb ≠ 0) (hcap : cap < 2 ^ 64)
     (hpm : posBlock ≠ mb) (hmbt : mb < 8192 ∨ 8196 < mb) :
     ∃ Ms : List Move, Ms.Perm p.pseudoMoves ∧ ∃ s' cb, ExS Gen.prog
@@ -38,7 +38,7 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
       Frame m s'.mem mb cb := by
   obtain ⟨Ms, hperm, hpc⟩ := pseudoC_moves p hw
   refine ⟨Ms, hperm, ?_⟩
-  have hMl : Ms.length ≤ 600 := by rw [hperm.length_eq]; exact h600
+  have hMl : Ms.length ≤ 7200 := by rw [hperm.length_eq]; exact pseudoMoves_le_7200 p
   let s0 : State := ⟨frameLocals Gen.generate_legal_mut_internal.params
     [posPtr, .ptr mb mo, .int IntTy.u64 cap, .int IntTy.u8 1], m, false⟩
   have hn0 := hf.2.1
@@ -124,15 +124,15 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
     _ = m x := hsbx
 
 /-- **C legal moves = spec legal moves (up to order).** With an output
-    array of at least 600 moves, `generate_legal_mut_internal` writes the
+    array of at least 7200 moves, `generate_legal_mut_internal` writes the
     bytes of a reordering of `legalAux (fuel + 1) p` and returns its length. -/
 theorem generate_legal_refines {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap : Nat} {blk : Block}
     (hS : p.Shaped) (hK : KingsUnique p) (hw : ∀ i, p.hand p.side i < 256)
-    (h600 : p.pseudoMoves.length ≤ 600) (hcap600 : 600 ≤ cap)
+    (hcap600 : 7200 ≤ cap)
     (hrec : ∀ mv ∈ p.pseudoMoves, Position.isPawnDrop mv →
       (p.play mv).inCheck (p.play mv).side → RecSpec fuel (p.play mv))
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (hf : Fresh m n)
-    (h64 : n + 700 * RB + 5000000000 < 2 ^ 64)
+    (h64 : n + 8000 * RB + 5000000000 < 2 ^ 64)
     (hmb : m mb = some blk) (hlen : mo + 5 * cap ≤ blk.length) (hmb0 : mb ≠ 0) (hcap : cap < 2 ^ 64)
     (hpm : posBlock ≠ mb) (hmbt : mb < 8192 ∨ 8196 < mb) :
     ∃ K : List (List UInt8), K.Perm ((Position.legalAux (fuel + 1) p).map (moveBytes p)) ∧ ∃ s' cb, ExS Gen.prog
@@ -140,10 +140,12 @@ theorem generate_legal_refines {p : Position} {fuel : Nat} {m : Mem} {n mb mo ca
         m, false⟩ Gen.generate_legal_mut_internal.body (.ret (some (.int ⟨64, false⟩ K.length))) s' ∧
       Buf s'.mem mb mo cb 0 cap K ∧ s'.mem posBlock = some (encode p) := by
   obtain ⟨Ms, hperm, s', cb, e, hb, hp, _⟩ :=
-    generate_legal_main (fuel := fuel) hS hK hw h600 hrec hm ht hf h64 hmb hlen hmb0 hcap hpm hmbt
+    generate_legal_main (fuel := fuel) hS hK hw hrec hm ht hf h64 hmb hlen hmb0 hcap hpm hmbt
   have hk : (keepBytes p fuel Ms).length ≤ cap := by
     have : (keepBytes p fuel Ms).length ≤ Ms.length := List.length_filterMap_le _ _
-    have := hperm.length_eq; omega
+    have := hperm.length_eq
+    have := pseudoMoves_le_7200 p
+    omega
   refine ⟨keepBytes p fuel Ms, keepBytes_perm p fuel hperm, s', cb, ?_, hb, hp⟩
   rwa [Nat.min_eq_left hk] at e
 

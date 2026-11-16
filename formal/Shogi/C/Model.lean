@@ -59,11 +59,11 @@ open MiniC
 /-- Allocator block (E5): the next fresh block number. -/
 def allocBlock : List UInt8 := encodeLE 8 1000000
 
-/-- Output buffer for `ShogiMove moves[600]`. -/
+/-- Output buffer for `ShogiMove moves[7200]`. -/
 def movesBlock : Nat := 2
 
 def memWithMoves (p : Position) : Mem :=
-  ((memOf p).upd 0 allocBlock).upd movesBlock (List.replicate (600 * 5) 0)
+  ((memOf p).upd 0 allocBlock).upd movesBlock (List.replicate (7200 * 5) 0)
 
 /-- Decode `ShogiMove {from, to, piece, promote, drop}` to a spec move. -/
 def decodeMove (bs : List UInt8) : Option Move := do
@@ -83,7 +83,7 @@ def decodeMove (bs : List UInt8) : Option Move := do
     (`none` on UB, time-out or an undecodable move). -/
 def miniLegal (fuel : Nat) (p : Position) : Option (List Move) :=
   match callFunc Gen.prog fuel Gen.fid_shogi_generate_legal_mut
-      [posPtr, .ptr movesBlock 0, .int IntTy.u64 600] (memWithMoves p) with
+      [posPtr, .ptr movesBlock 0, .int IntTy.u64 7200] (memWithMoves p) with
   | .ok (some (.int _ n), m) =>
     match m movesBlock with
     | some blk => ((List.range n).mapM fun i => decodeMove ((blk.drop (5 * i)).take 5))

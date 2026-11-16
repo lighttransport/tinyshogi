@@ -614,3 +614,33 @@ implements, and any proof that reaches compiled machine code.
 * dwrensha/Chess.lean, elanroth/PuzzleProof — forced-mate theorems (future tsume work).
 * Wesselink et al., *Formal Verification of Minimax Algorithms*, arXiv 2509.20138 (future search work).
 * No earlier Lean/Coq/Isabelle formalization of shogi was found.
+
+---
+
+## Continued work (post-`c37d829`, branch `formal-plan`)
+
+### M4 — Discharge `RecSpec` (strong induction on `pawnsInHands`)
+
+Scaffolding in place (Frame/Fresh exports, `checkingPawnDrops_le_one`).
+Remaining: strong induction on `pawnsInHands` using `generate_legal_main`.
+
+### M5 — 600 → 7200-move bound (done, verified)
+
+`SHOGI_MAX_MOVES = 7200`, `Gen.lean` regenerated with `shogi_position_copy_active`
+(fid 37) and `shogi_generate_legal` (fid 38). `pseudoMoves_le_7200` proved
+(`Shogi/MoveCount.lean`); `h600` no longer needed as a hypothesis of
+`generate_legal_main`. Build green (75 jobs), axiom check OK, `c2lean --check`,
+`cdiff` 0 mismatches.
+
+### M6 — Public entry points (translation half done; proof open)
+
+Translations of `shogi_position_copy_active` and `shogi_generate_legal`
+landed in `Gen.lean` (fid 37, 38) and `--check` passes. Remaining proof work:
+wrapper and copy-active bridge.
+
+### Other remaining
+
+- Discharge `RecSpec` via strong induction (M4c).
+- Wrapper and copy-active bridge proofs (M6 proof half).
+- make/unmake with hash and history, repetition (M7).
+- Docs refresh + pre-push audit (M8).

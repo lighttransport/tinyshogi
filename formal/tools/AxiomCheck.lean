@@ -99,3 +99,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.checkingPawnDrop_unique
 #print axioms Shogi.C.Proofs.checkingPawnDrops_le_one
 #print axioms Shogi.C.Proofs.dropMoves_nodup
+#print axioms Shogi.pseudoMoves_le_7200

@@ -63,8 +63,8 @@ theorem legal_loop {p : Position} {fuel : Nat} {Ms : List Move} {pb cntb Sb mb m
     have es : ExS Gen.prog s1 lpStep .normal s2 := by
       apply ExS.set; apply EvE_of_eval (n := 4)
       simp [evalExpr, hl1 9 (by omega), h9, evalCast, evalBin, isPtr, evalBinInt, binInt, intOf, IntTy.u64,
-        IntTy.modulus, Res.bind, IntTy.toInt, IntTy.wrap, Nat.mod_eq_of_lt (show i < 18446744073709551616 by omega),
-        Nat.mod_eq_of_lt (show i + 1 < 18446744073709551616 by omega)]
+        IntTy.modulus, Res.bind, IntTy.toInt, IntTy.wrap, Nat.mod_eq_of_lt (show i < 2 ^ 64 by omega),
+        Nat.mod_eq_of_lt (show i + 1 < 2 ^ 64 by omega)]
     have hl2 : ∀ x, x < 9 → s2.locals x = s.locals x := fun x hx => by
       simp [s2, Locals.upd, show x ≠ 9 by omega]; exact hl1 x (by omega)
     have keepM : ∀ b, s.mem b ≠ none → b ≠ 0 → b ≠ mb → b ≠ cb → s2.mem b = s.mem b := fun b h a c d =>

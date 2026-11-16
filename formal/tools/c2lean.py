@@ -75,6 +75,8 @@ FUNCTIONS = [
     "unmake_legal_probe",
     "generate_legal_mut_internal",
     "shogi_generate_legal_mut",
+    "shogi_position_copy_active",
+    "shogi_generate_legal",
     # T9: make / unmake (hash and history bookkeeping).
     "position_hash",
     "reset_history",

@@ -196,17 +196,12 @@ theorem probe_path (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mov
     · exact ⟨_, hfu, by omega⟩
 
 /-- The reply buffer the recursive call writes into: a block of at least
-    3000 bytes (600 five-byte moves) at offset 0, distinct from the allocator
+    36000 bytes (7200 five-byte moves) at offset 0, distinct from the allocator
     block, the position block and the attack-table blocks. -/
 def ReplyBuf (M : Mem) (rb : Nat) : Prop :=
-  ∃ blk, M rb = some blk ∧ 3000 ≤ blk.length ∧ rb ≠ 0 ∧ rb ≠ posBlock ∧ (rb < 8192 ∨ 8196 < rb)
+  ∃ blk, M rb = some blk ∧ 36000 ≤ blk.length ∧ rb ≠ 0 ∧ rb ≠ posBlock ∧ (rb < 8192 ∨ 8196 < rb)
 
-/-- Per-call allocation budget of the recursive call.  Discharging `RecSpec`
-    (M4) replaces this fixed bound by one that grows with the pawn count;
-    until then it keeps the current shape. -/
-def recBudget : Nat := 1000000000
-
-/-- What the recursive `generate_legal_mut_internal(position, replies, 600, true)`
+/-- What the recursive `generate_legal_mut_internal(position, replies, 7200, true)`
     call must do (the induction hypothesis of the eventual loop proof): from a
     memory holding `encode q`, it returns a count that is nonzero exactly when
     the spec's `legalAux fuel q` is nonempty, restores the position, and only
@@ -215,12 +210,12 @@ def recBudget : Nat := 1000000000
     out on moves that never enter the recursion. -/
 def RecSpec (fuel : Nat) (q : Position) : Prop :=
   ∀ (M : Mem) (rb k : Nat), M posBlock = some (encode q) → TablesIn M → Fresh M k → ReplyBuf M rb →
-    k + recBudget < 2 ^ 64 →
+    k + 1000000000 < 2 ^ 64 →
     ∃ s' cnt k', ExS Gen.prog ⟨frameLocals Gen.generate_legal_mut_internal.params
-        [posPtr, .ptr rb 0, .int IntTy.u64 600, .int IntTy.u8 1], M, false⟩
+        [posPtr, .ptr rb 0, .int IntTy.u64 7200, .int IntTy.u8 1], M, false⟩
       Gen.generate_legal_mut_internal.body (.ret (some (.int IntTy.u64 cnt))) s' ∧
       (cnt ≠ 0 ↔ !(Position.legalAux fuel q).isEmpty) ∧ s'.mem posBlock = some (encode q) ∧
-      Fresh s'.mem k' ∧ k ≤ k' ∧ k' ≤ k + recBudget ∧
+      Fresh s'.mem k' ∧ k ≤ k' ∧ k' ≤ k + 1000000000 ∧
       (∀ x, x ≠ 0 → x ≠ rb → x < k → x ≠ posBlock → s'.mem x = M x)
 
 /-- A freshly allocated block number cannot be one of the attack-table blocks:
@@ -501,27 +496,26 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
           by rw [k _ (by decide) (by rw [ht.g3]; simp)]; exact ht.g3, by rw [k _ (by decide) (by rw [ht.g4]; simp)]; exact ht.g4,
           by rw [k _ (by decide) (by rw [ht.g5]; simp)]; exact ht.g5⟩
       let rb := n + 5
-      let ma := (sc2.mem.upd 0 (encodeLE 8 (n + 6))).upd rb (List.replicate 3000 0)
+      let ma := (sc2.mem.upd 0 (encodeLE 8 (n + 6))).upd rb (List.replicate 36000 0)
       let sa : State := { sc2 with mem := ma, locals := sc2.locals.upd 23 (.ptr rb 0) }
-      have ea : ExS Gen.prog sc2 (.alloc 23 3000) .normal sa := exec_alloc (hfc2.allocAt (by omega)) 23 3000
+      have ea : ExS Gen.prog sc2 (.alloc 23 36000) .normal sa := exec_alloc (hfc2.allocAt (by omega)) 23 36000
       have hma : ∀ x, x ≠ 0 → x ≠ rb → ma x = sc2.mem x := fun x a b => by
         simp only [ma]; rw [Mem.upd_ne b, Mem.upd_ne a]
       have hfa : Fresh ma (n + 6) := hfc2.after_alloc _
       have hta : TablesIn ma := (htc2.upd0 _).upd _ (by rw [Mem.upd_ne (by omega)]; exact hfc2.2.2 _ (Nat.le_refl _))
       have hpa : ma posBlock = some (encode q) := by rw [hma _ (by decide) (by simp only [posBlock, rb]; omega)]; exact hpc2
       have hrb : ReplyBuf ma rb := by
-        refine ⟨List.replicate 3000 0, Mem.upd_eq, by simp only [List.length_replicate]; omega, ?_, ?_, ?_⟩
+        refine ⟨List.replicate 36000 0, Mem.upd_eq, by simp only [List.length_replicate]; omega, ?_, ?_, ?_⟩
         · simp only [rb]; omega
         · simp only [rb, posBlock]; omega
         · exact fresh_not_table hfc2 htc2 (by simp only [rb]; omega)
       obtain ⟨sr, cnt, kf, er, hcnt, hpr, hfr, hkk, hkb, hor⟩ := hrec hicq ma rb (n + 6) hpa hta hfa hrb
-        (by simp only [recBudget]; omega)
+        (by omega)
       have hkb2 : kf ≤ n + 6 + 1000000000 := by
         have h := hkb
-        simp only [recBudget] at h
         omega
       let sb1 : State := { sa with mem := sr.mem, locals := sa.locals.upd 25 (.int IntTy.u64 cnt) }
-      have ecr : ExS Gen.prog sa (.call (some 25) 35 [(.var 0), (.var 23), (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 600))),
+      have ecr : ExS Gen.prog sa (.call (some 25) 35 [(.var 0), (.var 23), (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 7200))),
           (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.const (.int ⟨32, true⟩ 1)) (.const (.int ⟨32, true⟩ 0))))]) .normal sb1 :=
         ExS.call_dst (EvArgs.cons (EvE.var (by simp [sa, sc2, sc1, s6, s6a, s5, s4, Locals.upd]; exact hI.l0))
           (EvArgs.cons (EvE.var (v := .ptr rb 0) (by simp [sa, Locals.upd]))
