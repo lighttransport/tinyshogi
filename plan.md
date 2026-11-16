@@ -135,21 +135,27 @@ Remaining work, in dependency order:
 
 1. **Discharge `RecSpec`** (M4) by strong induction on `q.pawnsInHands`
    (`legalFuel = pawnsInHands + 2`), using `generate_legal_main` for the inner
-   call. Concretely, three changes:
-   - `legal_loop` currently drops the per-iteration `Frame` from `iter_one`;
-     add `Frame s.mem s'.mem mb cb` to its conclusion (the induction carries
-     it through unchanged).
-   - `generate_legal_main` then exports a frame for blocks outside
-     `{0, mb, cb, posBlock}` by composing the frames of the prologue,
-     pseudo call, count init, king-safety prep and the loop.
-   - Replace the fixed `recBudget` in `RecSpec` by `allocBound pawns`
-     (linear in `pawnsInHands`): one level costs prologue + per-move small
-     allocs + at most one nested `allocBound (pawns-1)` (that last "at most
-     one" is `checkingPawnDrops_le_one`). Then strong induction on
-     `q.pawnsInHands` closes `RecSpec fuel q` whenever
-     `q.pawnsInHands + 2 ≤ fuel`, using `legalAux_stable`. Also needs the
-     play-preservation lemmas for a checking pawn drop (`Shaped`,
-     `KingsUnique`, hands < 256).
+   call. Progress: `legal_loop` (`LegalLoop.lean`) and `generate_legal_main`
+   (`LegalMain.lean`) now both export `Frame m s'.mem mb cb` (commits
+   `1a371f9`, `cc8368a`), and `legal_loop` additionally exports
+   `∃ f, Fresh s'.mem f ∧ f ≤ n + (d+1) * RB`. Still to do:
+   - export the Fresh bound from `generate_legal_main` too (compose the
+     prologue `n+2`, pseudo `n+40000`, count-init `+1`, safety `+2`, and the
+     loop's `f`; the true per-call cost is ≈ `n + 40000 + 5 + (Ms.length+1)*RB`
+     ≤ `n + 5*RB + 40010`, so `allocBound` can be a constant ≈ `5000000010`).
+   - replace `recBudget` (`LegalProbe.lean:207`) and the fixed `k + recBudget`
+     in `RecSpec` by `allocBound`; a single level's nested-call cost is one
+     `allocBound`, but `iter_one`'s bound currently charges `+1000000030`
+     regardless, so `allocBound` must exceed `1000000030` per level *and*
+     recursively cover one nested level: use a per-level constant
+     `Lvl := 5000000000` and set `allocBound pawns := (pawns + 2) * Lvl`
+     (reachable `pawnsInHands ≤ 18` ⇒ ≈ 10¹¹ ≪ 2^64). Prove
+     `k' ≤ k + allocBound (pawnsInHands q)` from the loop's `f` bound plus
+     `checkingPawnDrops_le_one` (at most one nested level consumes `Lvl`).
+   - play-preservation lemmas for a checking pawn drop (`Shaped`,
+     `KingsUnique`, hands < 256), then strong induction on `pawnsInHands`
+     (`pawnsInHands_play_drop` decreases it; `legalAux_stable` supplies the
+     fuel past `pawnsInHands+2`).
 2. **600-move bound** (M5), informed by the measured 591: prove
    `pseudoMoves.length ≤ 600` for reachable positions (per-family mobility
    maxima + drop count, case analysis on onboard count), or prove a bound
