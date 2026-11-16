@@ -29,7 +29,8 @@ theorem load_u8_at {s : State} {e : Expr} {b o : Nat} {blk : Block} (he : EvE Ge
   simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl]
   rw [readByte hb o ho]; simp [Res.bind, decodeLE, IntTy.u8, pure]
 
-def pbPre : Stmt := .seq pb0 (.seq pb1 (.seq pb2 (.seq pb3 (.seq pb4 (.seq pb5 (.seq pb6 (.seq pb7 (.seq pb8 pb9))))))))
+def pbPre (rest : Stmt) : Stmt :=
+  .seq pb0 (.seq pb1 (.seq pb2 (.seq pb3 (.seq pb4 (.seq pb5 (.seq pb6 (.seq pb7 (.seq pb8 (.seq pb9 rest)))))))))
 
 /-- After the prefix: locals and the three blocks the probe touches. -/
 structure PreOut (s : State) (m : Mem) (mvb ub n : Nat) (sd : Color) (P MV U : List UInt8) : Prop where
@@ -48,8 +49,9 @@ theorem probe_pre {m : Mem} {mvb ub n : Nat} {pa h sd kb kw} {MV UB : List UInt8
     (hp : m posBlock = some (enc pa h sd kb kw)) (hmv : m mvb = some MV) (hub : m ub = some UB)
     (hMV : MV.length = 5) (hUB : UB.length = 20) (hf : Fresh m n) (h64 : n + 1 < 2 ^ 64)
     (hmvb0 : mvb ≠ 0) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
-    ∃ s, ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], m, false⟩
-        pbPre .normal s ∧
+    ∃ s, (∀ {rest o s'}, ExS Gen.prog s rest o s' →
+        ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], m, false⟩
+        (pbPre rest) o s') ∧
       PreOut s m mvb ub n sd (enc pa h sd kb kw) MV
         (ub1 UB MV sd.idx ((enc pa h sd kb kw).getD (112 + sd.idx) 0)) := by
   have hnmv : n ≠ mvb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hmv; cases hmv
@@ -158,8 +160,8 @@ theorem probe_pre {m : Mem} {mvb ub n : Nat} {pa h sd kb kw} {MV UB : List UInt8
   have hne : ∀ x, x ≠ ub → m8 x = m2 x := fun x hx => by
     simp only [m8, m7, m6, m5, m4, m3]
     rw [Mem.write_ne hx, Mem.write_ne hx, Mem.write_ne hx, Mem.write_ne hx, Mem.write_ne hx, Mem.write_ne hx]
-  refine ⟨{ sE with mem := m8 }, ExS.seq e0 (ExS.seq e1 (ExS.seq e2 (ExS.seq e3 (ExS.seq e4 (ExS.seq e5
-    (ExS.seq e6 (ExS.seq e7 (ExS.seq e8 e9)))))))), ?_⟩
+  refine ⟨{ sE with mem := m8 }, fun hr => ExS.seq e0 (ExS.seq e1 (ExS.seq e2 (ExS.seq e3 (ExS.seq e4 (ExS.seq e5
+    (ExS.seq e6 (ExS.seq e7 (ExS.seq e8 (ExS.seq e9 hr))))))))), ?_⟩
   refine ⟨rfl, by simp [sE, sD, sC, sB, Locals.upd], by simp [sE, sD, sC, sB, sA, Locals.upd]; rfl,
     by simp [sE, sD, Locals.upd]; rfl, rfl, ?_, ?_, hU6, ?_, ?_⟩
   · show m8 posBlock = _; rw [hne _ hpu]; exact hmp2

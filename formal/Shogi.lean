@@ -29,6 +29,16 @@ import Shogi.C.Proofs.Pseudo3
 import Shogi.C.Proofs.Pseudo4
 import Shogi.C.Proofs.Pseudo5
 import Shogi.C.Proofs.PseudoSpec
+import Shogi.C.Proofs.PlaySpec
+import Shogi.C.Proofs.Probe1
+import Shogi.C.Proofs.Probe2
+import Shogi.C.Proofs.Probe3
+import Shogi.C.Proofs.Probe4
+import Shogi.C.Proofs.Probe5
+import Shogi.C.Proofs.Probe6
+import Shogi.C.Proofs.Probe7
+import Shogi.C.Proofs.Probe8
+import Shogi.C.Proofs.Probe9
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
