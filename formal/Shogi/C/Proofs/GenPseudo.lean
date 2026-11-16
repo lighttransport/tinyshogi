@@ -227,4 +227,17 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
   · show sk.mem x = _
     rw [hkf x (by omega) (by omega) (by omega), hMg x (by omega) (by omega)]; exact hf.2.2 x (by omega)
 
+/-- `return count;` in `generate_legal_mut_internal` returns the number of
+    stored moves. -/
+theorem legal_return {s : State} {mb mo cb cap : Nat} {L : List (List UInt8)}
+    (h6 : s.locals 6 = some (.ptr cb 0)) (hb : Buf s.mem mb mo cb 0 cap L) :
+    EvE Gen.prog s (.load (.int ⟨64, false⟩) (.var 6)) (.int ⟨64, false⟩ (min L.length cap)) := by
+  obtain ⟨cblk, hc, hl, ht⟩ := hb.cnt
+  refine EvE.load (EvE.var h6) ?_
+  have hr : readBytes s.mem cb 0 8 = .ok (encodeLE 8 (min L.length cap)) := by
+    simp only [readBytes, hc]; rw [if_pos (by omega)]; simpa using congrArg Res.ok ht
+  simp only [load, Ty.size, IntTy.bytes, show (64 : Nat) / 8 = 8 by rfl, hr]
+  have := hb.cap64
+  simp [Res.bind, pure]; exact decode_encode8 _ (by omega)
+
 end Shogi.C.Proofs
