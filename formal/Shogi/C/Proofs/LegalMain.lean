@@ -80,7 +80,7 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
   obtain ⟨CB, hCB, _⟩ := hbc.cnt
   have hMs : ∀ mv ∈ Ms, mv ∈ p.pseudoMoves := fun mv h => hperm.subset h
   have hn1b : n1 ≤ n + 2 + 40000 := hn1
-  obtain ⟨s', el, hb', hp', h6', hfrl⟩ := legal_loop (fuel := fuel) (pb := n) (cntb := n + 1) (Sb := n1 + 1) (mb := mb)
+  obtain ⟨s', el, hb', hp', h6', hfrl, f', hf', _⟩ := legal_loop (fuel := fuel) (pb := n) (cntb := n + 1) (Sb := n1 + 1) (mb := mb)
     (mo := mo) (cb := n1) (co := 0) (cap := cap) (PB := PB) (CB := CB) hS hK hMs
     (fun mv h => hrec mv (hMs mv h)) (by omega) hPBl hmv hn0 (by omega) (by omega) (by omega) (by omega)
     ⟨by omega, by omega⟩ ⟨by omega, by omega⟩ ⟨by omega, by omega⟩
