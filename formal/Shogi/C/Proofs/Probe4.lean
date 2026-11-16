@@ -109,4 +109,39 @@ theorem st_hand_slot {ev : Expr} {v : Nat} (hv : EvE Gen.prog s ev (.int IntTy.u
 
 end hand
 
+section handu
+variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some posPtr)
+  (hmp : s.mem posBlock = some P) {c : Color} (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx))
+  {j : Nat} {i : Nat} (hi : i < 7) (hlj : s.locals j = some (.int IntTy.u32 i))
+
+include hP hl0 hmp hl4 hi hlj in
+theorem hand_ptr_u (hc : c.idx < 2) :
+    EvE Gen.prog s (.index (.index (.field (.var 0) 81) (.var 4) 7) (.var j) 1)
+      (.ptr posBlock (81 + 7 * c.idx + i)) := by
+  refine EvE.index (pb := .ptr posBlock (0 + 81 + c.idx * 7))
+    (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr, hmp, hP]))
+      (EvE.var hl4) (by simp [IntTy.u32, ptrAddN, hmp, hP]; omega)) (EvE.var hlj) ?_
+  simp [IntTy.u32, ptrAddN, hmp, hP]
+  rw [if_pos (by omega)]; congr 2; omega
+
+include hP hl0 hmp hl4 hi hlj in
+theorem ev_hand_slot_u :
+    EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.index (.field (.var 0) 81) (.var 4) 7) (.var j) 1))
+      (.int IntTy.u8 (P.getD (81 + 7 * c.idx + i) 0).toNat) :=
+  load_u8_at (hand_ptr_u hP hl0 hmp hl4 hi hlj (by cases c <;> decide)) hmp
+    (by rw [hP]; have : c.idx < 2 := by cases c <;> decide
+        omega)
+
+include hP hl0 hmp hl4 hi hlj in
+theorem st_hand_slot_u {ev : Expr} {v : Nat} (hv : EvE Gen.prog s ev (.int IntTy.u8 v)) (hro : s.ro = false) :
+    ExS Gen.prog s (.store (.int ⟨8, false⟩) (.index (.index (.field (.var 0) 81) (.var 4) 7) (.var j) 1) ev) .normal
+      { s with mem := s.mem.write posBlock (81 + 7 * c.idx + i) (encodeLE 1 v) } := by
+  have hc : c.idx < 2 := by cases c <;> decide
+  have := ExS.store (p := Gen.prog) (s := s) (ty := .int ⟨8, false⟩) (hand_ptr_u hP hl0 hmp hl4 hi hlj hc) hv hro
+    (by simp only [store, ite_true, show IntTy.u8 = (⟨8, false⟩ : IntTy) from rfl, IntTy.bytes]
+        exact writeBytes_ok hmp (by simp [encodeLE_length, hP]; omega))
+  simpa [IntTy.bytes] using this
+
+end handu
+
 end Shogi.C.Proofs
