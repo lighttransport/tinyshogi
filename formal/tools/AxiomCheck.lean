@@ -77,3 +77,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.np_spec
 #print axioms Shogi.C.Proofs.pd_spec
 #print axioms Shogi.C.Proofs.iter_fast
+#print axioms Shogi.C.Proofs.probe_path
