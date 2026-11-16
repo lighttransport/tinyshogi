@@ -8,6 +8,7 @@
   square, and `dropMoves` emits at most one pawn drop per square.
 -/
 import Shogi.Rules
+import Shogi.Theorems
 import Shogi.C.Proofs.PlaySpec
 
 namespace Shogi.C.Proofs
@@ -502,5 +503,33 @@ theorem checkingPawnDrops_le_one {p : Position} (hS : p.Shaped) (hK : KingsUniqu
         obtain ⟨had, hpa, hca⟩ := hamem
         exact filter_pawn_check_pair hS hK hnc hpa hca hpx hcx
     simpa using hlen
+
+theorem play_drop_kingsUnique {p : Position} (hS : p.board.length = 81) {d : Square}
+    (hK : KingsUnique p) : KingsUnique (p.play (Move.drop .pawn d)) := by
+  intro c x y hx hy
+  rw [play_drop_pieceAt p hS] at hx hy
+  by_cases hxd : x.val = d.val <;> by_cases hyd : y.val = d.val
+  · exact Fin.val_inj.mp (hxd.trans hyd.symm)
+  · rw [if_pos hxd] at hx; rw [if_neg hyd] at hy
+    exact absurd hx (by simp)
+  · rw [if_neg hxd] at hx; rw [if_pos hyd] at hy
+    exact absurd hy (by simp)
+  · rw [if_neg hxd] at hx; rw [if_neg hyd] at hy
+    exact hK c x y hx hy
+
+/-- A pawn drop preserves the "every hand slot < 256" invariant. The dropped
+    pawn leaves the mover's hand; the opponent's hand is untouched, and after
+    the drop the opponent is to move. -/
+theorem play_drop_hand_le {p : Position} (hS : p.Shaped)
+    (h : ∀ c i, p.hand c i < 256) (d : Square) :
+    ∀ i, (p.play (Move.drop .pawn d)).hand (p.play (Move.drop .pawn d)).side i < 256 := by
+  intro i
+  have hside : (p.play (Move.drop .pawn d)).side = p.side.opp := play_drop_side p d
+  have hbw := hS.2.2
+  have hbl := hS.2.1
+  have hne : p.side ≠ p.side.opp := by cases p.side <;> simp [Color.opp]
+  show (p.hands.set p.side 0 (p.hand p.side 0 - 1)).get p.side.opp i < 256
+  rw [Position.Hands.get_set_len hbl hbw, if_neg (by simp [hne])]
+  simpa [Position.hand] using h p.side.opp i
 
 end Shogi.C.Proofs
