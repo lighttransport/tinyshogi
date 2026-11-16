@@ -194,7 +194,7 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     {s : State} {mb mo cb co cap n e3 : Nat} {L : List (List UInt8)}
     (hI : PInv s p mb mo cb co cap n L) (hn : s.mem n = some (moveBytes p mv)) (hf : Fresh s.mem (n + 1))
     (h64 : n + 100010 < 2 ^ 64) (hn0 : n ≠ 0) (hl3 : s.locals 3 = some (.int IntTy.u8 e3))
-    (hl11 : s.locals 11 = some (u8 1)) (hl17 : s.locals 17 = some (u8 1)) (hnmb : n ≠ mb) (hncb : n ≠ cb) (he3 : e3 = 1)
+    {a11 : Nat} (hl11 : s.locals 11 = some (u8 a11)) (hl17 : s.locals 17 = some (u8 1)) (hnmb : n ≠ mb) (hncb : n ≠ cb) (he3 : e3 = 1)
     (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s', ExS Gen.prog s (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9)))))) .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ (if !(p.play mv).inCheck p.side &&

@@ -79,3 +79,5 @@ import Shogi
 #print axioms Shogi.C.Proofs.iter_fast
 #print axioms Shogi.C.Proofs.probe_path
 #print axioms Shogi.C.Proofs.probe_path_drop
+#print axioms Shogi.C.Proofs.iter_slow
+#print axioms Shogi.C.Proofs.iter_one
