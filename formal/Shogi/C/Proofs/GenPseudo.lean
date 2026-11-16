@@ -122,4 +122,22 @@ theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 2 <
   · show (M2.write (n + 1) 0 _) b = _
     rw [Mem.write_ne d]; exact gb b a c d
 
+/-- The `generate_pseudo(position, pseudo, &pseudo_count, 600)` call of
+    `generate_legal_mut_internal`. -/
+theorem legal_call_pseudo {s : State} {p : Position} {mb cb n : Nat}
+    (h0 : s.locals 0 = some posPtr) (h4 : s.locals 4 = some (.ptr mb 0)) (h5 : s.locals 5 = some (.ptr cb 0))
+    (hb : Buf s.mem mb 0 cb 0 600 []) (hf : Fresh s.mem n) (h64 : n + 40000 < 2 ^ 64)
+    (hm : s.mem posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) (hro : s.ro = false) :
+    ∃ s' n', ExS Gen.prog s (.call none 28 [(.var 0), (.var 4), (.var 5),
+        (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 600)))]) .normal s' ∧
+      s'.locals = s.locals ∧ s'.ro = s.ro ∧
+      Buf s'.mem mb 0 cb 0 600 (pseudoC p p.side) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧
+      Frame s.mem s'.mem mb cb := by
+  obtain ⟨sg, n', eg, hb', hf', hn', hfr⟩ := generate_pseudo_wrap (L := []) hb hf h64 hm hpm hpc
+  have hc : EvE Gen.prog s (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 600))) (.int IntTy.u64 600) :=
+    EvE_of_eval (n := 2) (by simp [evalExpr, evalCast, IntTy.wrap, IntTy.toInt, IntTy.modulus, IntTy.u64])
+  refine ⟨{ s with mem := sg.mem }, n', ExS.call (vs := [posPtr, .ptr mb 0, .ptr cb 0, .int IntTy.u64 600])
+    (EvArgs.cons (EvE.var h0) (EvArgs.cons (EvE.var h4) (EvArgs.cons (EvE.var h5) (EvArgs.cons hc EvArgs.nil))))
+    rfl rfl (by rw [hro]; exact eg) (Or.inl rfl), rfl, rfl, by simpa using hb', hf', hn', hfr⟩
+
 end Shogi.C.Proofs
