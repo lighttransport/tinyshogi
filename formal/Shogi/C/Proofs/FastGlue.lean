@@ -44,4 +44,34 @@ theorem skip_sound (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mov
       · left; rfl
       · right; simp [h] at hpin; exact hpin
 
+/-- The spec's per-move legality test inside `legalAux (fuel + 1)`. -/
+def specKeep (p : Position) (fuel : Nat) (m : Move) : Bool :=
+  let q := p.play m
+  !q.inCheck p.side && !(Position.isPawnDrop m && q.inCheck q.side && (Position.legalAux fuel q).isEmpty)
+
+/-- The C's per-move decision in `generate_legal_mut_internal` (with the
+    recursive reply count abstracted as `replies`): add without probing on
+    the fast path, otherwise probe, test check, and for a checking pawn drop
+    require a reply. -/
+def cKeep (p : Position) (replies : Position → Bool) (m : Move) : Bool :=
+  if needsProbeC (ksRec p p.side) p m = false && !(Position.isPawnDrop m) then true
+  else
+    let q := p.play m
+    !q.inCheck p.side && !(Position.isPawnDrop m && q.inCheck q.side && !replies q)
+
+/-- **The two paths of the C filter agree with the spec's test**, given that
+    the recursive call answers the spec's "has a legal reply". -/
+theorem cKeep_eq (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (fuel : Nat) (m : Move)
+    (hm : m ∈ p.pseudoMoves) :
+    cKeep p (fun q => !(Position.legalAux fuel q).isEmpty) m = specKeep p fuel m := by
+  unfold cKeep specKeep
+  by_cases h : needsProbeC (ksRec p p.side) p m = false && !(Position.isPawnDrop m)
+  · rw [if_pos h]
+    simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq] at h
+    obtain ⟨hn, hd⟩ := h
+    simp only
+    rw [skip_sound p hS hK m hm hn]
+    simp [hd]
+  · rw [if_neg h]; simp
+
 end Shogi.C.Proofs
