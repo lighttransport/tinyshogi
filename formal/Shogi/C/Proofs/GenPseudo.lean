@@ -140,4 +140,44 @@ theorem legal_call_pseudo {s : State} {p : Position} {mb cb n : Nat}
     (EvArgs.cons (EvE.var h0) (EvArgs.cons (EvE.var h4) (EvArgs.cons (EvE.var h5) (EvArgs.cons hc EvArgs.nil))))
     rfl rfl (by rw [hro]; exact eg) (Or.inl rfl), rfl, rfl, by simpa using hb', hf', hn', hfr⟩
 
+/-- `count = 0` in `generate_legal_mut_internal`: with the caller's move
+    array this starts the empty output buffer. -/
+theorem legal_count_init {s : State} {n mb mo cap : Nat} {blk : Block} (hf : Fresh s.mem n)
+    (h64 : n + 1 < 2 ^ 64) (hro : s.ro = false) (hmb : s.mem mb = some blk) (hlen : mo + 5 * cap ≤ blk.length)
+    (hmb0 : mb ≠ 0) (hcap : cap < 2 ^ 64) :
+    ∃ s', ExS Gen.prog s (.seq (.alloc 6 8)
+        (.store (.int ⟨64, false⟩) (.var 6) (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0))))) .normal s' ∧
+      Buf s'.mem mb mo n 0 cap [] ∧ Fresh s'.mem (n + 1) ∧ s'.locals 6 = some (.ptr n 0) ∧
+      (∀ x, x ≠ 6 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
+      (∀ b, b ≠ 0 → b ≠ n → s'.mem b = s.mem b) := by
+  have e1 := exec_alloc (hf.allocAt (by omega)) 6 8
+  have hf1 := hf.after_alloc (List.replicate 8 0)
+  generalize hM : (s.mem.upd 0 (encodeLE 8 (n + 1))).upd n (List.replicate 8 0) = M at e1 hf1
+  have g1 : M n = some (List.replicate 8 0) := by rw [← hM]; exact Mem.upd_eq
+  have gb : ∀ b, b ≠ 0 → b ≠ n → M b = s.mem b := fun b a c => by rw [← hM, Mem.upd_ne c, Mem.upd_ne a]
+  have hmbn : mb ≠ n := fun e => by have := hf.2.2 n (Nat.le_refl _); rw [← e, hmb] at this; simp at this
+  let L1 := s.locals.upd 6 (.ptr n 0)
+  have es : ExS Gen.prog ⟨L1, M, s.ro⟩ (.store (.int ⟨64, false⟩) (.var 6)
+      (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0)))) .normal ⟨L1, M.write n 0 (encodeLE 8 0), s.ro⟩ := by
+    refine ExS.store (pa := .ptr n 0) (v := .int ⟨64, false⟩ 0) (EvE.var (by simp [L1, Locals.upd]))
+      (EvE_of_eval (n := 2) ?_) hro ?_
+    · simp [evalExpr, evalCast, IntTy.wrap, IntTy.toInt, IntTy.modulus]
+    · simp only [store, Ty.size, IntTy.bytes]
+      exact writeBytes_ok g1 (by simp [encodeLE_length])
+  refine ⟨_, ExS.seq e1 es, ?_, ?_, by simp [L1, Locals.upd], fun x a => by simp [L1, Locals.upd, a], rfl,
+    fun b a c => ?_⟩
+  · refine ⟨⟨encodeLE 8 0, ?_, by simp [encodeLE_length], by simp [List.take_of_length_le, encodeLE_length]⟩,
+      ⟨blk, ?_, hlen, by simp⟩, by simp, hmbn, hmb0, hf.2.1, hcap⟩
+    · show (M.write n 0 _) n = _
+      rw [Mem.write_eq g1]; simp [encodeLE_length]
+    · show (M.write n 0 _) mb = _
+      rw [Mem.write_ne hmbn, gb mb hmb0 hmbn]; exact hmb
+  · refine ⟨?_, by omega, fun x hx => ?_⟩
+    · show (M.write n 0 _) 0 = _
+      rw [Mem.write_ne hf.2.1.symm]; exact hf1.1
+    · show (M.write n 0 _) x = _
+      rw [Mem.write_ne (by omega)]; exact hf1.2.2 x hx
+  · show (M.write n 0 _) b = _
+    rw [Mem.write_ne c]; exact gb b a c
+
 end Shogi.C.Proofs

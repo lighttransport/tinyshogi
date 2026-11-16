@@ -89,3 +89,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.keepBytes_perm
 #print axioms Shogi.C.Proofs.legal_prologue
 #print axioms Shogi.C.Proofs.legal_call_pseudo
+#print axioms Shogi.C.Proofs.legal_count_init
