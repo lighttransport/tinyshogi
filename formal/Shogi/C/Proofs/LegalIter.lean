@@ -60,7 +60,7 @@ theorem iter_fast {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
     (hpd : Position.isPawnDrop m = false) :
     ∃ s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 rest)))) .cont s' ∧
       Buf s'.mem mb mo cb co cap (L ++ [moveBytes p m]) ∧ Fresh s'.mem (n + 2) ∧
-      (∀ x, x < 10 → s'.locals x = s.locals x) ∧ Frame s.mem s'.mem mb cb := by
+      (∀ x, x < 10 → s'.locals x = s.locals x) ∧ Frame s.mem s'.mem mb cb ∧ s'.ro = false := by
   have hnpb : n ≠ pb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpb; cases hpb
   have hnS : n ≠ Sb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hSb; cases hSb
   have hnp' : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpos; cases hpos
@@ -104,7 +104,8 @@ theorem iter_fast {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
       (EvArgs.cons (EvE.var (by rw [hl3 2 (by omega)]; exact hl2)) (EvArgs.cons (EvE.var (by
         simp [s3, Locals.upd]; rw [hl2' 10 (by omega)]; simp [s1, Locals.upd])) EvArgs.nil)))
   refine ⟨{ s3 with mem := sA.mem }, ExS.seq e0 (ExS.seq (by rw [lp1_eq]; exact e1) (ExS.seq (by rw [lp2_eq]; exact e2)
-    (ExS.seq_cont (ExS.ite (bc := true) hc3 rfl (ExS.seq hcall ExS.cont))))), hbA, hfA, fun x hx => hl3 x hx, ?_⟩
+    (ExS.seq_cont (ExS.ite (bc := true) hc3 rfl (ExS.seq hcall ExS.cont))))), hbA, hfA, fun x hx => hl3 x hx, ?_,
+    by show s2.ro = false; rw [hro2]; exact hro⟩
   intro x a b c d
   have hxn : x ≠ n := fun e => by subst e; exact d (hf.2.2 _ (Nat.le_refl _))
   show sA.mem x = _

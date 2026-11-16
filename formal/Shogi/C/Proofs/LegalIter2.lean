@@ -24,7 +24,8 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
     ∃ s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel m then [moveBytes p m] else [])) ∧
-      s'.mem posBlock = some (encode p) := by
+      s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
+      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f + 99000 < 2 ^ 64 := by
   have hnpb : n ≠ pb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpb; cases hpb
   have hnS : n ≠ Sb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hSb; cases hSb
   have hnp' : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpos; cases hpos
@@ -74,19 +75,30 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
       ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) o t :=
     fun h => ExS.seq e0 (ExS.seq (by rw [lp1_eq]; exact e1) (ExS.seq (by rw [lp2_eq]; exact e2) h))
+  have hfr3 : ∀ x, x ≠ 0 → s.mem x ≠ none → s3.mem x = s.mem x := fun x a b => by
+    rw [hm3]; exact hm1o x a (fun e => b (by rw [e]; exact hf.2.2 _ (Nat.le_refl _)))
+  have fin : ∀ s' : State, s'.ro = false → (∀ x, x < 10 → s'.locals x = s3.locals x) →
+      (∀ x, x ≠ 0 → x ≠ mb → x ≠ cb → s3.mem x ≠ none → s'.mem x = s3.mem x) →
+      s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧ Frame s.mem s'.mem mb cb := by
+    intro s' r l f
+    refine ⟨r, fun x hx => by rw [l x hx, hl3' x hx], fun x a b c d => ?_⟩
+    rw [f x a b c (by rw [hfr3 x a d]; exact d), hfr3 x a d]
   cases hpd : Position.isPawnDrop m
   · -- not a pawn drop: the probe path
     have hnp : needsProbeC (ksRec p p.side) p m = true := by rcases hslow with h | h; exact h; rw [hpd] at h; cases h
-    obtain ⟨s', e', hb', hp'⟩ := probe_path p hS hK m hm hpd hI hn3 hf3 (by omega) hf.2.1 l3
+    obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path p hS hK m hm hpd hI hn3 hf3 (by omega) hf.2.1 l3
       (by rw [l11', hnp]; rfl) (by rw [l17, hpd]; rfl) (Ne.symm hnb.1 |>.symm |> fun h => by
         intro e; exact hnb.1 (by rw [e])) (by intro e; exact hnb.2 (by rw [e])) (by decide) hpm hpc
-    refine ⟨s', hpre e', ?_, hp'⟩
+    obtain ⟨f1, f2, f3⟩ := fin s' hr' hl' hf'
+    obtain ⟨ff, hff, hffb⟩ := hfr'
+    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, ff, hff, by omega⟩
     have hk : specKeep p fuel m = !(p.play m).inCheck p.side := by simp [specKeep, hpd]
     rw [hk]; cases h : (p.play m).inCheck p.side <;> simp [h] at hb' ⊢ <;> exact hb'
   · -- a pawn drop: the probe path with the uchifuzume recursion
-    obtain ⟨s', e', hb', hp'⟩ := probe_path_drop p hS hK m hm hpd _ hrec hI hn3 hf3 (by omega) hf.2.1 l3
+    obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path_drop p hS hK m hm hpd _ hrec hI hn3 hf3 (by omega) hf.2.1 l3
       l11' (by rw [l17, hpd]; rfl) (by intro e; exact hnb.1 (by rw [e])) (by intro e; exact hnb.2 (by rw [e])) rfl hpm hpc
-    refine ⟨s', hpre e', ?_, hp'⟩
+    obtain ⟨f1, f2, f3⟩ := fin s' hr' hl' hf'
+    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, hfr'⟩
     have hk : specKeep p fuel m = (!(p.play m).inCheck p.side &&
         !((p.play m).inCheck (p.play m).side && !!(Position.legalAux fuel (p.play m)).isEmpty)) := by
       simp [specKeep, hpd]
@@ -110,20 +122,22 @@ theorem iter_one {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co ca
     ∃ o s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) o s' ∧ (o = .normal ∨ o = .cont) ∧
       Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel m then [moveBytes p m] else [])) ∧
-      s'.mem posBlock = some (encode p) := by
+      s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
+      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f + 99000 < 2 ^ 64 := by
   by_cases hfast : needsProbeC (ksRec p p.side) p m = false ∧ Position.isPawnDrop m = false
-  · obtain ⟨s', e', hb', _, _, hfr⟩ := iter_fast (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9))))) hm hl0 hl1 hl2
+  · obtain ⟨s', e', hb', hf2, hl2, hfr, hro'⟩ := iter_fast (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9))))) hm hl0 hl1 hl2
       hl4 hl6 hl8 hl9 hpos hpb hi hmv hSb hbuf hf (by omega) hro hpb0 hS0 hfast.1 hfast.2
     have hk : specKeep p fuel m = true := by
       have := cKeep_eq p hS hK fuel m hm
       unfold cKeep at this
       rw [if_pos (by simp [hfast.1, hfast.2])] at this
       exact this.symm
-    refine ⟨.cont, s', e', Or.inr rfl, by rw [hk]; simpa using hb', hfr.pos hpm hpc hpos⟩
+    exact ⟨.cont, s', e', Or.inr rfl, by rw [hk]; simpa using hb', hfr.pos hpm hpc hpos, hro', hl2, hfr,
+      _, hf2, by omega⟩
   · have hslow : needsProbeC (ksRec p p.side) p m = true ∨ Position.isPawnDrop m = true := by
       cases h1 : needsProbeC (ksRec p p.side) p m <;> cases h2 : Position.isPawnDrop m <;> simp_all
-    obtain ⟨s', e', hb', hp'⟩ := iter_slow hS hK hm fuel hrec hl0 hl1 hl2 hl3 hl4 hl6 hl7 hl8 hl9 hpos hpb hi hmv hSb
+    obtain ⟨s', e', hb', hp', hx⟩ := iter_slow hS hK hm fuel hrec hl0 hl1 hl2 hl3 hl4 hl6 hl7 hl8 hl9 hpos hpb hi hmv hSb
       hbuf htab hf h64 hro hpb0 hS0 hpm hpc hslow
-    exact ⟨.normal, s', e', Or.inl rfl, hb', hp'⟩
+    exact ⟨.normal, s', e', Or.inl rfl, hb', hp', hx⟩
 
 end Shogi.C.Proofs
