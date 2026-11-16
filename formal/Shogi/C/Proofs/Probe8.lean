@@ -28,6 +28,8 @@ theorem probe_drop {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
     ∃ s' U', ExS Gen.prog s pbDrop .normal s' ∧ s'.ro = s.ro ∧
       s'.mem posBlock = some (enc pa (hupd h c i (h c i - 1)) c kb kw) ∧
       s'.mem ub = some U' ∧ U'.length = 20 ∧ U'.getD 12 0 = (Piece.code ⟨c, t⟩).toUInt8 ∧
+      (∀ k, k ≠ 12 → k ≠ 15 → k ≠ 16 → U'.getD k 0 = U.getD k 0) ∧
+      U'.getD 15 0 = i.val.toUInt8 ∧ U'.getD 16 0 = (h c i).toUInt8 ∧
       (∀ x, x ≠ posBlock → x ≠ ub → s'.mem x = s.mem x) ∧
       (∀ x, x ≤ 4 → s'.locals x = s.locals x) := by
   let P := enc pa h c kb kw
@@ -132,8 +134,11 @@ theorem probe_drop {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
     rw [write1_set hm5p (by rw [hP]; omega), toUInt8_mod, enc_set_hand]
   refine ⟨{ s2 with mem := m6 }, U3.set 16 (h c i).toUInt8,
     ExS.seq e0 (ExS.seq (ExS.seq c1 st1) (ExS.seq st2 (ExS.seq st3 st4))), rfl, hm6p, ?_, by simp [U3, U2, hU],
-    ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_, ?_, ?_⟩
   · show (m5.write posBlock _ _) ub = _; rw [Mem.write_ne (Ne.symm hpu)]; exact hm5u
+  · simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set, hU]
+  · intro k a b d1; simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set, Ne.symm a, Ne.symm b, Ne.symm d1]
+  · simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set, hU]
   · simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set, hU]
   · intro x a b; show (m5.write posBlock _ _) x = _
     simp only [m5, m4, m3]; rw [Mem.write_ne a, Mem.write_ne b, Mem.write_ne b, Mem.write_ne b]

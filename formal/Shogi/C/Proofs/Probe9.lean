@@ -79,6 +79,96 @@ theorem pseudo_drop {p : Position} {t : PieceType} {d : Square} (h : Move.drop t
       exact ⟨i, PieceType.handIndex_ofHandIndex i, hc.1, hc.2.1.1⟩
     · simp at h
 
+theorem wrb_getD_out (blk : List UInt8) (o k : Nat) (bs : List UInt8) (hl : o + bs.length ≤ blk.length)
+    (hk : k < o ∨ o + bs.length ≤ k) : (wrb blk o bs).getD k 0 = blk.getD k 0 := by
+  simp only [wrb, List.getD_eq_getElem?_getD]
+  rcases hk with hk | hk
+  · rw [List.append_assoc, List.getElem?_append_left (by simp; omega), List.getElem?_take, if_pos hk]
+  · rw [List.getElem?_append_right (by simp; omega), List.getElem?_drop]
+    congr 2; simp; omega
+
+theorem wrb_getD_in (blk : List UInt8) (o k : Nat) (bs : List UInt8) (hl : o + bs.length ≤ blk.length)
+    (hk1 : o ≤ k) (hk2 : k < o + bs.length) : (wrb blk o bs).getD k 0 = bs.getD (k - o) 0 := by
+  simp only [wrb, List.getD_eq_getElem?_getD]
+  rw [List.getElem?_append_left (by simp; omega), List.getElem?_append_right (by simp; omega)]
+  congr 2; simp; omega
+
+theorem take_of_getD (U L : List UInt8) (o n : Nat) (hL : L.length = n) (hU : o + n ≤ U.length)
+    (h : ∀ k, k < n → U.getD (o + k) 0 = L.getD k 0) : (U.drop o).take n = L := by
+  apply List.ext_getElem
+  · simp; omega
+  · intro k h1 h2
+    have := h k (by omega)
+    simp only [List.getD_eq_getElem?_getD] at this
+    rw [List.getElem?_eq_getElem (by omega), List.getElem?_eq_getElem (by omega)] at this
+    simp only [Option.getD_some] at this
+    simp [this]
+
+section ub1facts
+variable (UB MV : List UInt8) (c : Nat) (kbc : UInt8) (hU : UB.length = 20) (hM : MV.length = 5)
+include hU hM
+
+theorem ub1_getD_out (k : Nat) (h1 : 5 ≤ k) (h2 : k < 8 ∨ 17 ≤ k) : (ub1 UB MV c kbc).getD k 0 = UB.getD k 0 := by
+  have l4 := encodeLE_length 4 c
+  simp only [ub1]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+
+theorem ub1_mv (k : Nat) (hk : k < 5) : (ub1 UB MV c kbc).getD k 0 = MV.getD k 0 := by
+  have l4 := encodeLE_length 4 c
+  simp only [ub1]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_in _ _ _ _ (by simp [hU, hM]) (by omega) (by omega), Nat.sub_zero]
+
+theorem ub1_c (k : Nat) (hk : k < 4) : (ub1 UB MV c kbc).getD (8 + k) 0 = (encodeLE 4 c).getD k 0 := by
+  have l4 := encodeLE_length 4 c
+  simp only [ub1]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4]; omega)]
+  rw [wrb_getD_in _ _ _ _ (by simp [wrb, hU, hM, l4]) (by omega) (by omega)]; congr 1; omega
+
+theorem ub1_14 : (ub1 UB MV c kbc).getD 14 0 = kbc := by
+  have l4 := encodeLE_length 4 c
+  simp only [ub1]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4])]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4])]
+  rw [wrb_getD_in _ _ _ _ (by simp [wrb, hU, hM, l4]) (by omega) (by simp)]; rfl
+
+theorem ub1_15 : (ub1 UB MV c kbc).getD 15 0 = 255 := by
+  have l4 := encodeLE_length 4 c
+  simp only [ub1]
+  rw [wrb_getD_out _ _ _ _ (by simp [wrb, hU, hM, l4]) (by simp [l4])]
+  rw [wrb_getD_in _ _ _ _ (by simp [wrb, hU, hM, l4]) (by omega) (by simp)]; rfl
+
+theorem ub1_len : (ub1 UB MV c kbc).length = 20 := ub1_length UB MV c kbc hU hM
+
+end ub1facts
+
+/-- What the probe leaves in the undo record (what `unmake_legal_probe` reads). -/
+def UndoRec (p : Position) (mv : Move) (U : List UInt8) : Prop :=
+  U.length = 20 ∧ (U.drop 0).take 5 = moveBytes p mv ∧ (U.drop 8).take 4 = le32 p.side.idx ∧
+  U.getD 14 0 = kingByte p p.side ∧
+  match mv with
+  | .normal _ d _ => U.getD 13 0 = pieceByte (p.pieceAt d) ∧
+      (match p.pieceAt d with
+        | some q => match q.type.unpromote.handIndex with
+          | some i => U.getD 15 0 = i.val.toUInt8 ∧ U.getD 16 0 = (p.hand p.side i).toUInt8
+          | none => True
+        | none => U.getD 15 0 = 255)
+  | .drop t _ => match t.handIndex with
+      | some i => U.getD 15 0 = i.val.toUInt8 ∧ U.getD 16 0 = (p.hand p.side i).toUInt8
+      | none => True
+
 theorem kbAfter_eq (p : Position) {s d : Square} {pc : Piece} {pr : Bool} (hcol : pc.color = p.side) (me : Color) :
     kbAfter p.side (movedPiece p.side pc pr) d (kingByte p me) me = kbOf (kingAfter p s d pc me) := by
   unfold kbAfter kingAfter
@@ -104,6 +194,14 @@ theorem pbCond_ev {s : State} {n : Nat} {MV : List UInt8} (hl1 : s.locals 1 = so
 /-- **`make_legal_probe` refines `Position.play`** on the position block, for
     every pseudo-legal move of a shaped position with at most one king per
     colour. -/
+theorem Fresh.congr {m m' : Mem} {n : Nat} (hf : Fresh m n) (h0 : m' 0 = m 0) (h : ∀ x, n ≤ x → m' x = m x) :
+    Fresh m' n := ⟨by rw [h0]; exact hf.1, hf.2.1, fun x hx => by rw [h x hx]; exact hf.2.2 x hx⟩
+
+theorem kbc_eq (p : Position) :
+    (enc p.pieceAt p.hand p.side (kingByte p .black) (kingByte p .white)).getD (112 + p.side.idx) 0 =
+      kingByte p p.side := by
+  rw [enc_getD_king]; cases p.side <;> rfl
+
 theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Move) (hm : mv ∈ p.pseudoMoves)
     {M : Mem} {mvb ub n : Nat} {UB : List UInt8}
     (hp : M posBlock = some (encode p)) (hmv : M mvb = some (moveBytes p mv)) (hub : M ub = some UB)
@@ -112,7 +210,8 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], M, false⟩
         Gen.make_legal_probe.body .normal s' ∧
       s'.mem posBlock = some (encode (p.play mv)) ∧
-      (∀ x, x ≠ 0 → x ≠ n → x ≠ ub → x ≠ posBlock → s'.mem x = M x) ∧ s'.ro = false := by
+      (∀ x, x ≠ 0 → x ≠ n → x ≠ ub → x ≠ posBlock → s'.mem x = M x) ∧ s'.ro = false ∧
+      (∃ U, s'.mem ub = some U ∧ UndoRec p mv U) ∧ Fresh s'.mem (n + 1) := by
   rw [encode_enc] at hp
   have hMVl : (moveBytes p mv).length = 5 := by cases mv <;> rfl
   obtain ⟨s1, hpre, hP⟩ := probe_pre (sd := p.side) hp hmv hub hMVl hUB hf h64 hmvb0 hub0 hpu
@@ -133,7 +232,7 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
       rw [hmvb]; simp [toNat_toUInt8_lt sq.val (by omega)]
     rw [hc0] at hcond
     have hmn := hP.mn; rw [hmvb] at hmn
-    obtain ⟨s2, U2, e2, hro2, hp2, hu2, hU2, hU212, hU213, ho2, hl2⟩ := probe_norm (pa := p.pieceAt) (h := p.hand)
+    obtain ⟨s2, U2, e2, hro2, hp2, hu2, hU2, hU212, hU213, hUT, ho2, hl2⟩ := probe_norm (pa := p.pieceAt) (h := p.hand)
       (sq := sq) (d := d) (pc := pc) (pr := pr) hP.l0 hP.l1 hP.l2 hP.l4 hP.mp hmn hP.mu hUl hpu hpn hnu hP.ro
       hpc hcol hcap
     have hmn2 : s2.mem n = some (moveBytes p (.normal sq d pr)) := by rw [ho2 n (Ne.symm hpn) hnu]; exact hP.mn
@@ -147,7 +246,24 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
       rfl
     · intro x a b c d'
       rw [ho3 x d', ho2 x d' c, hP.other x a b c]
-    · rw [hro3, hro2]; exact hP.ro
+    · refine ⟨by rw [hro3, hro2]; exact hP.ro, ⟨U2, by rw [ho3 ub (Ne.symm hpu)]; exact hu2, ?_⟩, ?_⟩
+      · have hk := kbc_eq p
+        refine ⟨hU2, take_of_getD _ _ 0 5 hMVl (by omega) (fun k hk5 => ?_),
+          take_of_getD _ _ 8 4 (by simp [le32]) (by omega) (fun k hk4 => ?_), ?_, hU213, ?_⟩
+        · rw [Nat.zero_add, hUT.1 k (by omega) (by omega) (by omega) (by omega), ub1_mv _ _ _ _ hUB hMVl k hk5]
+        · rw [hUT.1 (8 + k) (by omega) (by omega) (by omega) (by omega), ub1_c _ _ _ _ hUB hMVl k hk4,
+            le32_small _ (by cases p.side <;> decide)]
+        · rw [hUT.1 14 (by omega) (by omega) (by omega) (by omega), ub1_14 _ _ _ _ hUB hMVl, hk]
+        · have h2 := hUT.2
+          cases hpd : p.pieceAt d with
+          | none => simp only [hpd] at h2 ⊢; rw [h2.1, ub1_15 _ _ _ _ hUB hMVl]
+          | some q => simp only [hpd] at h2 ⊢; exact h2
+      · have hp1 : posBlock < n := Nat.lt_of_not_le (fun hc => by
+          have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
+        have hu1 : ub < n := Nat.lt_of_not_le (fun hc => by
+          have := hf.2.2 ub hc; rw [this] at hub; cases hub)
+        exact hP.fresh.congr (by rw [ho3 0 (by decide), ho2 0 (by decide) (Ne.symm hub0)])
+          (fun x hx => by rw [ho3 x (by omega), ho2 x (by omega) (by omega)])
   | drop t d =>
     obtain ⟨i, hi, hh, hd⟩ := pseudo_drop hm
     have hcode := code_handIndex hi
@@ -155,7 +271,7 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     have hc0 : ((moveBytes p (.drop t d)).getD 0 0).toNat = 255 := rfl
     rw [hc0] at hcond
     have hmn := hP.mn; rw [hmvb] at hmn
-    obtain ⟨s2, U2, e2, hro2, hp2, hu2, hU2, hU212, ho2, hl2⟩ := probe_drop (pa := p.pieceAt) (h := p.hand)
+    obtain ⟨s2, U2, e2, hro2, hp2, hu2, hU2, hU212, hDo, hD15, hD16, ho2, hl2⟩ := probe_drop (pa := p.pieceAt) (h := p.hand)
       (d := d) (t := t) (i := i) hP.l0 hP.l1 hP.l2 hP.l4 hP.mp hmn hP.mu hUl hpu hpn hnu hP.ro hi hh
     have hmn2 : s2.mem n = some (moveBytes p (.drop t d)) := by rw [ho2 n (Ne.symm hpn) hnu]; exact hP.mn
     obtain ⟨s3, e3, hro3, hp3, ho3, hl3⟩ := probe_tail (M := ⟨p.side, t⟩) (d := d)
@@ -168,6 +284,20 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
       simp [kbAfter, htk]
     · intro x a b c d'
       rw [ho3 x d', ho2 x d' c, hP.other x a b c]
-    · rw [hro3, hro2]; exact hP.ro
+    · refine ⟨by rw [hro3, hro2]; exact hP.ro, ⟨U2, by rw [ho3 ub (Ne.symm hpu)]; exact hu2, ?_⟩, ?_⟩
+      · have hk := kbc_eq p
+        refine ⟨hU2, take_of_getD _ _ 0 5 hMVl (by omega) (fun k hk5 => ?_),
+          take_of_getD _ _ 8 4 (by simp [le32]) (by omega) (fun k hk4 => ?_), ?_, ?_⟩
+        · rw [Nat.zero_add, hDo k (by omega) (by omega) (by omega), ub1_mv _ _ _ _ hUB hMVl k hk5]
+        · rw [hDo (8 + k) (by omega) (by omega) (by omega), ub1_c _ _ _ _ hUB hMVl k hk4,
+            le32_small _ (by cases p.side <;> decide)]
+        · rw [hDo 14 (by omega) (by omega) (by omega), ub1_14 _ _ _ _ hUB hMVl, hk]
+        · simp only [hi]; exact ⟨hD15, hD16⟩
+      · have hp1 : posBlock < n := Nat.lt_of_not_le (fun hc => by
+          have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
+        have hu1 : ub < n := Nat.lt_of_not_le (fun hc => by
+          have := hf.2.2 ub hc; rw [this] at hub; cases hub)
+        exact hP.fresh.congr (by rw [ho3 0 (by decide), ho2 0 (by decide) (Ne.symm hub0)])
+          (fun x hx => by rw [ho3 x (by omega), ho2 x (by omega) (by omega)])
 
 end Shogi.C.Proofs

@@ -19,6 +19,16 @@ theorem toNat_toUInt8_lt (n : Nat) (h : n < 256) : n.toUInt8.toNat = n := by
 
 theorem pieceByte_toNat' (o : Option Piece) : (pieceByte o).toNat < 256 := UInt8.toNat_lt _
 
+/-- How the board-move branch leaves the undo record bytes other than 12/13. -/
+def UndoTail (pa : Square → Option Piece) (h : Color → Fin 7 → Nat) (c : Color) (d : Square)
+    (U U' : List UInt8) : Prop :=
+  (∀ k, k ≠ 12 → k ≠ 13 → k ≠ 15 → k ≠ 16 → U'.getD k 0 = U.getD k 0) ∧
+  (match pa d with
+    | some q => match q.type.unpromote.handIndex with
+      | some i => U'.getD 15 0 = i.val.toUInt8 ∧ U'.getD 16 0 = (h c i).toUInt8
+      | none => True
+    | none => U'.getD 15 0 = U.getD 15 0 ∧ U'.getD 16 0 = U.getD 16 0)
+
 theorem unpromote_hand (t : PieceType) (h : t ≠ .king) : ∃ i, t.unpromote.handIndex = some i := by
   cases t <;> first | exact absurd rfl h | exact ⟨_, rfl⟩
 
@@ -34,7 +44,7 @@ theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
     ∃ s' U', ExS Gen.prog s pbNorm .normal s' ∧ s'.ro = s.ro ∧
       s'.mem posBlock = some (enc (fun y => if y = sq then none else pa y) (normHands pa h c d) c kb kw) ∧
       s'.mem ub = some U' ∧ U'.length = 20 ∧ U'.getD 12 0 = (movedPiece c pc pr).code.toUInt8 ∧
-      U'.getD 13 0 = pieceByte (pa d) ∧
+      U'.getD 13 0 = pieceByte (pa d) ∧ UndoTail pa h c d U U' ∧
       (∀ x, x ≠ posBlock → x ≠ ub → s'.mem x = s.mem x) ∧
       (∀ x, x ≤ 6 → s'.locals x = s.locals x) := by
   let P := enc pa h c kb kw
@@ -100,11 +110,12 @@ theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
   let t5 : State := { t4 with mem := m5 }
   have hm5u : m5 ub = some U3 := by simp only [m5]; rw [Mem.write_ne (Ne.symm hpu)]; exact hm4u
   have l8 : t5.locals 8 = some (.int IntTy.u8 capb) := by simp [t5, t4, s2, Locals.upd]
-  obtain ⟨s6, U4, e5, hro6, hm6p, hm6u, hU4, hU412, hU413, hm6o, hl6⟩ : ∃ s6 U4,
+  obtain ⟨s6, U4, e5, hro6, hm6p, hm6u, hU4, hU412, hU413, hUT, hm6o, hl6⟩ : ∃ s6 U4,
       ExS Gen.prog t5 pn5 .normal s6 ∧ s6.ro = t5.ro ∧
       s6.mem posBlock = some (enc (fun y => if y = sq then none else pa y) (normHands pa h c d) c kb kw) ∧
       s6.mem ub = some U4 ∧ U4.length = 20 ∧ U4.getD 12 0 = pieceByte (some pc) ∧
-      U4.getD 13 0 = pieceByte (pa d) ∧ (∀ x, x ≠ posBlock → x ≠ ub → s6.mem x = t5.mem x) ∧
+      U4.getD 13 0 = pieceByte (pa d) ∧ UndoTail pa h c d U U4 ∧
+      (∀ x, x ≠ posBlock → x ≠ ub → s6.mem x = t5.mem x) ∧
       (∀ x, x ≠ 9 → x ≠ 10 → x ≠ 11 → x ≠ 12 → s6.locals x = t5.locals x) := by
     have hU3l : U3.length = 20 := by simp [U3, U2, hU]
     have hU312 : U3.getD 12 0 = pieceByte (some pc) := by
@@ -116,8 +127,11 @@ theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
       have hc0 : capb = 0 := by simp [capb, hpd, pieceByte]
       have hz := ev_ne0 (s := t5) (by rw [hc0]; decide) l8
       refine ⟨t5, U3, by rw [pn5_eq]; exact ExS.ite (bc := false) hz (by simp [truthy_boolVal, hc0]) ExS.skip,
-        rfl, ?_, hm5u, hU3l, hU312, by rw [hU313, hpd], fun _ _ _ => rfl, fun _ _ _ _ _ => rfl⟩
-      simp only [normHands, hpd]; exact hm5p
+        rfl, ?_, hm5u, hU3l, hU312, by rw [hU313, hpd], ⟨fun k a b _ _ => ?_, ?_⟩, fun _ _ _ => rfl,
+        fun _ _ _ _ _ => rfl⟩
+      · simp only [normHands, hpd]; exact hm5p
+      · simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set, Ne.symm a, Ne.symm b]
+      · simp only [hpd]; simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set]
     | some q =>
       obtain ⟨i, hi⟩ := unpromote_hand q.type (hcap q hpd)
       have hcq : capb = q.code := by simp [capb, hpd, pieceByte, toNat_toUInt8_lt _ (piece_code_lt q)]
@@ -128,10 +142,12 @@ theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
         (by simp [t5, t4, s2, s1, Locals.upd]; exact hl4) (by rw [l8, hcq]; rfl) hm5p hm5u hU3l hpu hro hi
       refine ⟨s6, (U3.set 15 i.val.toUInt8).set 16 (h c i).toUInt8,
         by rw [pn5_eq]; exact ExS.ite (bc := true) hz (by simp [truthy_boolVal, hcq, hq0]) ec,
-        hro6, ?_, hu6, by simp [hU3l], ?_, ?_, ho6, hl6⟩
+        hro6, ?_, hu6, by simp [hU3l], ?_, ?_, ⟨fun k a b d1 d2 => ?_, ?_⟩, ho6, hl6⟩
       · simp only [normHands, hpd, hi]; exact hp6
       · rw [← hU312]; simp [List.getD_eq_getElem?_getD, List.getElem?_set]
       · rw [← hpd, ← hU313]; simp [List.getD_eq_getElem?_getD, List.getElem?_set]
+      · simp [U3, U2, List.getD_eq_getElem?_getD, List.getElem?_set, Ne.symm a, Ne.symm b, Ne.symm d1, Ne.symm d2]
+      · simp only [hpd, hi]; simp [List.getD_eq_getElem?_getD, List.getElem?_set, hU3l]
   have l1_6 : s6.locals 1 = some (.ptr n 0) := by
     rw [hl6 1 (by decide) (by decide) (by decide) (by decide)]; simp [t5, t4, s2, s1, Locals.upd]; exact hl1
   have hm6n : s6.mem n = some MV := by rw [hm6o n (Ne.symm hpn) hnu]; simp only [t5, m5]; rw [Mem.write_ne (Ne.symm hpn)]; exact hm4n
@@ -170,11 +186,17 @@ theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
     refine ⟨{ s7c with mem := s6.mem.write ub (0 + 12) (encodeLE 1 (Piece.code ⟨c, pc.type.promote⟩)) }, U5,
       ExS.seq e0 (ExS.seq e1 (ExS.seq e2 (ExS.seq e3 (ExS.seq e4 (ExS.seq e5
         (ExS.ite (bc := true) hprv (by simp [truthy, hp]) (ExS.seq c1 (ExS.seq c2 (ExS.seq c3 st))))))))),
-      hro6, ?_, ?_, by simp [U5, hU4], ?_, ?_, ?_, ?_⟩
+      hro6, ?_, ?_, by simp [U5, hU4], ?_, ?_, ?_, ?_, ?_⟩
     · show (s6.mem.write ub _ _) posBlock = _; rw [Mem.write_ne hpu]; exact hm6p
     · show (s6.mem.write ub _ _) ub = _; rw [write1_set hm6u (by omega)]
     · rw [hmv, if_pos hp]; simp [U5, List.getD_eq_getElem?_getD, List.getElem?_set, hU4]
     · rw [← hU413]; simp [U5, List.getD_eq_getElem?_getD, List.getElem?_set]
+    · refine ⟨fun k a b d1 d2 => ?_, ?_⟩
+      · rw [← hUT.1 k a b d1 d2]; simp [U5, List.getD_eq_getElem?_getD, List.getElem?_set, Ne.symm a]
+      · have h2 := hUT.2
+        have e15 : U5.getD 15 0 = U4.getD 15 0 := by simp [U5, List.getD_eq_getElem?_getD, List.getElem?_set]
+        have e16 : U5.getD 16 0 = U4.getD 16 0 := by simp [U5, List.getD_eq_getElem?_getD, List.getElem?_set]
+        rw [e15, e16]; exact h2
     · intro x a b; show (s6.mem.write ub _ _) x = _; rw [Mem.write_ne b, hm6o x a b]
       simp only [t5, m5, m4, m3]; rw [Mem.write_ne a, Mem.write_ne b, Mem.write_ne b]
     · intro x hx
@@ -184,7 +206,7 @@ theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
   · have hpf : pr = false := by simpa using hp
     refine ⟨s6, U4, ExS.seq e0 (ExS.seq e1 (ExS.seq e2 (ExS.seq e3 (ExS.seq e4 (ExS.seq e5
         (ExS.ite (bc := false) hprv (by simp [truthy, hpf]) ExS.skip)))))),
-      by rw [hro6], hm6p, hm6u, hU4, by rw [hmv, if_neg hp]; exact hU412, hU413, ?_, ?_⟩
+      by rw [hro6], hm6p, hm6u, hU4, by rw [hmv, if_neg hp]; exact hU412, hU413, hUT, ?_, ?_⟩
     · intro x a b; rw [hm6o x a b]
       simp only [t5, m5, m4, m3]; rw [Mem.write_ne a, Mem.write_ne b, Mem.write_ne b]
     · intro x hx
