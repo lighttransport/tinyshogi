@@ -189,7 +189,7 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
         (.seq (.alloc 8 84) (.call none 31 [(.var 8), (.var 0), (.var 7)]))) .normal s' ∧
       s'.mem n = some (ksRec p p.side) ∧ s'.locals 7 = some (u32 p.side.idx) ∧
       s'.locals 8 = some (.ptr n 0) ∧ (∀ x, x ≠ 7 → x ≠ 8 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
-      (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → s'.mem b = s.mem b) := by
+      (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → s'.mem b = s.mem b) ∧ Fresh s'.mem (n + 2) := by
   have hside : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.field (.var 0) 96)) (u32 p.side.idx) := by
     refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr, hm, encode_length])) ?_
     simp only [load, readBytes, hm, encode_length, Ty.size, IntTy.bytes]
@@ -211,7 +211,7 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
     (hgn g (by
       rcases (show g = 8192 ∨ g = 8193 ∨ g = 8194 ∨ g = 8195 ∨ g = 8196 by omega) with h | h | h | h | h <;>
         subst h <;> simp [ht.g1, ht.g2, ht.g3, ht.g4, ht.g5]))
-  obtain ⟨sk, ek, hk, hkf⟩ := king_safety_spec p p.side hmM hMn (by simp) (by rw [tg _ (by decide) (by decide)]; exact ht.g1)
+  obtain ⟨sk, ek, hk, hkf, hk0⟩ := king_safety_spec p p.side hmM hMn (by simp) (by rw [tg _ (by decide) (by decide)]; exact ht.g1)
     (by rw [tg _ (by decide) (by decide)]; exact ht.g2) (by rw [tg _ (by decide) (by decide)]; exact ht.g3)
     (by rw [tg _ (by decide) (by decide)]; exact ht.g4) (by rw [tg _ (by decide) (by decide)]; exact ht.g5)
     hf1 (by omega) hn0 hnp
@@ -220,8 +220,11 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
   refine ⟨{ s2 with mem := sk.mem }, ExS.seq e1 (ExS.seq e2 (ExS.call (vs := [.ptr n 0, posPtr, u32 p.side.idx])
     (EvArgs.cons (EvE.var (by simp [s2, Locals.upd])) (EvArgs.cons (EvE.var (by simp [s2, s1, Locals.upd, h0]))
       (EvArgs.cons (EvE.var h7) EvArgs.nil))) rfl rfl (by simp only [s2, s1]; rw [hro]; exact ek) (Or.inr rfl))),
-    hk, h7, by simp [s2, Locals.upd], fun x a b => by simp [s2, s1, Locals.upd, a, b], rfl, fun b a c d => ?_⟩
-  show sk.mem b = _
-  rw [hkf b a d c, hMg b a c]
+    hk, h7, by simp [s2, Locals.upd], fun x a b => by simp [s2, s1, Locals.upd, a, b], rfl, fun b a c d => ?_,
+    hk0, by omega, fun x hx => ?_⟩
+  · show sk.mem b = _
+    rw [hkf b a d c, hMg b a c]
+  · show sk.mem x = _
+    rw [hkf x (by omega) (by omega) (by omega), hMg x (by omega) (by omega)]; exact hf.2.2 x (by omega)
 
 end Shogi.C.Proofs

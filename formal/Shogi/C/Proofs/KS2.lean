@@ -490,7 +490,7 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
     (hf : Fresh m n) (h64 : n + 1 < 2 ^ 64) (hob0 : ob ≠ 0) (hobp : ob ≠ posBlock) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.king_safety_prepare.params [.ptr ob 0, posPtr, .int IntTy.u32 c.idx], m, false⟩
         Gen.king_safety_prepare.body (.ret none) s' ∧ s'.mem ob = some (ksRec p c) ∧
-      (∀ x, x ≠ 0 → x ≠ n → x ≠ ob → s'.mem x = m x) := by
+      (∀ x, x ≠ 0 → x ≠ n → x ≠ ob → s'.mem x = m x) ∧ s'.mem 0 = some (encodeLE 8 (n + 1)) := by
   have hn0 := hf.2.1
   have hnob : n ≠ ob := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hob; cases hob
   have hnp : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hm; cases hm
@@ -510,6 +510,8 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
   have hm2n : m2 n = some Z := by show (m1.write n 0 Z) n = _; rw [write_some hm1n]; simp [wrb, Z]
   have hm2 : ∀ x, x ≠ 0 → x ≠ n → m2 x = m x := fun x a b => by
     show (m1.write n 0 Z) x = _; rw [Mem.write_ne b, hm1 x a b]
+  have hm20 : m2 0 = some (encodeLE 8 (n + 1)) := by
+    show (m1.write n 0 Z) 0 = _; rw [Mem.write_ne hn0.symm]; simp only [m1]; rw [Mem.upd_ne hn0.symm, Mem.upd_eq]
   let s2 : State := { s1 with mem := m2 }
   have hm2p : m2 posBlock = some (encode p) := by rw [hm2 _ (by decide) (Ne.symm hnp)]; exact hm
   have hfk := find_king_refines p c m2 n Z hm2p hm2n (by simp [Z])
@@ -541,11 +543,13 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
     have hcp := hmcpy s3 Z (by simp [s3, s2, s1, s0, Locals.upd]; rfl) (by simp [s3, s2, Locals.upd]; exact l3)
       (by show sf.mem n = _; rw [hsf]; exact hm2n) (by simp [Z]) (by show sf.mem ob = _; rw [hsf]; exact hob2) rfl
     refine ⟨_, ExS.seq ea (ExS.seq ems (ExS.seq_ret (ExS.seq ec (ExS.ite (bc := true) hlnot (by simp [truthy_boolVal])
-      (ExS.seq hcp ExS.ret_none))))), ?_, ?_⟩
+      (ExS.seq hcp ExS.ret_none))))), ?_, ?_, ?_⟩
     · show (s3.mem.write ob 0 Z) ob = _; simp only [ksRec, hk]
       exact hwob _ Z (by show sf.mem ob = _; rw [hsf]; exact hob2) (by simp [Z])
     · intro x a b d; show (s3.mem.write ob 0 Z) x = _
       rw [Mem.write_ne d]; show sf.mem x = _; rw [hsf, hm2 x a b]
+    · show (s3.mem.write ob 0 Z) 0 = _
+      rw [Mem.write_ne hob0.symm]; show sf.mem 0 = _; rw [hsf]; exact hm20
   | some k =>
     rw [hk] at hfk
     obtain ⟨sf, ef, hsf⟩ := hfk
@@ -642,11 +646,14 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
     let R := ksAll p c c.opp k (ksInit p c k) 8
     refine ⟨_, ExS.seq ea (ExS.seq ems (ExS.seq (ExS.seq ec (ExS.ite (bc := false) hlnot (by simp [truthy_boolVal])
       ExS.skip)) (ExS.seq st1 (ExS.seq e5 (ExS.seq (ExS.seq ec6 st2) (ExS.seq (ExS.seq e8 (by rw [ks_loop1_eq]; exact e9))
-        (ExS.seq hcp ExS.ret_none))))))), ?_, ?_⟩
+        (ExS.seq hcp ExS.ret_none))))))), ?_, ?_, ?_⟩
     · show (s9.mem.write ob 0 R) ob = _; simp only [ksRec, hk]
       exact hwob _ R hob9 (by rw [kAll_len]; exact hS3l)
     · intro x a b d; show (s9.mem.write ob 0 R) x = _
       rw [Mem.write_ne d, hm9 x b]; show m7 x = _
       rw [hm7o x b, hm4o x b, hm2 x a b]
+    · show (s9.mem.write ob 0 R) 0 = _
+      rw [Mem.write_ne hob0.symm, hm9 0 hn0.symm]; show m7 0 = _
+      rw [hm7o 0 hn0.symm, hm4o 0 hn0.symm]; exact hm20
 
 end Shogi.C.Proofs
