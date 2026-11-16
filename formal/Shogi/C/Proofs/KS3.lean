@@ -82,4 +82,73 @@ theorem ksRec_inCheck (p : Position) (c : Color) :
     simp only [hr]
     cases stepAttacked p k c.opp <;> cases raysFrom p c.opp k 0 <;> rfl
 
+/-- `s` is pinned against the king `k` of `c`: on some ray the first occupied
+    square is `s` (own) and the next occupied one is an attacker slider. -/
+def pinnedSpec (p : Position) (c : Color) (k s : Square) : Bool :=
+  (List.range 8).any fun r => (kres p c (rayMask c.opp (rdir r)) (ray k (rdir r)) none).2 == some s
+
+theorem applyK_pin (S : List UInt8) (x : Bool × Option Square) (q : Square) (hS : 3 + q.val < S.length) :
+    (applyK S x).getD (3 + q.val) 0 = if x.2 = some q then 1 else S.getD (3 + q.val) 0 := by
+  obtain ⟨chk, pin⟩ := x
+  have h2 : 3 + q.val ≠ 2 := by omega
+  cases pin with
+  | none => cases chk <;> simp [applyK, List.getD_eq_getElem?_getD, List.getElem?_set, Ne.symm h2]
+  | some o =>
+    by_cases h : o = q
+    · subst h; cases chk <;> simp [applyK, List.getD_eq_getElem?_getD, List.getElem?_set, hS]
+    · have hv : o.val ≠ q.val := fun e => h (Fin.ext e)
+      cases chk <;> simp [applyK, List.getD_eq_getElem?_getD, List.getElem?_set, h, Ne.symm h2,
+        show 3 + o.val ≠ 3 + q.val by omega, hv]
+
+theorem ksAll_pin (p : Position) (c a : Color) (t : Square) (S : List UInt8) (q : Square)
+    (hS : 3 + q.val < S.length) : ∀ r, (ksAll p c a t S r).getD (3 + q.val) 0 =
+      if (List.range r).any (fun r' => (kres p c (rayMask a (rdir r')) (ray t (rdir r')) none).2 == some q)
+      then 1 else S.getD (3 + q.val) 0 := by
+  intro r; induction r with
+  | zero => simp [ksAll]
+  | succ r ih =>
+    simp only [ksAll]
+    rw [applyK_pin _ _ q (by rw [kAll_len]; exact hS), ih, List.range_succ, List.any_append]
+    by_cases h1 : (kres p c (rayMask a (rdir r)) (ray t (rdir r)) none).2 = some q
+    · simp [h1]
+    · simp [h1]
+
+/-- **Pinned bytes**: `pinned[s]` in the record is `pinnedSpec`. -/
+theorem ksRec_pinned (p : Position) (c : Color) (k s : Square) (hk : p.kingSquare c = some k) :
+    (ksRec p c).getD (3 + s.val) 0 = if pinnedSpec p c k s then 1 else 0 := by
+  have hs := s.isLt
+  unfold ksRec; rw [hk]; simp only
+  rw [ksAll_pin _ _ _ _ _ s (by simp [ksInit]; omega)]
+  have h0 : (ksInit p c k).getD (3 + s.val) 0 = 0 := by
+    unfold ksInit
+    simp only [List.getD_eq_getElem?_getD]
+    rw [List.getElem?_set_ne (by omega), List.getElem?_set_ne (by omega), List.getElem?_set_ne (by omega),
+      List.getElem?_replicate, if_pos (by omega)]; rfl
+  rw [h0]; rfl
+
+theorem applyK_1 (S : List UInt8) (x : Bool × Option Square) : (applyK S x).getD 1 0 = S.getD 1 0 := by
+  obtain ⟨chk, pin⟩ := x
+  cases pin with
+  | none => cases chk <;> simp [applyK, List.getD_eq_getElem?_getD, List.getElem?_set]
+  | some o => cases chk <;> simp [applyK, List.getD_eq_getElem?_getD, List.getElem?_set] <;> (rw [if_neg (by omega)])
+
+theorem ksAll_1 (p : Position) (c a : Color) (t : Square) (S : List UInt8) :
+    ∀ r, (ksAll p c a t S r).getD 1 0 = S.getD 1 0 := by
+  intro r; induction r with
+  | zero => rfl
+  | succ r ih => simp only [ksAll]; rw [applyK_1, ih]
+
+theorem ksRec_valid (p : Position) (c : Color) :
+    (ksRec p c).getD 1 0 = (if (p.kingSquare c).isSome then 1 else 0) ∧
+    (∀ k, p.kingSquare c = some k → (ksRec p c).getD 0 0 = k.val.toUInt8) := by
+  unfold ksRec
+  cases hk : p.kingSquare c with
+  | none => simp [List.getD_eq_getElem?_getD]
+  | some k =>
+    refine ⟨?_, fun k' hk' => ?_⟩
+    · simp only [Option.isSome_some, if_true]
+      rw [ksAll_1]; simp [ksInit, List.getD_eq_getElem?_getD, List.getElem?_set]
+    · cases hk'
+      rw [kAll_0]; simp [ksInit, List.getD_eq_getElem?_getD, List.getElem?_set]
+
 end Shogi.C.Proofs
