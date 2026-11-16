@@ -1,0 +1,288 @@
+/-
+  T8/M3: at most one pawn drop gives check to the opponent.
+
+  A pawn attacks exactly one square (directly forward), and adding a piece
+  never shortens another piece's attack set.  So if the side not to move is
+  not in check, a dropped pawn can only create a check by attacking the
+  opponent's king itself; the drop square is then determined by the king
+  square, and `dropMoves` emits at most one pawn drop per square.
+-/
+import Shogi.Rules
+import Shogi.C.Proofs.PlaySpec
+
+namespace Shogi.C.Proofs
+open Shogi
+
+/-! ### The board after a pawn drop -/
+
+theorem play_drop_pieceAt (p : Position) (hS : p.board.length = 81) (d s : Square) :
+    (p.play (Move.drop .pawn d)).pieceAt s =
+      if s.val = d.val then some ⟨p.side, .pawn⟩ else p.pieceAt s := by
+  have hb : (p.play (Move.drop .pawn d)).board = p.board.set d.val (some ⟨p.side, .pawn⟩) := by
+    simp [Position.play, Position.setSq, PieceType.handIndex]
+  simp only [Position.pieceAt]
+  rw [hb, List.getD_eq_getElem?_getD, List.getElem?_set]
+  by_cases hx : s.val = d.val
+  · rw [if_pos hx.symm, if_pos (by rw [hS]; omega), if_pos hx]
+    simp
+  · rw [if_neg (Ne.symm hx), List.getD_eq_getElem?_getD, if_neg hx]
+
+theorem play_drop_pieceAt_ne {p : Position} (hS : p.board.length = 81) {d s : Square}
+    (h : s.val ≠ d.val) :
+    (p.play (Move.drop .pawn d)).pieceAt s = p.pieceAt s := by
+  rw [play_drop_pieceAt p hS, if_neg h]
+
+theorem play_drop_self (p : Position) (hS : p.board.length = 81) (d : Square) :
+    (p.play (Move.drop .pawn d)).pieceAt d = some ⟨p.side, .pawn⟩ := by
+  rw [play_drop_pieceAt p hS, if_pos rfl]
+
+theorem play_drop_side (p : Position) (d : Square) :
+    (p.play (Move.drop .pawn d)).side = p.side.opp := rfl
+
+/-- Dropping a pawn (on any square, empty or not) does not move the king of
+    colour `c`, provided the drop square does not hold that king. -/
+theorem play_drop_kingSquare {p : Position} (hS : p.board.length = 81) {d : Square} (c : Color)
+    (hE : p.pieceAt d ≠ some ⟨c, .king⟩) :
+    (p.play (Move.drop .pawn d)).kingSquare c = p.kingSquare c := by
+  apply kingSquare_iff
+  intro x
+  rw [play_drop_pieceAt p hS]
+  by_cases hx : x.val = d.val
+  · have xe : x = d := Fin.val_inj.mp hx
+    subst xe
+    rw [if_pos rfl]
+    simp [hE]
+  · rw [if_neg hx]
+
+/-! ### Slides never get longer when a piece is added -/
+
+theorem slideTargets_go_mono {p q : Position}
+    (hE : ∀ x, q.pieceAt x = none → p.pieceAt x = none)
+    {r : List Square} {k : Square} :
+    k ∈ Position.slideTargets.go q r → k ∈ Position.slideTargets.go p r := by
+  induction r with
+  | nil => intro h; simp only [Position.slideTargets.go] at h; cases h
+  | cons t r ih =>
+    intro h
+    by_cases hq : q.isEmpty t
+    · have hp : p.isEmpty t := by simpa [Position.isEmpty] using hE t (by simpa [Position.isEmpty] using hq)
+      have e1 : Position.slideTargets.go q (t :: r) = t :: Position.slideTargets.go q r := by
+        simp [Position.slideTargets.go, hq]
+      rw [e1] at h
+      rcases List.mem_cons.mp h with he | hm
+      · rw [he]
+        rw [show Position.slideTargets.go p (t :: r) = t :: Position.slideTargets.go p r from
+          (by simp [Position.slideTargets.go, hp])]
+        exact List.mem_cons_self
+      · rw [show Position.slideTargets.go p (t :: r) = t :: Position.slideTargets.go p r from
+          (by simp [Position.slideTargets.go, hp])]
+        exact List.mem_cons_of_mem _ (ih hm)
+    · have e2 : Position.slideTargets.go q (t :: r) = [t] := by
+        simp [Position.slideTargets.go, hq]
+      rw [e2] at h
+      rcases List.mem_cons.mp h with he | hm
+      · rw [he]
+        by_cases hp : p.isEmpty t
+        · rw [show Position.slideTargets.go p (t :: r) = t :: Position.slideTargets.go p r from
+            (by simp [Position.slideTargets.go, hp])]
+          exact List.mem_cons_self
+        · rw [show Position.slideTargets.go p (t :: r) = [t] from
+            (by simp [Position.slideTargets.go, hp])]
+          exact List.mem_cons_self
+      · exact absurd hm (by simp)
+
+theorem attackSquares_mono {p q : Position} {s : Square} {pc : Piece} {k : Square}
+    (hE : ∀ x, q.pieceAt x = none → p.pieceAt x = none)
+    (hmem : k ∈ q.attackSquares s pc) : k ∈ p.attackSquares s pc := by
+  unfold Position.attackSquares at hmem ⊢
+  rw [List.mem_append] at hmem ⊢
+  rcases hmem with h | h
+  · exact Or.inl h
+  · right
+    rw [List.mem_flatMap] at h ⊢
+    obtain ⟨dir, hd, hm⟩ := h
+    exact ⟨dir, hd, slideTargets_go_mono hE hm⟩
+
+/-! ### A pawn attacks exactly one square -/
+
+theorem pawn_attackSquares (q : Position) (c : Color) (d : Square) :
+    q.attackSquares d ⟨c, .pawn⟩ =
+      match d.offset (c.fwd, 0) with | some u => [u] | none => [] := by
+  simp only [Position.attackSquares, stepOffsets, slideDirs, List.filterMap_cons,
+    List.filterMap_nil]
+  cases ho : d.offset (c.fwd, 0) <;> simp [ho]
+
+theorem offset_fwd_eq {d k : Square} {f : Int} (h : d.offset (f, 0) = some k) :
+    ((k.val : Int)) = ((d.val : Int)) + f * 9 := by
+  unfold Square.offset Square.mk? at h
+  split at h
+  · next hpos =>
+    rw [Option.some_inj] at h
+    have hv : k.val = (((Square.row d : Int) + f) * 9 + ((Square.col d : Int) + 0)).toNat := by
+      rw [← h]
+    unfold Square.row Square.col at hv hpos
+    rw [Int.add_mul] at hv
+    omega
+  · exact absurd h (by simp)
+
+/-! ### Uniqueness of the checking pawn drop -/
+
+/-- If the side not to move is not in check, a checking pawn drop attacks the
+    opponent's king itself, which pins its square. -/
+theorem checkingPawnDrop_unique {p : Position} (hS : p.Shaped) (hK : KingsUnique p)
+    (hnc : p.inCheck p.side.opp = false)
+    {d1 d2 : Square}
+    (hc1 : (p.play (Move.drop .pawn d1)).inCheck (p.play (Move.drop .pawn d1)).side = true)
+    (hc2 : (p.play (Move.drop .pawn d2)).inCheck (p.play (Move.drop .pawn d2)).side = true) :
+    d1 = d2 := by
+  have key : ∀ d : Square,
+      (p.play (Move.drop .pawn d)).inCheck (p.play (Move.drop .pawn d)).side = true →
+      ∃ kk, p.kingSquare p.side.opp = some kk ∧
+        ((kk.val : Int)) = ((d.val : Int)) + p.side.fwd * 9 := by
+    intro d hc
+    have hside : (p.play (Move.drop .pawn d)).side = p.side.opp := play_drop_side p d
+    have hEq : ∀ x, (p.play (Move.drop .pawn d)).pieceAt x = none → p.pieceAt x = none := by
+      intro x hx
+      rw [play_drop_pieceAt p hS.1] at hx
+      split at hx
+      · simp at hx
+      · exact hx
+    -- the drop square does not hold the opponent's king: otherwise the drop
+    -- would remove that (unique) king and the position would not be in check
+    have hE : p.pieceAt d ≠ some ⟨p.side.opp, .king⟩ := by
+      intro hKd
+      have hKq' : (p.play (Move.drop .pawn d)).kingSquare p.side.opp = none := by
+        apply kingSquare_none
+        intro x hx
+        rw [play_drop_pieceAt p hS.1] at hx
+        by_cases hxv : x.val = d.val
+        · have xe : x = d := Fin.val_inj.mp hxv
+          subst xe
+          rw [if_pos rfl] at hx
+          simp at hx
+        · rw [if_neg hxv] at hx
+          exact absurd (hK p.side.opp x d hx hKd) (by
+            intro e
+            exact hxv (congrArg (fun s : Square => s.val) e))
+      unfold Position.inCheck at hc
+      rw [hside, hKq'] at hc
+      simp at hc
+    have hKq : (p.play (Move.drop .pawn d)).kingSquare p.side.opp = p.kingSquare p.side.opp :=
+      play_drop_kingSquare hS.1 (p.side.opp) hE
+    have hksome : (p.play (Move.drop .pawn d)).kingSquare
+        ((p.play (Move.drop .pawn d)).side) ≠ none := by
+      intro hnone
+      unfold Position.inCheck at hc
+      rw [hnone] at hc
+      simp at hc
+    obtain ⟨kk, hkk⟩ := Option.ne_none_iff_exists.mp hksome
+    rw [hside] at hkk
+    have hkkv : p.kingSquare p.side.opp = some kk := hKq.symm.trans hkk.symm
+    have hc' : (p.play (Move.drop .pawn d)).attacked kk p.side = true := by
+      unfold Position.inCheck at hc
+      rw [hside, hKq, hkkv] at hc
+      simpa using hc
+    unfold Position.attacked at hc'
+    rw [List.any_eq_true] at hc'
+    obtain ⟨s, _, hf⟩ := hc'
+    cases hpq : (p.play (Move.drop .pawn d)).pieceAt s with
+    | none => rw [hpq] at hf; simp at hf
+    | some pc =>
+      rw [hpq] at hf
+      simp only [Bool.and_eq_true, beq_iff_eq, List.contains_iff_mem] at hf
+      have hcol : pc.color = p.side := hf.1
+      by_cases hsd : s.val = d.val
+      · -- the dropped pawn itself attacks the king
+        have hsq : s = d := Fin.val_inj.mp hsd
+        rw [hsq] at hpq hf
+        have hpc : pc = ⟨p.side, .pawn⟩ := by
+          rw [play_drop_self p hS.1] at hpq
+          exact Option.some_inj.mp hpq.symm
+        rw [hpc] at hf
+        rw [pawn_attackSquares] at hf
+        cases ho : d.offset (p.side.fwd, 0) with
+        | none => rw [ho] at hf; simp at hf
+        | some u =>
+          simp only [ho] at hf
+          rcases List.mem_cons.mp hf.2 with hh | hh2
+          · rw [hh] at hkkv
+            exact ⟨u, hkkv, offset_fwd_eq ho⟩
+          · exact absurd hh2 (by simp)
+      · -- an existing piece attacks the king: it already attacked it before
+        have hp' : p.pieceAt s = some pc :=
+          (play_drop_pieceAt_ne hS.1 (s := s) hsd).symm.trans hpq
+        have hmem : kk ∈ p.attackSquares s pc :=
+          attackSquares_mono (p := p) (q := p.play (Move.drop .pawn d)) hEq hf.2
+        have hatt : p.attacked kk p.side = true := by
+          unfold Position.attacked
+          rw [List.any_eq_true]
+          exact ⟨s, List.mem_finRange s, by simp [hp', hcol, hmem]⟩
+        have hin : p.inCheck p.side.opp = true := by
+          unfold Position.inCheck
+          rw [hkkv]
+          simpa using hatt
+        exact absurd hin (by rw [hnc]; simp)
+  obtain ⟨kk1, eq1, v1⟩ := key d1 hc1
+  obtain ⟨kk2, eq2, v2⟩ := key d2 hc2
+  have hkk : kk1 = kk2 := Option.some_inj.mp (eq1.symm.trans eq2)
+  have v2' : ((kk1.val : Int)) = ((d2.val : Int)) + p.side.fwd * 9 := by
+    rw [hkk]; exact v2
+  have : d1.val = d2.val := by
+    have h := v1.symm.trans v2'
+    omega
+  exact Fin.val_inj.mp this
+
+/-! ### A drop value occurs at most once in `dropMoves` -/
+
+theorem filterMap_as_flatMap {α β : Type} (f : α → Option β) (l : List α) :
+    l.filterMap f = l.flatMap (fun x => match f x with | some y => [y] | none => []) := by
+  induction l with
+  | nil => rfl
+  | cons a l ih =>
+    cases h : f a with
+    | none => simp [List.filterMap_cons, List.flatMap_cons, h, ih]
+    | some b => simp [List.filterMap_cons, List.flatMap_cons, h, ih]
+
+theorem filter_flatMap_comm {α β : Type} [DecidableEq β] (l : List α) (g : α → List β) (v : β) :
+    (l.flatMap g).filter (fun x => decide (x = v)) =
+      l.flatMap (fun x => (g x).filter (fun x => decide (x = v))) := by
+  induction l with
+  | nil => rfl
+  | cons a l ih =>
+    rw [List.flatMap_cons, List.filter_append, ih, List.flatMap_cons]
+
+theorem flatMap_nil_of_forall {α β : Type} (l : List α) (g : α → List β)
+    (h : ∀ x ∈ l, g x = []) : l.flatMap g = [] := by
+  induction l with
+  | nil => rfl
+  | cons a l ih =>
+    rw [List.flatMap_cons, h a (List.mem_cons_self),
+      ih (fun x hx => h x (List.mem_cons_of_mem _ hx))]
+    simp
+
+theorem flatMap_single {α β : Type} (l : List α) (a₀ : α) (g : α → List β)
+    (h₀ : a₀ ∈ l) (hnd : l.Nodup) (h : ∀ x ∈ l, x ≠ a₀ → g x = []) :
+    l.flatMap g = g a₀ := by
+  induction l with
+  | nil => cases h₀
+  | cons a l ih =>
+    by_cases he : a = a₀
+    · subst he
+      rw [List.flatMap_cons, flatMap_nil_of_forall l g (fun x hx => h x
+        (List.mem_cons_of_mem _ hx) (fun e => (List.nodup_cons.mp hnd).1 (e ▸ hx)))]
+      simp
+    · rw [List.flatMap_cons, h a (List.mem_cons_self) he, List.nil_append]
+      exact ih ((List.mem_cons.mp h₀).resolve_left (Ne.symm he)) (List.nodup_cons.mp hnd).2
+        (fun x hx => h x (List.mem_cons_of_mem _ hx))
+
+theorem ofHandIndex_eq_pawn (i : Fin 7) : PieceType.ofHandIndex i = .pawn ↔ i.val = 0 := by
+  revert i; decide
+
+/-
+The counting lemma `checkingPawnDrops_le_one` (all checking pawn drops are
+the same move, and `dropMoves` emits each drop value once) is work in
+progress: the geometric core `checkingPawnDrop_unique` above is complete;
+the remaining list plumbing (Nodup of `dropMoves` from per-square filterMap
+injectivity, then length ≤ 1 from Nodup + all-equal) still needs its final
+tactic pass. Tracked for the next session.
+-/
