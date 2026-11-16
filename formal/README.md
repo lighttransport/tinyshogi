@@ -38,6 +38,16 @@ Requirements: elan (installs the toolchain in `lean-toolchain`) and clang.
 
 ### Findings
 
+* **Pseudo-move buffer margin** (measured 2026-11-16, `tools/maxpseudo.py` +
+  `tools/maxpseudo.c`): over positions satisfying the provable material
+  invariants (each unpromoted family a full set across board and both hands,
+  one king per side), the maximum of `generate_pseudo` found by greedy/random
+  walks, corpus mining, and batched local search is **591**
+  (e.g. `R8/2S1K1SS1/4B4/9/9/9/9/9/1L1L2k1L b 18PL3NS3GBRng 1`); the best
+  game-reachable position found in play is 520. `SHOGI_MAX_MOVES` = 600
+  therefore has at least 9 slots of slack over everything constructible, but a
+  proof that it never triggers is still open (`h600` in
+  `Shogi/C/Proofs/LegalMain.lean`).
 * **python-shogi 1.1.1** allows a pawn-drop mate when the only piece that could
   capture the pawn is pinned (e.g. `9/9/gN7/P3+s4/4+p4/3g1L+s1p/k1p5p/3+PPP3/KG2r4
   w 3pSs2P 45`, `P*9h`). After the drop it reports checkmate itself. tinyshogi
