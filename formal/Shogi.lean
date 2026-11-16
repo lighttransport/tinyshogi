@@ -23,6 +23,12 @@ import Shogi.C.Proofs.AddSlide
 import Shogi.C.Proofs.AddDrops
 import Shogi.C.Proofs.AddDrops2
 import Shogi.C.Proofs.DropsSpec
+import Shogi.C.Proofs.Pseudo1
+import Shogi.C.Proofs.Pseudo2
+import Shogi.C.Proofs.Pseudo3
+import Shogi.C.Proofs.Pseudo4
+import Shogi.C.Proofs.Pseudo5
+import Shogi.C.Proofs.PseudoSpec
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
