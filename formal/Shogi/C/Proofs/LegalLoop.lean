@@ -15,7 +15,7 @@ def RB : Nat := 1000000100
 theorem legal_loop {p : Position} {fuel : Nat} {Ms : List Move} {pb cntb Sb mb mo cb co cap : Nat}
     {PB CB : List UInt8} (hS : p.Shaped) (hK : KingsUnique p)
     (hMs : ∀ m ∈ Ms, m ∈ p.pseudoMoves)
-    (hrec : ∀ m ∈ Ms, RecSpec (p.play m) (!(Position.legalAux fuel (p.play m)).isEmpty))
+    (hrec : ∀ m ∈ Ms, Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec fuel (p.play m))
     (hcnt : Ms.length < 2 ^ 64) (hPB : 5 * Ms.length ≤ PB.length)
     (hmv : ∀ j (hj : j < Ms.length), (PB.drop (5 * j)).take 5 = moveBytes p Ms[j])
     (hpb0 : pb ≠ 0) (hS0 : Sb ≠ 0) (hc0 : cntb ≠ 0) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb)

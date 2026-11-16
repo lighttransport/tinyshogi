@@ -195,30 +195,76 @@ theorem probe_path (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mov
       · exact hkeep8 x a hxp d
     · exact ⟨_, hfu, by omega⟩
 
+/-- The reply buffer the recursive call writes into: a block of at least
+    3000 bytes (600 five-byte moves) at offset 0, distinct from the allocator
+    block, the position block and the attack-table blocks. -/
+def ReplyBuf (M : Mem) (rb : Nat) : Prop :=
+  ∃ blk, M rb = some blk ∧ 3000 ≤ blk.length ∧ rb ≠ 0 ∧ rb ≠ posBlock ∧ (rb < 8192 ∨ 8196 < rb)
+
+/-- Per-call allocation budget of the recursive call.  Discharging `RecSpec`
+    (M4) replaces this fixed bound by one that grows with the pawn count;
+    until then it keeps the current shape. -/
+def recBudget : Nat := 1000000000
+
 /-- What the recursive `generate_legal_mut_internal(position, replies, 600, true)`
     call must do (the induction hypothesis of the eventual loop proof): from a
     memory holding `encode q`, it returns a count that is nonzero exactly when
-    `q` has a legal reply, restores the position, and only allocates. -/
-def RecSpec (q : Position) (hasReply : Bool) : Prop :=
-  ∀ (M : Mem) (rb k : Nat), M posBlock = some (encode q) → TablesIn M → Fresh M k → M rb ≠ none →
-    k + 4000000000 < 2 ^ 64 →
+    the spec's `legalAux fuel q` is nonempty, restores the position, and only
+    allocates.  Only demanded for checking pawn drops (the C recurses exactly
+    there), which is what makes it dischargeable: the spec's fuel only runs
+    out on moves that never enter the recursion. -/
+def RecSpec (fuel : Nat) (q : Position) : Prop :=
+  ∀ (M : Mem) (rb k : Nat), M posBlock = some (encode q) → TablesIn M → Fresh M k → ReplyBuf M rb →
+    k + recBudget < 2 ^ 64 →
     ∃ s' cnt k', ExS Gen.prog ⟨frameLocals Gen.generate_legal_mut_internal.params
         [posPtr, .ptr rb 0, .int IntTy.u64 600, .int IntTy.u8 1], M, false⟩
       Gen.generate_legal_mut_internal.body (.ret (some (.int IntTy.u64 cnt))) s' ∧
-      (cnt ≠ 0 ↔ hasReply = true) ∧ s'.mem posBlock = some (encode q) ∧ Fresh s'.mem k' ∧ k ≤ k' ∧
-      k' ≤ k + 1000000000 ∧ (∀ x, x ≠ 0 → x ≠ rb → x < k → x ≠ posBlock → s'.mem x = M x)
+      (cnt ≠ 0 ↔ !(Position.legalAux fuel q).isEmpty) ∧ s'.mem posBlock = some (encode q) ∧
+      Fresh s'.mem k' ∧ k ≤ k' ∧ k' ≤ k + recBudget ∧
+      (∀ x, x ≠ 0 → x ≠ rb → x < k → x ≠ posBlock → s'.mem x = M x)
+
+/-- A freshly allocated block number cannot be one of the attack-table blocks:
+    `Fresh` says everything at or above `k` is empty, `TablesIn` says the five
+    table blocks are not. -/
+theorem fresh_not_table {M : Mem} {k b : Nat} (hf : Fresh M k) (ht : TablesIn M) (hk : k ≤ b) :
+    b < 8192 ∨ 8196 < b := by
+  have hnone : M b = none := hf.2.2 b hk
+  have hne := ht.fresh hnone
+  rcases Nat.lt_or_ge b 8192 with h | h
+  · exact Or.inl h
+  rcases Nat.lt_or_ge b 8197 with h | h
+  · exfalso
+    rcases Nat.lt_or_ge b 8193 with h3 | h3
+    · have hb : b = 8192 := by omega
+      rw [hb] at hne
+      omega
+    rcases Nat.lt_or_ge b 8194 with h4 | h4
+    · have hb : b = 8193 := by omega
+      rw [hb] at hne
+      omega
+    rcases Nat.lt_or_ge b 8195 with h5 | h5
+    · have hb : b = 8194 := by omega
+      rw [hb] at hne
+      omega
+    rcases Nat.lt_or_ge b 8196 with h6 | h6
+    · have hb : b = 8195 := by omega
+      rw [hb] at hne
+      omega
+    · have hb : b = 8196 := by omega
+      rw [hb] at hne
+      omega
+  · exact Or.inr (by omega)
 
 theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Move) (hm : mv ∈ p.pseudoMoves)
-    (hpd : Position.isPawnDrop mv = true) (hasReply : Bool)
-    (hrec : RecSpec (p.play mv) hasReply)
+    (hpd : Position.isPawnDrop mv = true) (fuel : Nat)
+    (hrec : (p.play mv).inCheck (p.play mv).side → RecSpec fuel (p.play mv))
     {s : State} {mb mo cb co cap n e3 : Nat} {L : List (List UInt8)}
     (hI : PInv s p mb mo cb co cap n L) (hn : s.mem n = some (moveBytes p mv)) (hf : Fresh s.mem (n + 1))
     (h64 : n + 4000000100 < 2 ^ 64) (hn0 : n ≠ 0) (hl3 : s.locals 3 = some (.int IntTy.u8 e3))
     {a11 : Nat} (hl11 : s.locals 11 = some (u8 a11)) (hl17 : s.locals 17 = some (u8 1)) (hnmb : n ≠ mb) (hncb : n ≠ cb) (he3 : e3 = 1)
     (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s', ExS Gen.prog s (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9)))))) .normal s' ∧
-      Buf s'.mem mb mo cb co cap (L ++ (if !(p.play mv).inCheck p.side &&
-        !((p.play mv).inCheck (p.play mv).side && !hasReply) then [moveBytes p mv] else [])) ∧
+      Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel mv then [moveBytes p mv] else [])) ∧
       s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
       (∀ x, x ≠ 0 → x ≠ mb → x ≠ cb → s.mem x ≠ none → s'.mem x = s.mem x) ∧
       ∃ f, Fresh s'.mem f ∧ f ≤ n + 1000000020 := by
@@ -442,8 +488,9 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
           (truthy_boolVal _) ExS.skip)
       obtain ⟨s', e', hb', hp', hx1, hx2, hx3, hx4⟩ := tail sc2 U (n + 5) true e7 (by rw [l19c, hic]; rfl) hlc hpc2 huc2 hfc2 (by omega) hkc hI.ro
       refine ⟨s', e', ?_, hp', hx1, hx2, hx3, by obtain ⟨f, hf1, hf2⟩ := hx4; exact ⟨f, hf1, by omega⟩⟩
-      have hk : (!(p.play mv).inCheck p.side && !((p.play mv).inCheck (p.play mv).side && !hasReply)) = true := by
-        simp only [ic, icq, q] at hic hicq; simp [hic, hicq]
+      have hk : specKeep p fuel mv = true := by
+        simp only [specKeep, Position.isPawnDrop, hpd, if_true, ic, icq, q] at hic hicq ⊢
+        simp [hic, hicq]
       rw [hk]; exact hb'
     · -- check: the drop is legal exactly when the opponent has a legal reply
       have htc2 : TablesIn sc2.mem := by
@@ -462,8 +509,17 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
       have hfa : Fresh ma (n + 6) := hfc2.after_alloc _
       have hta : TablesIn ma := (htc2.upd0 _).upd _ (by rw [Mem.upd_ne (by omega)]; exact hfc2.2.2 _ (Nat.le_refl _))
       have hpa : ma posBlock = some (encode q) := by rw [hma _ (by decide) (by simp only [posBlock, rb]; omega)]; exact hpc2
-      obtain ⟨sr, cnt, kf, er, hcnt, hpr, hfr, hkk, hkb, hor⟩ := hrec ma rb (n + 6) hpa hta hfa
-        (by rw [show ma rb = some (List.replicate 3000 0) from Mem.upd_eq]; exact Option.some_ne_none _) (by omega)
+      have hrb : ReplyBuf ma rb := by
+        refine ⟨List.replicate 3000 0, Mem.upd_eq, by simp only [List.length_replicate]; omega, ?_, ?_, ?_⟩
+        · simp only [rb]; omega
+        · simp only [rb, posBlock]; omega
+        · exact fresh_not_table hfc2 htc2 (by simp only [rb]; omega)
+      obtain ⟨sr, cnt, kf, er, hcnt, hpr, hfr, hkk, hkb, hor⟩ := hrec hicq ma rb (n + 6) hpa hta hfa hrb
+        (by simp only [recBudget]; omega)
+      have hkb2 : kf ≤ n + 6 + 1000000000 := by
+        have h := hkb
+        simp only [recBudget] at h
+        omega
       let sb1 : State := { sa with mem := sr.mem, locals := sa.locals.upd 25 (.int IntTy.u64 cnt) }
       have ecr : ExS Gen.prog sa (.call (some 25) 35 [(.var 0), (.var 23), (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 600))),
           (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.const (.int ⟨32, true⟩ 1)) (.const (.int ⟨32, true⟩ 0))))]) .normal sb1 :=
@@ -501,9 +557,23 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
       obtain ⟨s', e', hb', hp', hx1, hx2, hx3, hx4⟩ := tail sb3 U kf keep e7 (by simp [sb3, Locals.upd]) hl7 hpr
         (by rw [hm7 _ hub0 (by omega) (by omega) (Ne.symm hpu)]; exact huc2) hfr (by omega) hk7 hI.ro
       refine ⟨s', e', ?_, hp', hx1, hx2, hx3, by obtain ⟨f, hf1, hf2⟩ := hx4; exact ⟨f, hf1, by omega⟩⟩
-      have hk : (!(p.play mv).inCheck p.side && !((p.play mv).inCheck (p.play mv).side && !hasReply)) = keep := by
-        simp only [ic, icq, q] at hic hicq; simp only [hic, hicq, keep]
-        cases hr : hasReply <;> simp_all
+      have hk : specKeep p fuel mv = keep := by
+        have hsk : specKeep p fuel mv = (!(p.play mv).inCheck p.side &&
+            !((p.play mv).inCheck (p.play mv).side &&
+              (Position.legalAux fuel (p.play mv)).isEmpty)) := by
+          simp [specKeep, hpd]
+        rw [hsk]
+        simp only [ic, icq, q] at hic hicq
+        rw [hic, hicq]
+        simp only [Bool.not_true, Bool.true_and, Bool.not_false, Bool.true_and, Bool.not_not]
+        cases hX : (Position.legalAux fuel (p.play mv)).isEmpty
+        · have hne : cnt ≠ 0 := hcnt.2 (by rw [hX]; simp)
+          simp [hX, hne, keep]
+        · have hz : cnt = 0 := by
+            cases hb : cnt with
+            | zero => rfl
+            | succ m => exact absurd (hcnt.1 (by omega)) (by rw [hX]; simp)
+          simp [hX, hz, keep]
       rw [hk]; exact hb'
   · -- the drop leaves the own king in check: dropped, no recursion
     rw [hic] at hc7
@@ -517,8 +587,9 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     have l19f : s7.locals 19 = some (u8 (if false then 1 else 0)) := by rw [l19s, l19, hic]; rfl
     obtain ⟨s', e', hb', hp', hx1, hx2, hx3, hx4⟩ := tail s7 U (n + 4) false e7 l19f hl7 hp6 hu6 hf6 (by omega) hkeep6 hI.ro
     refine ⟨s', e', ?_, hp', hx1, hx2, hx3, by obtain ⟨f, hf1, hf2⟩ := hx4; exact ⟨f, hf1, by omega⟩⟩
-    have hk : (!(p.play mv).inCheck p.side && !((p.play mv).inCheck (p.play mv).side && !hasReply)) = false := by
-      simp only [ic] at hic; simp [hic]
+    have hk : specKeep p fuel mv = false := by
+      simp only [specKeep, ic, q] at hic ⊢
+      rw [hic]; simp
     rw [hk]; exact hb'
 
 end Shogi.C.Proofs

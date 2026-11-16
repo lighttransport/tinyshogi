@@ -10,7 +10,7 @@ open MiniC Shogi Shogi.C Shogi.Tables
 
 theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co cap : Nat} {PB : List UInt8}
     {L : List (List UInt8)} (hS : p.Shaped) (hK : KingsUnique p) (hm : m ∈ p.pseudoMoves) (fuel : Nat)
-    (hrec : RecSpec (p.play m) (!(Position.legalAux fuel (p.play m)).isEmpty))
+    (hrec : Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec fuel (p.play m))
     (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
     (hl3 : s.locals 3 = some (.int IntTy.u8 1))
     (hl4 : s.locals 4 = some (.ptr pb 0)) (hl6 : s.locals 6 = some (.ptr cb co))
@@ -95,21 +95,17 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
     have hk : specKeep p fuel m = !(p.play m).inCheck p.side := by simp [specKeep, hpd]
     rw [hk]; cases h : (p.play m).inCheck p.side <;> simp [h] at hb' ⊢ <;> exact hb'
   · -- a pawn drop: the probe path with the uchifuzume recursion
-    obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path_drop p hS hK m hm hpd _ hrec hI hn3 hf3 (by omega) hf.2.1 l3
+    obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path_drop p hS hK m hm hpd fuel (hrec hpd) hI hn3 hf3 (by omega) hf.2.1 l3
       l11' (by rw [l17, hpd]; rfl) (by intro e; exact hnb.1 (by rw [e])) (by intro e; exact hnb.2 (by rw [e])) rfl hpm hpc
     obtain ⟨f1, f2, f3⟩ := fin s' hr' hl' hf'
-    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, by obtain ⟨f, hf1, hf2⟩ := hfr'; exact ⟨f, hf1, by omega⟩⟩
-    have hk : specKeep p fuel m = (!(p.play m).inCheck p.side &&
-        !((p.play m).inCheck (p.play m).side && !!(Position.legalAux fuel (p.play m)).isEmpty)) := by
-      simp [specKeep, hpd]
-    rw [hk]; exact hb'
+    refine ⟨s', hpre e', hb', hp', f1, f2, f3, by obtain ⟨f, hf1, hf2⟩ := hfr'; exact ⟨f, hf1, by omega⟩⟩
 
 /-- **One iteration of the C legality loop keeps a pseudo-legal move exactly
     when the spec's `legalAux (fuel + 1)` test does** (given the recursive
     reply count for checking pawn drops), and leaves the position unchanged. -/
 theorem iter_one {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co cap : Nat} {PB : List UInt8}
     {L : List (List UInt8)} (hS : p.Shaped) (hK : KingsUnique p) (hm : m ∈ p.pseudoMoves) (fuel : Nat)
-    (hrec : RecSpec (p.play m) (!(Position.legalAux fuel (p.play m)).isEmpty))
+    (hrec : Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec fuel (p.play m))
     (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
     (hl3 : s.locals 3 = some (.int IntTy.u8 1))
     (hl4 : s.locals 4 = some (.ptr pb 0)) (hl6 : s.locals 6 = some (.ptr cb co))

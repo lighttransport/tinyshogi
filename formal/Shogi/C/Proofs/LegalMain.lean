@@ -18,12 +18,14 @@ theorem readBytes_of_eq {m m' : Mem} {b : Nat} (h : m' b = m b) (o k : Nat) :
     call with an output array of `cap` moves, the function returns, and there
     is a reordering `Ms` of the spec's pseudo-legal moves such that the
     output holds the spec-kept moves of `Ms` (capped at `cap`) and the
-    returned value is their count. Assumes the uchifuzume reply spec
-    `RecSpec` for every pseudo move and at most 600 pseudo moves. -/
+    returned value is their count.  Assumes the uchifuzume reply spec
+    `RecSpec` for the checking pawn drops only (the C recurses exactly there)
+    and at most 600 pseudo moves. -/
 theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap : Nat} {blk : Block}
     (hS : p.Shaped) (hK : KingsUnique p) (hw : ∀ i, p.hand p.side i < 256)
     (h600 : p.pseudoMoves.length ≤ 600)
-    (hrec : ∀ mv ∈ p.pseudoMoves, RecSpec (p.play mv) (!(Position.legalAux fuel (p.play mv)).isEmpty))
+    (hrec : ∀ mv ∈ p.pseudoMoves, Position.isPawnDrop mv →
+      (p.play mv).inCheck (p.play mv).side → RecSpec fuel (p.play mv))
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (hf : Fresh m n)
     (h64 : n + 700 * RB + 5000000000 < 2 ^ 64)
     (hmb : m mb = some blk) (hlen : mo + 5 * cap ≤ blk.length) (hmb0 : mb ≠ 0) (hcap : cap < 2 ^ 64)
@@ -109,7 +111,8 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
 theorem generate_legal_refines {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap : Nat} {blk : Block}
     (hS : p.Shaped) (hK : KingsUnique p) (hw : ∀ i, p.hand p.side i < 256)
     (h600 : p.pseudoMoves.length ≤ 600) (hcap600 : 600 ≤ cap)
-    (hrec : ∀ mv ∈ p.pseudoMoves, RecSpec (p.play mv) (!(Position.legalAux fuel (p.play mv)).isEmpty))
+    (hrec : ∀ mv ∈ p.pseudoMoves, Position.isPawnDrop mv →
+      (p.play mv).inCheck (p.play mv).side → RecSpec fuel (p.play mv))
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (hf : Fresh m n)
     (h64 : n + 700 * RB + 5000000000 < 2 ^ 64)
     (hmb : m mb = some blk) (hlen : mo + 5 * cap ≤ blk.length) (hmb0 : mb ≠ 0) (hcap : cap < 2 ^ 64)
