@@ -152,8 +152,10 @@ Remaining work, in dependency order:
      (reachable `pawnsInHands ≤ 18` ⇒ ≈ 10¹¹ ≪ 2^64). Prove
      `k' ≤ k + allocBound (pawnsInHands q)` from the loop's `f` bound plus
      `checkingPawnDrops_le_one` (at most one nested level consumes `Lvl`).
-   - play-preservation lemmas for a checking pawn drop (`Shaped`,
-     `KingsUnique`, hands < 256), then strong induction on `pawnsInHands`
+   - play-preservation lemmas for a checking pawn drop: **done** (commit
+     `e326838`) — `play_drop_kingsUnique` and `play_drop_hand_le` (hands < 256
+     for both colours) in `OneCheckDrop.lean`; `play_shaped` already exists in
+     `Shogi/Theorems.lean`. Then strong induction on `pawnsInHands`
      (`pawnsInHands_play_drop` decreases it; `legalAux_stable` supplies the
      fuel past `pawnsInHands+2`).
 2. **600-move bound** (M5), informed by the measured 591: prove
