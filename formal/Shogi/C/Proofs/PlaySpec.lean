@@ -206,4 +206,73 @@ theorem play_normal_kingSquare (p : Position) (hb : p.board.length = 81) (hK : K
         · intro h; cases h; exact absurd ⟨rfl, rfl⟩ hk
       · rw [if_neg e2]
 
+theorem hand_set (p : Position) (hS : p.Shaped) (c : Color) (i : Fin 7) (n : Nat) :
+    (fun c' i' => Hands.get (p.hands.set c i n) c' i') = hupd p.hand c i n := by
+  obtain ⟨_, hb, hw⟩ := hS
+  funext c' i'
+  simp only [hupd, Position.hand]
+  cases c <;> cases c' <;> simp [Hands.set, Hands.get, List.getD_eq_getElem?_getD, List.getElem?_set, hb, hw] <;>
+    by_cases e : i' = i <;> simp [e, Fin.val_ne_of_ne, i'.isLt] <;> (rw [List.getElem_set_ne (fun h => e (Fin.ext h.symm))])
+
+def handsAfter (p : Position) (d : Square) : Color → Fin 7 → Nat :=
+  match p.pieceAt d with
+  | some q => match q.type.unpromote.handIndex with
+    | some i => hupd p.hand p.side i (p.hand p.side i + 1)
+    | none => p.hand
+  | none => p.hand
+
+def kbOf : Option Square → UInt8
+  | some k => k.val.toUInt8
+  | none => 255
+
+theorem encode_play_normal (p : Position) (hS : p.Shaped) (hK : KingsUnique p) {s d : Square} {pr : Bool}
+    {pc : Piece} (hpc : p.pieceAt s = some pc) (hcol : pc.color = p.side)
+    (hd : ∀ c', p.pieceAt d ≠ some ⟨c', .king⟩) :
+    encode (p.play (.normal s d pr)) =
+      enc (fun y => if y = d then some (movedPiece p.side pc pr) else if y = s then none else p.pieceAt y)
+        (handsAfter p d) p.side.opp (kbOf (kingAfter p s d pc .black)) (kbOf (kingAfter p s d pc .white)) := by
+  rw [encode_enc]
+  have hP : (p.play (.normal s d pr)).pieceAt = fun y =>
+      if y = d then some (movedPiece p.side pc pr) else if y = s then none else p.pieceAt y :=
+    funext (play_normal_pieceAt p hS.1 hpc)
+  have hH : (p.play (.normal s d pr)).hand = handsAfter p d := by
+    funext c' i'
+    simp only [Position.play, hpc, handsAfter]
+    cases hq : p.pieceAt d with
+    | none => rfl
+    | some q =>
+      cases hi : q.type.unpromote.handIndex with
+      | none => simp only [hi]; rfl
+      | some i =>
+        simp only [hi]
+        exact congrFun (congrFun (hand_set p hS p.side i _) c') i'
+  have hSd : (p.play (.normal s d pr)).side = p.side.opp := rfl
+  have hk : ∀ c', kingByte (p.play (.normal s d pr)) c' = kbOf (kingAfter p s d pc c') := by
+    intro c'; unfold kingByte; rw [play_normal_kingSquare p hS.1 hK hpc hcol hd c']
+    cases kingAfter p s d pc c' <;> rfl
+  rw [hP, hH, hSd, hk, hk]
+
+theorem encode_play_drop (p : Position) (hS : p.Shaped) {t : PieceType} {d : Square} {i : Fin 7}
+    (hi : t.handIndex = some i) (hd : p.pieceAt d = none) :
+    encode (p.play (.drop t d)) =
+      enc (fun y => if y = d then some ⟨p.side, t⟩ else p.pieceAt y)
+        (hupd p.hand p.side i (p.hand p.side i - 1)) p.side.opp (kingByte p .black) (kingByte p .white) := by
+  rw [encode_enc]
+  have hP : (p.play (.drop t d)).pieceAt = fun y => if y = d then some ⟨p.side, t⟩ else p.pieceAt y := by
+    funext y
+    simp only [Position.play, hi]
+    exact pieceAt_setSq p p.board hS.1 d _ y
+  have hH : (p.play (.drop t d)).hand = hupd p.hand p.side i (p.hand p.side i - 1) := by
+    funext c' i'
+    simp only [Position.play, hi]
+    exact congrFun (congrFun (hand_set p hS p.side i _) c') i'
+  have htk : t ≠ .king := by intro h; subst h; simp [PieceType.handIndex] at hi
+  have hk : ∀ c', kingByte (p.play (.drop t d)) c' = kingByte p c' := by
+    intro c'; unfold kingByte
+    rw [kingSquare_iff (q := p) (fun x => by
+      rw [hP]; by_cases e : x = d
+      · subst e; simp [hd]; intro _; exact htk
+      · simp [e])]
+  rw [hP, hH, hk, hk]; rfl
+
 end Shogi.C.Proofs
