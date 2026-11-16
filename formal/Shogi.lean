@@ -20,6 +20,9 @@ import Shogi.C.Proofs.AddNormal
 import Shogi.C.Proofs.Pure
 import Shogi.C.Proofs.AddStep
 import Shogi.C.Proofs.AddSlide
+import Shogi.C.Proofs.AddDrops
+import Shogi.C.Proofs.AddDrops2
+import Shogi.C.Proofs.DropsSpec
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
