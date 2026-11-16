@@ -54,6 +54,7 @@ import Shogi.C.Proofs.NoWrite
 import Shogi.C.Proofs.LegalProbe
 import Shogi.C.Proofs.LegalIter2
 import Shogi.C.Proofs.KingsUniq
+import Shogi.C.Proofs.LegalLoop
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems

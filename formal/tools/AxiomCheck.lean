@@ -83,3 +83,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.iter_one
 #print axioms Shogi.C.Proofs.reachable_kingsUnique
 #print axioms Shogi.C.Proofs.probe_roundtrip_reachable
+#print axioms Shogi.C.Proofs.legal_loop
