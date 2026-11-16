@@ -279,4 +279,17 @@ theorem buf_bridge {m : Mem} {mb cb : Nat} {p : Position} {Ms : List Move}
   rw [h6] at hbt
   rw [e, hbt, flatten5_get _ hlen j (by simpa using hj)]; simp
 
+theorem TablesIn.of_eq {m m' : Mem} (h : TablesIn m) (he : ∀ g, 8192 ≤ g → g ≤ 8196 → m' g = m g) :
+    TablesIn m' :=
+  ⟨by rw [he _ (by decide) (by decide)]; exact h.g1, by rw [he _ (by decide) (by decide)]; exact h.g2,
+    by rw [he _ (by decide) (by decide)]; exact h.g3, by rw [he _ (by decide) (by decide)]; exact h.g4,
+    by rw [he _ (by decide) (by decide)]; exact h.g5⟩
+
+/-- The tables survive any step whose frame excludes only blocks outside them. -/
+theorem TablesIn.of_frame {m m' : Mem} {mb cb : Nat} (h : TablesIn m) (hf : Frame m m' mb cb)
+    (hmb : mb < 8192 ∨ 8196 < mb) (hcb : cb < 8192 ∨ 8196 < cb) : TablesIn m' :=
+  h.of_eq fun g a b => hf g (by omega) (by omega) (by omega) (by
+    rcases (show g = 8192 ∨ g = 8193 ∨ g = 8194 ∨ g = 8195 ∨ g = 8196 by omega) with e | e | e | e | e <;>
+      subst e <;> simp [h.g1, h.g2, h.g3, h.g4, h.g5])
+
 end Shogi.C.Proofs
