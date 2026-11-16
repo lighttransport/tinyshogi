@@ -247,4 +247,36 @@ theorem legal_index_init (s : State) :
   ExS.set (EvE_of_eval (n := 3) (by simp [evalExpr, evalCast, IntTy.u64, IntTy.toInt, IntTy.wrap, IntTy.modulus,
     Res.bind]))
 
+theorem flatten5_get : ∀ (L : List (List UInt8)), (∀ x ∈ L, x.length = 5) →
+    ∀ j (hj : j < L.length), (L.flatten.drop (5 * j)).take 5 = L[j]
+  | [], _, j, hj => absurd hj (by simp)
+  | x :: L, h, 0, _ => by
+    simp only [List.flatten_cons, Nat.mul_zero, List.drop_zero, List.getElem_cons_zero]
+    rw [List.take_append_of_le_length (by rw [h x (by simp)]; omega)]
+    exact List.take_of_length_le (by rw [h x (by simp)]; omega)
+  | x :: L, h, j + 1, hj => by
+    simp only [List.flatten_cons, List.getElem_cons_succ]
+    rw [show 5 * (j + 1) = x.length + 5 * j by rw [h x (by simp)]; omega, ← List.drop_drop,
+      List.drop_left]
+    exact flatten5_get L (fun y hy => h y (by simp [hy])) j (by simp at hj; omega)
+
+/-- From the pseudo buffer filled with `Ms` (no truncation), the facts the
+    legality loop reads: the count and the bytes of each move. -/
+theorem buf_bridge {m : Mem} {mb cb : Nat} {p : Position} {Ms : List Move}
+    (hb : Buf m mb 0 cb 0 600 (Ms.map (moveBytes p))) (h600 : Ms.length ≤ 600) :
+    readBytes m cb 0 8 = .ok (encodeLE 8 Ms.length) ∧
+    ∃ PB, m mb = some PB ∧ 5 * Ms.length ≤ PB.length ∧
+      ∀ j (hj : j < Ms.length), (PB.drop (5 * j)).take 5 = moveBytes p Ms[j] := by
+  obtain ⟨cblk, hc, hl, ht⟩ := hb.cnt
+  obtain ⟨blk, hm, hbl, hbt⟩ := hb.buf
+  simp only [List.length_map, Nat.min_eq_left h600, List.drop_zero] at ht hbt
+  refine ⟨by simp only [readBytes, hc]; rw [if_pos (by omega)]; simpa using congrArg Res.ok ht, blk, hm, by omega,
+    fun j hj => ?_⟩
+  have hlen : ∀ x ∈ Ms.map (moveBytes p), x.length = 5 := hb.len
+  have e : (blk.drop (5 * j)).take 5 = ((blk.take (5 * Ms.length)).drop (5 * j)).take 5 := by
+    rw [List.drop_take, List.take_take]; congr 1; omega
+  have h6 : (Ms.map (moveBytes p)).take 600 = Ms.map (moveBytes p) := List.take_of_length_le (by simp; omega)
+  rw [h6] at hbt
+  rw [e, hbt, flatten5_get _ hlen j (by simpa using hj)]; simp
+
 end Shogi.C.Proofs
