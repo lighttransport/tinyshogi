@@ -18,14 +18,14 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
     (hl8 : s.locals 8 = some (.ptr Sb 0)) (hl9 : s.locals 9 = some (.int IntTy.u64 i))
     (hpos : s.mem posBlock = some (encode p)) (hpb : s.mem pb = some PB) (hi : 5 * i + 5 ≤ PB.length)
     (hmv : (PB.drop (5 * i)).take 5 = moveBytes p m) (hSb : s.mem Sb = some (ksRec p p.side))
-    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 100020 < 2 ^ 64)
+    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 4000000200 < 2 ^ 64)
     (hro : s.ro = false) (hpb0 : pb ≠ 0) (hS0 : Sb ≠ 0) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb)
     (hslow : needsProbeC (ksRec p p.side) p m = true ∨ Position.isPawnDrop m = true) :
     ∃ s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel m then [moveBytes p m] else [])) ∧
       s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
-      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f + 99000 < 2 ^ 64 := by
+      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f ≤ n + 1000000030 := by
   have hnpb : n ≠ pb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpb; cases hpb
   have hnS : n ≠ Sb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hSb; cases hSb
   have hnp' : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpos; cases hpos
@@ -98,7 +98,7 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
     obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path_drop p hS hK m hm hpd _ hrec hI hn3 hf3 (by omega) hf.2.1 l3
       l11' (by rw [l17, hpd]; rfl) (by intro e; exact hnb.1 (by rw [e])) (by intro e; exact hnb.2 (by rw [e])) rfl hpm hpc
     obtain ⟨f1, f2, f3⟩ := fin s' hr' hl' hf'
-    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, hfr'⟩
+    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, by obtain ⟨f, hf1, hf2⟩ := hfr'; exact ⟨f, hf1, by omega⟩⟩
     have hk : specKeep p fuel m = (!(p.play m).inCheck p.side &&
         !((p.play m).inCheck (p.play m).side && !!(Position.legalAux fuel (p.play m)).isEmpty)) := by
       simp [specKeep, hpd]
@@ -117,13 +117,13 @@ theorem iter_one {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co ca
     (hl8 : s.locals 8 = some (.ptr Sb 0)) (hl9 : s.locals 9 = some (.int IntTy.u64 i))
     (hpos : s.mem posBlock = some (encode p)) (hpb : s.mem pb = some PB) (hi : 5 * i + 5 ≤ PB.length)
     (hmv : (PB.drop (5 * i)).take 5 = moveBytes p m) (hSb : s.mem Sb = some (ksRec p p.side))
-    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 100020 < 2 ^ 64)
+    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 4000000200 < 2 ^ 64)
     (hro : s.ro = false) (hpb0 : pb ≠ 0) (hS0 : Sb ≠ 0) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ o s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) o s' ∧ (o = .normal ∨ o = .cont) ∧
       Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel m then [moveBytes p m] else [])) ∧
       s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
-      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f + 99000 < 2 ^ 64 := by
+      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f ≤ n + 1000000030 := by
   by_cases hfast : needsProbeC (ksRec p p.side) p m = false ∧ Position.isPawnDrop m = false
   · obtain ⟨s', e', hb', hf2, hl2, hfr, hro'⟩ := iter_fast (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9))))) hm hl0 hl1 hl2
       hl4 hl6 hl8 hl9 hpos hpb hi hmv hSb hbuf hf (by omega) hro hpb0 hS0 hfast.1 hfast.2

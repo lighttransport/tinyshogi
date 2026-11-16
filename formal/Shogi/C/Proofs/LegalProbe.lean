@@ -201,19 +201,19 @@ theorem probe_path (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mov
     `q` has a legal reply, restores the position, and only allocates. -/
 def RecSpec (q : Position) (hasReply : Bool) : Prop :=
   ∀ (M : Mem) (rb k : Nat), M posBlock = some (encode q) → TablesIn M → Fresh M k → M rb ≠ none →
-    k + 100000 < 2 ^ 64 →
+    k + 4000000000 < 2 ^ 64 →
     ∃ s' cnt k', ExS Gen.prog ⟨frameLocals Gen.generate_legal_mut_internal.params
         [posPtr, .ptr rb 0, .int IntTy.u64 600, .int IntTy.u8 1], M, false⟩
       Gen.generate_legal_mut_internal.body (.ret (some (.int IntTy.u64 cnt))) s' ∧
       (cnt ≠ 0 ↔ hasReply = true) ∧ s'.mem posBlock = some (encode q) ∧ Fresh s'.mem k' ∧ k ≤ k' ∧
-      k' + 100000 < 2 ^ 64 ∧ (∀ x, x ≠ 0 → x ≠ rb → x < k → x ≠ posBlock → s'.mem x = M x)
+      k' ≤ k + 1000000000 ∧ (∀ x, x ≠ 0 → x ≠ rb → x < k → x ≠ posBlock → s'.mem x = M x)
 
 theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Move) (hm : mv ∈ p.pseudoMoves)
     (hpd : Position.isPawnDrop mv = true) (hasReply : Bool)
     (hrec : RecSpec (p.play mv) hasReply)
     {s : State} {mb mo cb co cap n e3 : Nat} {L : List (List UInt8)}
     (hI : PInv s p mb mo cb co cap n L) (hn : s.mem n = some (moveBytes p mv)) (hf : Fresh s.mem (n + 1))
-    (h64 : n + 100010 < 2 ^ 64) (hn0 : n ≠ 0) (hl3 : s.locals 3 = some (.int IntTy.u8 e3))
+    (h64 : n + 4000000100 < 2 ^ 64) (hn0 : n ≠ 0) (hl3 : s.locals 3 = some (.int IntTy.u8 e3))
     {a11 : Nat} (hl11 : s.locals 11 = some (u8 a11)) (hl17 : s.locals 17 = some (u8 1)) (hnmb : n ≠ mb) (hncb : n ≠ cb) (he3 : e3 = 1)
     (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s', ExS Gen.prog s (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9)))))) .normal s' ∧
@@ -221,7 +221,7 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
         !((p.play mv).inCheck (p.play mv).side && !hasReply) then [moveBytes p mv] else [])) ∧
       s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
       (∀ x, x ≠ 0 → x ≠ mb → x ≠ cb → s.mem x ≠ none → s'.mem x = s.mem x) ∧
-      ∃ f, Fresh s'.mem f ∧ f + 99000 < 2 ^ 64 := by
+      ∃ f, Fresh s'.mem f ∧ f ≤ n + 1000000020 := by
   have hMl : (moveBytes p mv).length = 5 := by cases mv <;> rfl
   have hnp : n ≠ posBlock := fun e => by rw [e, hI.mp] at hn; have := congrArg (Option.map List.length) hn; simp [encode_length, hMl] at this
   -- lp3: the fast path is not taken
@@ -324,7 +324,7 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
         Buf s'.mem mb mo cb co cap (L ++ (if keep then [moveBytes p mv] else [])) ∧
         s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
         (∀ x, x ≠ 0 → x ≠ mb → x ≠ cb → s.mem x ≠ none → s'.mem x = s.mem x) ∧
-        ∃ f, Fresh s'.mem f ∧ f + 99000 < 2 ^ 64 := by
+        ∃ f, Fresh s'.mem f ∧ f ≤ kf + 2 := by
     intro s7 U' kf keep e7 l19k hl7 hp7 hu7 hf7 hkf hk7 hro7
     obtain ⟨su, eu, hpu8, hou, hfu⟩ := unmake_spec p hS hK mv hm hp7 hu7 hR hf7 (by omega) hub0 hpu
     let s8 : State := { s7 with mem := su.mem }
@@ -441,7 +441,7 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
         ExS.seq ec2 (ExS.ite (bc := false) (vc := boolVal false) (EvE.var (by simp [sc2, Locals.upd, hicq]))
           (truthy_boolVal _) ExS.skip)
       obtain ⟨s', e', hb', hp', hx1, hx2, hx3, hx4⟩ := tail sc2 U (n + 5) true e7 (by rw [l19c, hic]; rfl) hlc hpc2 huc2 hfc2 (by omega) hkc hI.ro
-      refine ⟨s', e', ?_, hp', hx1, hx2, hx3, hx4⟩
+      refine ⟨s', e', ?_, hp', hx1, hx2, hx3, by obtain ⟨f, hf1, hf2⟩ := hx4; exact ⟨f, hf1, by omega⟩⟩
       have hk : (!(p.play mv).inCheck p.side && !((p.play mv).inCheck (p.play mv).side && !hasReply)) = true := by
         simp only [ic, icq, q] at hic hicq; simp [hic, hicq]
       rw [hk]; exact hb'
@@ -500,7 +500,7 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
         rw [hm7 x a (by omega) (by omega) b]; exact hkc x a b c
       obtain ⟨s', e', hb', hp', hx1, hx2, hx3, hx4⟩ := tail sb3 U kf keep e7 (by simp [sb3, Locals.upd]) hl7 hpr
         (by rw [hm7 _ hub0 (by omega) (by omega) (Ne.symm hpu)]; exact huc2) hfr (by omega) hk7 hI.ro
-      refine ⟨s', e', ?_, hp', hx1, hx2, hx3, hx4⟩
+      refine ⟨s', e', ?_, hp', hx1, hx2, hx3, by obtain ⟨f, hf1, hf2⟩ := hx4; exact ⟨f, hf1, by omega⟩⟩
       have hk : (!(p.play mv).inCheck p.side && !((p.play mv).inCheck (p.play mv).side && !hasReply)) = keep := by
         simp only [ic, icq, q] at hic hicq; simp only [hic, hicq, keep]
         cases hr : hasReply <;> simp_all
@@ -516,7 +516,7 @@ theorem probe_path_drop (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     have l19s : s7.locals 19 = s6.locals 19 := by simp [s7, Locals.upd]
     have l19f : s7.locals 19 = some (u8 (if false then 1 else 0)) := by rw [l19s, l19, hic]; rfl
     obtain ⟨s', e', hb', hp', hx1, hx2, hx3, hx4⟩ := tail s7 U (n + 4) false e7 l19f hl7 hp6 hu6 hf6 (by omega) hkeep6 hI.ro
-    refine ⟨s', e', ?_, hp', hx1, hx2, hx3, hx4⟩
+    refine ⟨s', e', ?_, hp', hx1, hx2, hx3, by obtain ⟨f, hf1, hf2⟩ := hx4; exact ⟨f, hf1, by omega⟩⟩
     have hk : (!(p.play mv).inCheck p.side && !((p.play mv).inCheck (p.play mv).side && !hasReply)) = false := by
       simp only [ic] at hic; simp [hic]
     rw [hk]; exact hb'
