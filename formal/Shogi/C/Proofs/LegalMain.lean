@@ -34,7 +34,8 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
       ⟨frameLocals Gen.generate_legal_mut_internal.params [posPtr, .ptr mb mo, .int IntTy.u64 cap, .int IntTy.u8 1],
         m, false⟩ Gen.generate_legal_mut_internal.body
       (.ret (some (.int ⟨64, false⟩ (min (keepBytes p fuel Ms).length cap)))) s' ∧
-      Buf s'.mem mb mo cb 0 cap (keepBytes p fuel Ms) ∧ s'.mem posBlock = some (encode p) := by
+      Buf s'.mem mb mo cb 0 cap (keepBytes p fuel Ms) ∧ s'.mem posBlock = some (encode p) ∧
+      Frame m s'.mem mb cb := by
   obtain ⟨Ms, hperm, hpc⟩ := pseudoC_moves p hw
   refine ⟨Ms, hperm, ?_⟩
   have hMl : Ms.length ≤ 600 := by rw [hperm.length_eq]; exact h600
@@ -79,7 +80,7 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
   obtain ⟨CB, hCB, _⟩ := hbc.cnt
   have hMs : ∀ mv ∈ Ms, mv ∈ p.pseudoMoves := fun mv h => hperm.subset h
   have hn1b : n1 ≤ n + 2 + 40000 := hn1
-  obtain ⟨s', el, hb', hp', h6'⟩ := legal_loop (fuel := fuel) (pb := n) (cntb := n + 1) (Sb := n1 + 1) (mb := mb)
+  obtain ⟨s', el, hb', hp', h6', hfrl⟩ := legal_loop (fuel := fuel) (pb := n) (cntb := n + 1) (Sb := n1 + 1) (mb := mb)
     (mo := mo) (cb := n1) (co := 0) (cap := cap) (PB := PB) (CB := CB) hS hK hMs
     (fun mv h => hrec mv (hMs mv h)) (by omega) hPBl hmv hn0 (by omega) (by omega) (by omega) (by omega)
     ⟨by omega, by omega⟩ ⟨by omega, by omega⟩ ⟨by omega, by omega⟩
@@ -103,7 +104,24 @@ theorem generate_legal_main {p : Position} {fuel : Nat} {m : Mem} {n mb mo cap :
   simp only [List.nil_append, List.drop_zero] at hb'
   have ev := legal_return (s := s') (h6' ▸ (by rw [lg 6 (by decide), lf 6 (by decide) (by decide)]; exact l6)) hb'
   refine ⟨s', n1, ExS.seq ea (ExS.seq eb (ExS.seq ec (ExS.seq ed (ExS.seq ee (ExS.seq ef
-    (ExS.seq (ExS.seq eg (by rw [lp_loop_eq]; exact el)) (ExS.ret ev))))))), hb', hp'⟩
+    (ExS.seq (ExS.seq eg (by rw [lp_loop_eq]; exact el)) (ExS.ret ev))))))), hb', hp', ?_⟩
+  intro x hx0 hxmb hxcb hxm
+  have hxlt : x < n := by
+    rcases Nat.lt_or_ge x n with h | h
+    · exact h
+    · exact absurd (hf.2.2 x h) hxm
+  have hxn : x ≠ n := by omega
+  have hxn1 : x ≠ n + 1 := by omega
+  have hxn1' : x ≠ n1 := by omega
+  have hsbx : sb.mem x = m x := frP x hx0 hxn hxn1
+  have hsbm : sb.mem x ≠ none := by rw [hsbx]; exact hxm
+  have hscx : sc.mem x = sb.mem x := frc x hx0 hxn hxn1 hsbm
+  have hsfx : sf.mem x = sc.mem x := kf x hx0 hxn1' (by omega) (by omega)
+  have hsfm : sf.mem x ≠ none := by rw [hsfx, hscx, hsbx]; exact hxm
+  calc s'.mem x = sf.mem x := hfrl x hx0 hxmb hxcb hsfm
+    _ = sc.mem x := hsfx
+    _ = sb.mem x := hscx
+    _ = m x := hsbx
 
 /-- **C legal moves = spec legal moves (up to order).** With an output
     array of at least 600 moves, `generate_legal_mut_internal` writes the
@@ -121,7 +139,7 @@ theorem generate_legal_refines {p : Position} {fuel : Nat} {m : Mem} {n mb mo ca
       ⟨frameLocals Gen.generate_legal_mut_internal.params [posPtr, .ptr mb mo, .int IntTy.u64 cap, .int IntTy.u8 1],
         m, false⟩ Gen.generate_legal_mut_internal.body (.ret (some (.int ⟨64, false⟩ K.length))) s' ∧
       Buf s'.mem mb mo cb 0 cap K ∧ s'.mem posBlock = some (encode p) := by
-  obtain ⟨Ms, hperm, s', cb, e, hb, hp⟩ :=
+  obtain ⟨Ms, hperm, s', cb, e, hb, hp, _⟩ :=
     generate_legal_main (fuel := fuel) hS hK hw h600 hrec hm ht hf h64 hmb hlen hmb0 hcap hpm hmbt
   have hk : (keepBytes p fuel Ms).length ≤ cap := by
     have : (keepBytes p fuel Ms).length ≤ Ms.length := List.length_filterMap_le _ _

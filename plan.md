@@ -123,30 +123,34 @@ Landed this session:
 - `4203c6a` **Buffer margin measured** (`tools/maxpseudo.{c,py}`): verified
   maximum `generate_pseudo` count over invariant-valid positions is **591**
   (`SHOGI_MAX_MOVES` = 600 leaves 9 slots); best game-reachable in play: 520.
+- `c37d829` **`checkingPawnDrops_le_one` proved** (`OneCheckDrop.lean`): at
+  most one pawn drop in `pseudoMoves` gives check. Via a named per-square
+  `dropCell` (injective within a square), `dropMoves` is Nodup (distinct
+  squares have disjoint move sets — a drop's destination is its square),
+  board moves never survive the pawn-drop/check filter, and a Nodup list of
+  equal elements has length ≤ 1. Registered in the axiom check
+  (propext, Quot.sound). This is the bound M4's allocation accounting needs.
 
 Remaining work, in dependency order:
 
-1. **Finish the count corollary `checkingPawnDrops_le_one`** (M3). The design
-   is in `formal/scratch/m3.lean` and **compiles** (`lake env lean
-   scratch/m3.lean`): named `dropCell`, `dropMoves_eq` (rfl), `dropCell_val`,
-   `dropCell_inj`, `cell_nodup`, `cell_dst`, `cells_disjoint`. Still to add:
-   `flatMap_nodup` (induction on the list; `nodup_append` + `nodup_cons`;
-   ~15 lines), then
-   `dropMoves_nodup p := by rw [dropMoves_eq]; exact flatMap_nodup … (cell_nodup p ·) (fun x _ hx y _ hy hxy a ha b hb => cells_disjoint hxy ha hb)`,
-   then `length ≤ 1` from `filter_sublist` + `List.Sublist.filter` +
-   `Nodup.sublist` + `Sublist.length_le` plus "all elements equal". Relevant
-   core lemmas confirmed present: `length_flatMap`, `List.Nodup.count`,
-   `nodup_iff_count`, `Sublist.filter`, `Nodup.sublist`, `Sublist.length_le`,
-   `nodup_replicate`.
-2. **Discharge `RecSpec`** (M4) by strong induction on `q.pawnsInHands`
+1. **Discharge `RecSpec`** (M4) by strong induction on `q.pawnsInHands`
    (`legalFuel = pawnsInHands + 2`), using `generate_legal_main` for the inner
-   call. Needs `generate_legal_main` to export a memory frame, `legal_loop` to
-   carry a `nestLeft ≤ 1` budget counter fed by `checkingPawnDrops_le_one`, and
-   the allocation bound to depend on recursion depth (`allocBound pawns`
-   replacing `recBudget`; MiniC never frees and the block counter is u64).
-   Play-preservation lemmas for a checking pawn drop: `Shaped`, `KingsUnique`,
-   hands < 256.
-3. **600-move bound** (M5), informed by the measured 591: prove
+   call. Concretely, three changes:
+   - `legal_loop` currently drops the per-iteration `Frame` from `iter_one`;
+     add `Frame s.mem s'.mem mb cb` to its conclusion (the induction carries
+     it through unchanged).
+   - `generate_legal_main` then exports a frame for blocks outside
+     `{0, mb, cb, posBlock}` by composing the frames of the prologue,
+     pseudo call, count init, king-safety prep and the loop.
+   - Replace the fixed `recBudget` in `RecSpec` by `allocBound pawns`
+     (linear in `pawnsInHands`): one level costs prologue + per-move small
+     allocs + at most one nested `allocBound (pawns-1)` (that last "at most
+     one" is `checkingPawnDrops_le_one`). Then strong induction on
+     `q.pawnsInHands` closes `RecSpec fuel q` whenever
+     `q.pawnsInHands + 2 ≤ fuel`, using `legalAux_stable`. Also needs the
+     play-preservation lemmas for a checking pawn drop (`Shaped`,
+     `KingsUnique`, hands < 256).
+2. **600-move bound** (M5), informed by the measured 591: prove
    `pseudoMoves.length ≤ 600` for reachable positions (per-family mobility
    maxima + drop count, case analysis on onboard count), or prove a bound
    `B > 600` and bump `SHOGI_MAX_MOVES` (measure perft/NPS, regenerate
@@ -172,18 +176,24 @@ Remaining work, in dependency order:
 
 ```text
 Continue the tinyshogi Lean formalization on branch `formal-plan` (HEAD
-4203c6a). Read plan.md's "Status and remaining items (session 2)" first.
+c37d829). Read plan.md's "Status and remaining items (session 2)" first.
 
 Verification loop (run after every change):
   cd formal && lake build && ./tools/axiomcheck.sh && \
     python3 tools/c2lean.py --check && python3 tools/cdiff.py --n 500
 
-Start with item 1 (M3 count corollary). The compiling design is in
-formal/scratch/m3.lean; port its lemmas into
-formal/Shogi/C/Proofs/OneCheckDrop.lean, add `flatMap_nodup` and
-`dropMoves_nodup`, then prove `checkingPawnDrops_le_one` (length ≤ 1).
-Then item 2 (discharge RecSpec by induction on pawns in hand), item 3
-(600 bound), items 4–6.
+Start with item 1 (M4, discharge RecSpec). Three changes, in order:
+(a) add `Frame s.mem s'.mem mb cb` to `legal_loop`'s conclusion in
+    formal/Shogi/C/Proofs/LegalLoop.lean (the per-iteration `Frame` from
+    `iter_one` is already in scope — just thread it through the induction);
+(b) export a memory frame from `generate_legal_main` (LegalMain.lean) by
+    composing the prologue / pseudo / count-init / king-safety / loop frames;
+(c) replace `recBudget` (LegalProbe.lean) with `allocBound pawns`, use the
+    new `checkingPawnDrops_le_one` (OneCheckDrop.lean) to show a level has
+    at most one nested call, then strong induction on `pawnsInHands` closes
+    `RecSpec`. Add play-preservation lemmas for a checking pawn drop
+    (`Shaped`, `KingsUnique`, hands < 256) if not already present.
+Then items 2–6 (600 bound, entry points, make/unmake+repetition, docs/audit).
 
 Policy: no `sorry`, no Mathlib, no `native_decide`; only propext,
 Classical.choice, Quot.sound. Commit each milestone separately with the
