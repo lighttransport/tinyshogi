@@ -69,3 +69,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.ksRec_pinned
 #print axioms Shogi.C.Proofs.ksRec_valid
 #print axioms Shogi.C.Proofs.fastpath_unpinned
+#print axioms Shogi.C.Proofs.fastpath_along
