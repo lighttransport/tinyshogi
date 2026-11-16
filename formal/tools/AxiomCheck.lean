@@ -92,3 +92,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.legal_count_init
 #print axioms Shogi.C.Proofs.legal_safety
 #print axioms Shogi.C.Proofs.legal_return
+#print axioms Shogi.C.Proofs.legal_index_init

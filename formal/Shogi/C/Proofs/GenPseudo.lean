@@ -240,4 +240,11 @@ theorem legal_return {s : State} {mb mo cb cap : Nat} {L : List (List UInt8)}
   have := hb.cap64
   simp [Res.bind, pure]; exact decode_encode8 _ (by omega)
 
+/-- `index = 0` before the legality loop. -/
+theorem legal_index_init (s : State) :
+    ExS Gen.prog s (.set 9 (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 0)))) .normal
+      { s with locals := s.locals.upd 9 (.int IntTy.u64 0) } :=
+  ExS.set (EvE_of_eval (n := 3) (by simp [evalExpr, evalCast, IntTy.u64, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+    Res.bind]))
+
 end Shogi.C.Proofs
