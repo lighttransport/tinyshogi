@@ -68,3 +68,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.same_king_ray_spec
 #print axioms Shogi.C.Proofs.ksRec_pinned
 #print axioms Shogi.C.Proofs.ksRec_valid
+#print axioms Shogi.C.Proofs.fastpath_unpinned

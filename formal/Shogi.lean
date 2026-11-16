@@ -44,6 +44,7 @@ import Shogi.C.Proofs.KS1
 import Shogi.C.Proofs.KS2
 import Shogi.C.Proofs.KS3
 import Shogi.C.Proofs.SameRay
+import Shogi.C.Proofs.FastPath
 import Shogi.Tests
 import Shogi.RuleTests
 import Shogi.Theorems
