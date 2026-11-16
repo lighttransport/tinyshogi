@@ -172,4 +172,110 @@ theorem sq_body {p : Position} {c : Color} {mb mo cb co cap : Nat} (hpm : posBlo
         fun x hx => hs2 x (by omega) (by omega) (by omega), by rw [hout]; simpa using hb, hf, by omega,
         Frame.refl _ _ _⟩
 
+theorem sqStep_spec {s : State} {fr : Nat} (hfr : fr < 81) (h6 : s.locals 6 = some (u8 fr)) :
+    ExS Gen.prog s sqStep .normal { s with locals := s.locals.upd 6 (u8 (fr + 1)) } := by
+  have c1 : evalCast ⟨32, true⟩ (u8 fr) = .ok (i32 (fr : Int)) := by
+    rw [i32_nat fr (by omega)]
+    simp [evalCast, u8, IntTy.u8, IntTy.toInt, IntTy.i32, IntTy.wrap, IntTy.modulus]; omega
+  have c2 : evalCast ⟨8, false⟩ (i32 ((fr : Int) + 1)) = .ok (u8 (fr + 1)) := by
+    rw [show ((fr : Int) + 1) = ((fr + 1 : Nat) : Int) by omega, i32_nat (fr + 1) (by omega)]
+    simp [evalCast, u8, IntTy.u8, IntTy.toInt, IntTy.i32, IntTy.wrap, IntTy.modulus,
+      show ¬ (2147483648 ≤ fr + 1) by omega]; omega
+  exact ExS.set (EvE.cast (EvE.bin (EvE.cast (EvE.var h6) c1) (EvE.const (.int ⟨32, true⟩ 1))
+    (add_i32 (fr : Int) 1 (by omega) (by omega) (by omega) (by omega) (by omega) (by omega))) c2)
+
+def boardOut (p : Position) (c : Color) (fr d : Nat) : List (List UInt8) := (List.range' fr d).flatMap (sqOut p c)
+
+theorem board_loop {p : Position} {c : Color} {mb mo cb co cap : Nat} (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
+    ∀ (d fr : Nat) (s : State) (L : List (List UInt8)) (n : Nat), fr + d = 81 →
+      Buf s.mem mb mo cb co cap L → Fresh s.mem n → n + 400 * d < 2 ^ 64 →
+      s.mem posBlock = some (encode p) → s.ro = false →
+      s.locals 0 = some posPtr → s.locals 1 = some (u32 c.idx) →
+      s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
+      s.locals 4 = some (.int IntTy.u64 cap) → s.locals 5 = some (i32 c.fwd) →
+      s.locals 6 = some (u8 fr) →
+      ∃ s' n', ExS Gen.prog s (.loop (sqBody c.fwd) sqStep) .normal s' ∧ s'.ro = false ∧
+        (∀ x, x ≤ 5 → s'.locals x = s.locals x) ∧
+        Buf s'.mem mb mo cb co cap (L ++ boardOut p c fr d) ∧ Fresh s'.mem n' ∧ n' ≤ n + 400 * d ∧
+        Frame s.mem s'.mem mb cb := by
+  intro d
+  induction d with
+  | zero =>
+    intro fr s L n hd hb hf _ _ hro _ _ _ _ _ _ a6
+    have : fr = 81 := by omega
+    subst this
+    refine ⟨s, n, ExS.loop_brk (ExS.ite (bc := false) (vc := boolVal false) (EvE_of_eval (n := 4) ?_) rfl ExS.brk),
+      hro, fun _ _ => rfl, by simpa [boardOut] using hb, hf, by omega, Frame.refl _ _ _⟩
+    simp [sqCond, evalExpr, a6, evalCast, evalBin, isPtr, evalBinInt, binInt, intOf, u8, IntTy.u8, IntTy.toInt,
+      IntTy.modulus, Res.bind]
+  | succ d ih =>
+    intro fr s L n hd hb hf h64 hm hro a0 a1 a2 a3 a4 a5 a6
+    have hfr : fr < 81 := by omega
+    obtain ⟨s1, o, n1, e1, ho, hro1, hl1, hb1, hf1, hn1, hfr1⟩ := sq_body (p := p) (c := c) hpm hpc fr hfr s L n
+      hb hf (Nat.lt_of_le_of_lt (by omega) h64) hm hro a0 a1 a2 a3 a4 a5 a6
+    let s2 : State := { s1 with locals := s1.locals.upd 6 (u8 (fr + 1)) }
+    have es : ExS Gen.prog s1 sqStep .normal s2 := sqStep_spec hfr (by rw [hl1 6 (by omega)]; exact a6)
+    have hl2 : ∀ x, x ≤ 5 → s2.locals x = s.locals x := fun x hx => by
+      simp [s2, Locals.upd, show x ≠ 6 by omega]; exact hl1 x (by omega)
+    obtain ⟨s', n', e', hro', hl', hb', hf', hn', hfr'⟩ := ih (fr + 1) s2 _ n1 (by omega) hb1 hf1 (by omega)
+      (hfr1.pos hpm hpc hm) hro1
+      (by rw [hl2 0 (by omega)]; exact a0) (by rw [hl2 1 (by omega)]; exact a1)
+      (by rw [hl2 2 (by omega)]; exact a2) (by rw [hl2 3 (by omega)]; exact a3)
+      (by rw [hl2 4 (by omega)]; exact a4) (by rw [hl2 5 (by omega)]; exact a5) (by simp [s2, Locals.upd])
+    have hout : boardOut p c fr (d + 1) = sqOut p c fr ++ boardOut p c (fr + 1) d := by
+      simp [boardOut, List.range'_succ]
+    refine ⟨s', n', ExS.loop_next e1 ho es e', hro', fun x hx => by rw [hl' x hx, hl2 x hx], ?_, hf', by omega,
+      Frame.trans hfr1 hfr'⟩
+    rw [hout, ← List.append_assoc]; exact hb'
+
+/-- Bytes `generate_pseudo_for_color(position, color, ...)` appends. -/
+def pseudoC (p : Position) (c : Color) : List (List UInt8) := boardOut p c 0 81 ++ dropsC p c
+
+theorem generate_pseudo_spec {p : Position} {c : Color} {m : Mem} {mb mo cb co cap n : Nat}
+    {L : List (List UInt8)} (hbuf : Buf m mb mo cb co cap L) (hf : Fresh m n) (h64 : n + 40000 < 2 ^ 64)
+    (hm : m posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
+    ∃ s' n', ExS Gen.prog ⟨frameLocals Gen.generate_pseudo_for_color.params
+        [posPtr, u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+      Gen.generate_pseudo_for_color.body .normal s' ∧
+      Buf s'.mem mb mo cb co cap (L ++ pseudoC p c) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧ Frame m s'.mem mb cb := by
+  let s0 : State := ⟨frameLocals Gen.generate_pseudo_for_color.params
+    [posPtr, u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+  let s1 : State := { s0 with locals := s0.locals.upd 5 (i32 c.fwd) }
+  have e1 : ExS Gen.prog s0 (.set 5 (.cond (.bin .eq (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.var 1))
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 0)))) (.un .neg ⟨32, true⟩ (.const (.int ⟨32, true⟩ 1)))
+      (.const (.int ⟨32, true⟩ 1)))) .normal s1 := by
+    apply ExS.set; apply EvE_of_eval (n := 4)
+    have h1 : s0.locals 1 = some (u32 c.idx) := rfl
+    cases c <;> simp [evalExpr, h1, evalCast, evalBin, evalUn, isPtr, evalBinInt, binInt, intOf, u32, IntTy.u32,
+      IntTy.modulus, IntTy.toInt, Res.bind, truthy, boolVal, Color.idx, Color.fwd, i32, IntTy.wrap, arith,
+      IntTy.inRange, IntTy.i32] <;> decide
+  let s2 : State := { s1 with locals := s1.locals.upd 6 (u8 0) }
+  have e2 : ExS Gen.prog s1 (.set 6 (.cast ⟨8, false⟩ (.const (.int ⟨32, true⟩ 0)))) .normal s2 :=
+    ExS.set (EvE_of_eval (n := 3) (by simp [evalExpr, evalCast, IntTy.toInt, Res.bind, u8, IntTy.u8, IntTy.wrap,
+      IntTy.modulus]))
+  have hl2 : ∀ x, x ≤ 4 → s2.locals x = s0.locals x := fun x hx => by
+    simp [s2, s1, Locals.upd, show x ≠ 6 by omega, show x ≠ 5 by omega]
+  obtain ⟨s3, n3, e3, hro3, hl3, hb3, hf3, hn3, hfr3⟩ := board_loop (p := p) (c := c) hpm hpc 81 0 s2 L n rfl
+    hbuf hf (Nat.lt_of_le_of_lt (by omega) h64) hm rfl
+    (by rw [hl2 0 (by omega)]; rfl) (by rw [hl2 1 (by omega)]; rfl) (by rw [hl2 2 (by omega)]; rfl)
+    (by rw [hl2 3 (by omega)]; rfl) (by rw [hl2 4 (by omega)]; rfl) (by simp [s2, s1, Locals.upd])
+    (by simp [s2, Locals.upd])
+  obtain ⟨s4, o4, e4, ho4, hb4, hf4, hfr4⟩ := add_pseudo_drops_spec (p := p) (c := c) hb3 hf3
+    (Nat.lt_of_le_of_lt (by omega) h64) (hfr3.pos hpm hpc hm) hpm hpc
+  have hl3' : ∀ x, x ≤ 4 → s3.locals x = s0.locals x := fun x hx => by
+    rw [hl3 x (by omega), hl2 x hx]
+  have hargs : EvArgs Gen.prog s3 [(.var 0), (.var 1), (.var 2), (.var 3), (.var 4)]
+      [posPtr, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap] :=
+    EvArgs.cons (EvE.var (by rw [hl3' 0 (by omega)]; rfl)) (EvArgs.cons (EvE.var (by rw [hl3' 1 (by omega)]; rfl))
+      (EvArgs.cons (EvE.var (by rw [hl3' 2 (by omega)]; rfl)) (EvArgs.cons (EvE.var (by rw [hl3' 3 (by omega)]; rfl))
+      (EvArgs.cons (EvE.var (by rw [hl3' 4 (by omega)]; rfl)) EvArgs.nil))))
+  have hlen := rowsOut_length p c (actUpTo p c 7) (pawnUpTo p (Piece.code ⟨c, .pawn⟩) 81) 0 9
+  have hdl : (dropsC p c).length ≤ 567 := by
+    unfold dropsC; split
+    · simp
+    · omega
+  refine ⟨{ s3 with mem := s4.mem }, _, ExS.seq e1 (ExS.seq (ExS.seq e2 (by rw [loop2_eq c.fwd]; exact e3))
+    (ExS.call hargs rfl rfl (by rw [hro3]; exact e4) ho4)), ?_, hf4, by omega, Frame.trans hfr3 hfr4⟩
+  rw [pseudoC, ← List.append_assoc]; exact hb4
+
 end Shogi.C.Proofs
