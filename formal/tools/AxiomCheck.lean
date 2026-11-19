@@ -138,5 +138,7 @@ import Shogi
 #print axioms XorList.xorList_self
 #print axioms XorList.foldl_eq_xorList
 #print axioms Shogi.Position.zobrist
+#print axioms Shogi.Position.zobristBoard_eq_xor
+#print axioms Shogi.Position.zobrist_side_flip
 #print axioms MiniC.ExS_ext
 #print axioms MiniC.ExS_mem_ext
