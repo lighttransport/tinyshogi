@@ -135,3 +135,5 @@ import Shogi
 #print axioms Shogi.C.shogi_generate_legal_mut_correct
 #print axioms Shogi.C.encodeW_length
 #print axioms Shogi.C.encode_length
+#print axioms MiniC.ExS_ext
+#print axioms MiniC.ExS_mem_ext

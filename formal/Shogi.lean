@@ -1,3 +1,4 @@
+import MiniC.Extend
 import Shogi.Basic
 import Shogi.Position
 import Shogi.Sfen
