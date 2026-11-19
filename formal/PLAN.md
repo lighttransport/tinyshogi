@@ -1,8 +1,12 @@
 # tinyshogi `formal/` — plan for a Lean 4 formalization of the shogi rules
 
-Status (2026-11-19): R0 (commit the work in progress), R1 (unconditional
-legal-move theorem) and the first two pieces of R2 (`MiniC/Extend.lean`
-byte-level lemmas; `encodeW` in `Shogi/C/Model.lean`) are done. The spec (T1–T4), the Lean → C tables (T6), the
+Status (2026-11-20): R0, R1 and the MiniC half of R2 are done.
+`MiniC/Extend.lean` now proves the full mutual induction `ext_step` over
+all MiniC constructors plus `ExS_ext`/`ExS_mem_ext`, all axiom-clean.
+`encodeW` is defined in `Shogi/C/Model.lean`. The remaining R2 step is
+migrating the position-block proofs from `encode p` to `encodeW p w` with
+a block tail, then composing with the extension lemma to discharge
+`CopyGenSpec`. The spec (T1–T4), the Lean → C tables (T6), the
 attack/king layer (T7) and the whole legal-move generator (T8–T9: pseudo
 moves, king safety, probe make/unmake, legality loop, uchifuzume recursion
 via `RecSpec_discharge`, 7200-move bound) are proven against the MiniC model,
@@ -195,16 +199,15 @@ block model. Implemented as follows.
 
 ### R2 — Real `ShogiPosition` blocks (1–2 w) — the core of the remaining M6
 
-**Progress:** both foundations are in place. (1) `MiniC/Extend.lean` proves
-`MemExt` and the byte-level extension lemmas for `readBytes`, `writeBytes`,
-`load`, `store`, pointer arithmetic, `memcmp`, `strlen` and `alloc`'s counter.
-(2) `Shogi.C.encodeW p w` replaces the 12 implementation-only bytes with a
-symbolic word, with `encodeW_length` proved. **Remaining:** the mutual
-fuel-induction `ext_step` that lifts successful `evalExpr`/`evalArgs`/
-`execStmt` runs to extended memories. All expression, argument and statement
-constructors except `alloc`/`memcpy`/`memset` were proved in draft form; the
-three memory-writing constructors and the final `ExS` corollary still need
-work. The draft was reverted so the tree stays green.
+**Progress (2026-11-20):** the MiniC half is complete. `MiniC/Extend.lean`
+proves `MemExt`, all byte-level extension lemmas, the mutual fuel-induction
+`ext_step` covering every MiniC constructor (including `alloc`, `memcpy`,
+`memset`), and `ExS_ext`/`ExS_mem_ext` using fuel monotonicity. All are
+axiom-clean and imported by `Shogi.lean`. `Shogi.C.encodeW p w` replaces the
+12 implementation-only bytes with a symbolic word. **Remaining:** migrate
+the position-block proofs from `encode p` to `encodeW p w` (and a block
+tail), then lift each `ExS` proof with `ExS_mem_ext` and discharge
+`CopyGenSpec`.
 
 Goal: fid 35/36/38 theorems for any 41088-byte block whose live fields
 encode `p`, with any `move_number`/`hash`/history bytes. `CopyGenSpec` is
