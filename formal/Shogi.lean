@@ -65,3 +65,4 @@ import Shogi.RuleTests
 import Shogi.Theorems
 import Shogi.SfenTheorems
 import Shogi.C.Proofs.LegalMain
+import Shogi.C.Proofs.RecDischarge

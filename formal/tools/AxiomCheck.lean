@@ -120,6 +120,7 @@ import Shogi
 #print axioms Shogi.C.Proofs.recCharge_sum_eq
 #print axioms Shogi.C.Proofs.recCharge_sum_le_tight
 #print axioms Shogi.C.Proofs.sum_charge_le
+#print axioms Shogi.C.Proofs.RecSpec_discharge
 #print axioms Shogi.Game.init_wf
 #print axioms Shogi.Game.occurrences_spec
 #print axioms Shogi.Game.repetition_none_of_lt_four
