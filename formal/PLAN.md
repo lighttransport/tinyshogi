@@ -262,6 +262,12 @@ Design (two independent pieces):
 
 ### R3 — Remaining small refinements (3–5 d, parallel after R2)
 
+**Progress (2026-11-20):** fid 32 `same_move` is proven (`Shogi/C/Proofs/
+SameMove.lean`): the C copies both move blobs into fresh blocks and compares
+fields 0/1/3/4; the frame lemma shows unrelated blocks are unchanged.
+Axiom-clean. Remaining: fid 29/30 (pseudo wrappers, need a fid 28 wrapper
+first), fid 15/18 (geometric attacks), fid 48 (`validate_material`).
+
 Write these directly against `IsPos`.
 
 * fid 29/30 `shogi_generate_pseudo{,_for_color}`: the output is a
