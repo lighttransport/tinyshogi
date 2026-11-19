@@ -3,12 +3,14 @@ import Shogi.Position
 import Shogi.Sfen
 import Shogi.Usi
 import Shogi.Rules
+import Shogi.PlayInverse
 import Shogi.MoveCount
 import Shogi.Tables
 import Shogi.TablesSpec
 import Shogi.AttackSpec
 import Shogi.Declaration
 import Shogi.Game
+import Shogi.GameTheorems
 import Shogi.C.Gen
 import Shogi.C.Proofs.Helpers
 import Shogi.C.Proofs.Tables
