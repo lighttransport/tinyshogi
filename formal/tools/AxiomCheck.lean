@@ -135,5 +135,8 @@ import Shogi
 #print axioms Shogi.C.shogi_generate_legal_mut_correct
 #print axioms Shogi.C.encodeW_length
 #print axioms Shogi.C.encode_length
+#print axioms XorList.xorList_self
+#print axioms XorList.foldl_eq_xorList
+#print axioms Shogi.Position.zobrist
 #print axioms MiniC.ExS_ext
 #print axioms MiniC.ExS_mem_ext

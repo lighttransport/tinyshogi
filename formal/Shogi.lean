@@ -12,6 +12,7 @@ import Shogi.AttackSpec
 import Shogi.Declaration
 import Shogi.Game
 import Shogi.GameTheorems
+import Shogi.Zobrist
 import Shogi.C.Gen
 import Shogi.C.Proofs.Helpers
 import Shogi.C.Proofs.Tables
