@@ -6,7 +6,10 @@ all MiniC constructors plus `ExS_ext`/`ExS_mem_ext`, all axiom-clean.
 `encodeW` is defined in `Shogi/C/Model.lean`. The remaining R2 step is
 migrating the position-block proofs from `encode p` to `encodeW p w` with
 a block tail, then composing with the extension lemma to discharge
-`CopyGenSpec`. The spec (T1–T4), the Lean → C tables (T6), the
+`CopyGenSpec`. R4a (spec Zobrist hash) is done. Note: making the 12 bytes an
+implicit parameter of `encode` itself was tried and reverted — the proofs
+use `simp [encode]` extensively, so the parametrisation must be threaded
+through theorem statements instead (a wide refactor). The spec (T1–T4), the Lean → C tables (T6), the
 attack/king layer (T7) and the whole legal-move generator (T8–T9: pseudo
 moves, king safety, probe make/unmake, legality loop, uchifuzume recursion
 via `RecSpec_discharge`, 7200-move bound) are proven against the MiniC model,
@@ -272,6 +275,11 @@ Write these directly against `IsPos`.
   checks (pin down the exact C predicate first).
 
 ### R4 — Hash and full-state abstraction (M7a, 1 w)
+
+**Progress (2026-11-20):** `Shogi/Zobrist.lean` defines `Keys`, `Position.zobrist`
+and the `XorList` lemmas; all axiom-clean. **Remaining:** the incremental
+hash lemma for a move (`zobrist (p.play m) = zobrist p ^^^ delta`), the
+C-global bridge, and `FullRel`.
 
 * `Shogi/Zobrist.lean` (spec): `Keys` (board 81×32, hand 2×7×19, side), and
   `zobrist K p` mirroring `position_hash` (hand count clamped at 18, side key
