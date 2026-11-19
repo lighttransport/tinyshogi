@@ -1,42 +1,418 @@
 # tinyshogi `formal/` — plan for a Lean 4 formalization of the shogi rules
 
-Status (2026-11-15): T0–T6 and T11 done, T7 layer 1 proven. T7 layer 2 to T10
-are translated and differentially tested through their MiniC models; their
-symbolic proofs are the main remaining work. See "Progress" below and the
-status table in `README.md`. This file answers the brief in `plan.md`, which is
-kept out of the tree.
+Status (2026-11-19 review): the spec (T1–T4), the Lean → C tables (T6), the
+attack/king layer (T7) and the whole legal-move generator (T8–T9: pseudo
+moves, king safety, probe make/unmake, legality loop, uchifuzume recursion
+via `RecSpec_discharge`, 7200-move bound) are proven against the MiniC model,
+axiom-clean. **Two structural gaps remain before any of it reaches the C
+objects the engine actually uses** (findings F2 and F4 below), and
+make/unmake, hashing, repetition, declaration and the game result (old
+T9/T10, "M7") have spec-level scaffolding only. The remaining work is
+re-planned as R0–R9 below. The original design (§1–§8) is kept at the end
+for reference; where it conflicts with the sections above it, the sections
+above win.
 
-## Progress against this plan
+---
 
-| Item | State | Notes / deviations |
+## 0. Snapshot (2026-11-19)
+
+Health check run during the review (working tree = detached `5750e18` plus
+uncommitted work, see F1):
+
+| Check | Result |
+|---|---|
+| `lake build` | green, 79 jobs (incremental) |
+| `./tools/axiomcheck.sh` | `axiomcheck: ok` (three standard axioms) |
+| `python3 tools/c2lean.py --check` | exit 0 (`Gen.lean` matches `src/shogi.c`) |
+| `python3 tools/cdiff.py --n 200 --walks 5 --games 20 --mini 5` | 0 mismatches |
+| `c2lean_report.py` | 60/72 functions translate; `FUNCTIONS` imports 52 (fid 0–51) |
+
+Not re-measured: clean `lake build` wall time, `make test`, full-size cdiff.
+
+### Proven C refinements, per translated function (fid in `Gen.lean`)
+
+| fid | Function | State |
 |---|---|---|
-| T0 scaffold, CI, axiom policy | done | `.github/workflows/formal.yml`; `tools/axiomcheck.sh` (no `sorry`/`native_decide`/`bv_decide`, three standard axioms) |
-| T1 SFEN/USI | done | `Sfen.parse_print`, `parse_print_reachable`, `Usi.parse_print`. The spec copies the C's tolerances (dead pieces accepted, `0P` = one pawn, `strtoul` signs). `cdiff` confirms agreement on 30k+ inputs |
-| T2 rules spec | done | `legalMoves_iff` (fuel-free legality incl. recursive uchifuzume), `legalAux_stable` (pawn-measure budget is adequate), king safety, no king/self capture, forced promotion, drop rules |
-| T3 invariants | done (proofs) | `reachable_inv` (shape, no dead pieces), `reachable_kings`, `reachable_material(Ok)`. make/unmake round trip: four-way tested, not proved |
-| T4 perft | done | Kernel: perft 1 (≈10 s) and one fixture per rule (5–25 s). perft 2–5 compiled, as anticipated in §7.3 |
-| T5 MiniC/translator | done for the rules core | E1–E3, E5, E7, E8 and E10 as planned. E4 is extended with "after-init" globals (Zobrist keys, dumped after `shogi_init`). E6 (aggregates) is realised in the **translator** (callee copy, hidden result pointer, `memcpy`) rather than as a MiniC value form, which keeps the trusted semantics smaller. E9 (`strcmp`) is not needed yet. Also added: calls hoisted out of expressions (A-normal form), and fuel monotonicity (`MiniC.Fuel`). 60/72 functions translate |
-| T6 Lean → C tables | done | R2 landed: `src/shogi_tables.h` generated; `*_refine` prove equality with the Lean tables; `probes_uncapped`. perft 5 unchanged (1.198 → 1.185 s median), NPS within noise |
-| T7 helpers / attacks | **done** (except `shogi_piece_attacks_square`) | 17 helper refinements for every input. Symbolic refinements for every position: `find_king`, `step_square_attacked`, `square_attacked` (= `Position.attacked`, via the target-centred `attacked_eq`), `shogi_is_in_check` (= `Position.inCheck`) |
-| T8–T10 | translated, tested | MiniC model of the C legal generator, make-move (incl. 64-bit hash) and make/unmake round trips agree with compiled C and the spec. **Remaining: symbolic refinement proofs** (loop invariants over symbolic board bytes) |
-| T11 differential testing | done | Adds python-shogi `--oracle`. Found a python-shogi 1.1.1 pawn-drop-mate bug (pinned capturer); kept as a kernel-checked fixture |
-| T12 shared package | not started | The fork has diverged (A-normal form, E5/E7/E8, `Fuel.lean`). Upstream candidates for tinygltf: the `collect_enums` crash, the `for`-init scoping bug, and the vendored `Hoare.lean` namespace issue |
+| 0–14 | piece/square helpers, `hand_index`, `piece_letter` | proven, every input |
+| 15 | `step_piece_attacks` | translated; no theorem (only used by fid 18) |
+| 16, 17, 19, 21 | `step_square_attacked`, `square_attacked`, `find_king`, `shogi_is_in_check` | proven, every position |
+| 18 | `shogi_piece_attacks_square` | **tested only** |
+| 20, 31 | `same_king_ray`, `king_safety_prepare` | proven |
+| 22–28 | `add_*`, `generate_pseudo_for_color`, `generate_pseudo` | proven (permutation of `pseudoMoves`) |
+| 29, 30 | `shogi_generate_pseudo{,_for_color}` (public) | **no theorem** |
+| 32 | `same_move` | **no theorem** (used by `shogi_parse_and_make_move`) |
+| 33, 34 | `make_legal_probe`, `unmake_legal_probe` | proven, round trip |
+| 35 | `generate_legal_mut_internal` | proven (`generate_legal_refines`), **114-byte block only** (F2) |
+| 36 | `shogi_generate_legal_mut` | proven **conditionally**: `hrec` hypothesis, 114-byte block, output pinned to block 2 (F2, F4, F6) |
+| 37 | `shogi_position_copy_active` | proven, full 41088-byte blocks |
+| 38 | `shogi_generate_legal` | proven **under `CopyGenSpec`** (F2, F3) |
+| 39–47 | `position_hash`, `reset_history`, make/undo/unmake (+ `_fast`), `shogi_search_null_move` | **tested only** (four-way cdiff) |
+| 48–51 | `validate_material`, `declaration_points`, `shogi_is_declaration_win`, `shogi_repetition_result` | **tested only** |
+| — | `shogi_game_result{,_with_moves,_with_moves_mut}`, `square_from_text/_chars`, `shogi_parse_and_make_move` | translate, but **not in `FUNCTIONS`** |
+| — | SFEN/USI parse/print, `shogi_init`, `splitmix64`, printing | rejected by c2lean (libc, atomics); spec + cdiff only |
 
-C changes so far: `src/shogi.c` reads the generated tables, and one probe is
-read through a `const` pointer (`step_square_attacked`). No other C changes.
+Spec-level results: `legalMoves_iff`, `legalAux_stable`, `reachable_inv`,
+`reachable_kings`, `reachable_material(Ok)`, `Sfen.parse_print(_reachable)`,
+`Usi.parse_print`, `pseudoMoves_le_7200`, `unplay_pseudo` (spec make/unmake
+round trip), `Game.init_wf`/`play_wf`/`occurrences_spec`/
+`repetition_none_of_lt_four`, perft 1 in the kernel.
 
-### Remaining work, in order
+---
 
-1. (done: `find_king`, `step_square_attacked`, `square_attacked`, `shogi_is_in_check`)
-2. Generators: `add_step`/`add_slide`/`add_pseudo_drops` write `pseudoMoves`
-   (as an ordered list) into the move buffer.
-3. Legality: `king_safety_prepare` gives sound pins (`shortcut_sound`);
-   `generate_legal_mut_internal` refines `legalMoves`, reusing the
-   pawn-drop measure for the recursion.
-4. make/unmake: board, hand and side refinement; hash parametric in the
-   Zobrist bytes; repetition under `NoCollision`.
-5. Speed up the MiniC interpreter's memory (lists → arrays) so the
-   differential runs can use more positions.
+## 1. Review findings (2026-11-19)
+
+**F1 — The current proofs are not committed.** HEAD is detached at
+`5750e18`. 56 tracked files are modified (the `posBlock` generalisation, the
+`rem` budget threading) and four theorem files are untracked:
+`Shogi/C/Proofs/EntryPoints.lean`, `Shogi/C/Proofs/RecDischarge.lean`,
+`Shogi/GameTheorems.lean`, `Shogi/PlayInverse.lean`. `formal-plan`
+(`32fc17c`) has two commits on top of `5750e18` (`67b9294`, `32fc17c`). They
+hold the abandoned "flat RB constant" scheme that the working tree replaced.
+There are 10 stashes from those experiments. The untracked root `resume.md`
+is out of date (it says `RecSpec` is open) and contains an absolute
+home-machine path, so it must never be committed.
+
+**F2 — Every position-block theorem assumes a 114-byte block whose
+`move_number` and `hash` are zero.** `encode p` (`Shogi/C/Model.lean`) is the
+114-byte `ShogiPosition` prefix, with zeros at offsets 100–111 (`move_number`
+at 100, `hash` at 104). Every C-side theorem takes `m posBlock = some
+(encode p)`. A real `ShogiPosition` has 41088 bytes and, in general, a
+non-zero hash and move number. As a result, the fid 35/36 theorems **do not
+yet apply to any position the engine builds**. `CopyGenSpec` (fid 38) is the
+visible symptom of this gap, and the README's "verified end to end" claim
+for fid 36 overstates the result. This gap is the main open item: R2.
+
+**F3 — The `CopyGenSpec` budget is inconsistent with the generator's
+contract.** It assumes `n + 10^9 < 2^64`, but `generate_legal_refines` needs
+`n + 401·rem < 2^64` with `rem ≥ recDelta = 10^13`. The hypothesis has to be
+restated when it is discharged, not just proved as written.
+
+**F4 — No unconditional capstone theorem exists.** `RecSpec_discharge` is
+proven but is not yet composed with `shogi_generate_legal_mut_spec`, so fid 36
+still takes `hrec`. Results are stated for `legalAux (fuel+1) p`, not
+`legalMoves p`. The side conditions (`Shaped`, `KingsUnique`,
+`hand < 256`, `inCheck side.opp = false`, the budget) are not derived from
+`Reachable p` anywhere. There is no lemma
+`Reachable p → p.inCheck p.side.opp = false`.
+
+**F5 — Frame conditions are dropped.** `generate_legal_main` exports "every
+other pre-existing block is unchanged", but `generate_legal_refines` and fid 36
+discard it (`_` in the `obtain`). Every caller (fid 38, the game result)
+needs it.
+
+**F6 — The fid 36 output buffer is pinned** to block `movesBlock = 2`,
+offset 0, a harness constant. `generate_legal_refines` already allows any
+`mb`/`mo`.
+
+**F7 — The docs are out of date.** The README "Findings" section still says
+`SHOGI_MAX_MOVES = 600` and that `h600` is open, and its T8 row says the 600-move cut "is not
+yet shown never to trigger". Both are fixed by M5. The line numbers in Appendix A §1.1
+refer to a 1539-line `shogi.c`; it now has 1480 lines.
+`fast_check_bookkeeping` is now `_Thread_local`. The T3 row lists make/unmake
+as "todo".
+
+**F8 — M7 has no C-side foundation yet.** There is no Lean Zobrist
+function, no abstraction for the history arrays, and no relation between a
+full 41088-byte block and `Game`. `encodeFull`/`decodeFull` are test-harness
+helpers only.
+
+**F9 — `tools/AxiomCheck.lean` is a hand-maintained list.** A new theorem
+that is left out of it is not checked, and the list already has duplicates.
+
+**F10 — Clean-build cost is unmeasured.** `Geom.lean` alone takes about
+5 minutes, and CI has a 60-minute budget. R2/R4/R5 add proofs over
+41088-byte blocks, so those proofs must never evaluate a full block (see the
+risks).
+
+---
+
+## 2. Remaining work (re-designed 2026-11-19)
+
+Order and dependencies:
+
+```
+R0 ─► R1 ─► R2 ─┬─► R4 ─► R5 ─► R6 ─► R7
+                └─► R3 (parallel with R4–R6)
+R8: decided (tested only); R9: optional, independent
+```
+
+Estimates are focused engineer-days (d) or weeks (w), ±50 % for proofs.
+
+### R0 — Commit the work in progress (0.5 d) — prerequisite
+
+1. Create a branch from the current HEAD and commit the working tree in
+   logical commits, each of which builds on its own:
+   (a) `posBlock`/`rem` generalisation across `Shogi/C/Proofs`,
+   (b) `RecDischarge.lean` (M4), (c) `EntryPoints.lean` (fid 36/37/38),
+   (d) `PlayInverse.lean`, (e) `GameTheorems.lean`, (f) `AxiomCheck`, README
+   and PLAN.
+2. Tag `formal-plan`'s `67b9294`/`32fc17c` as `formal-plan-rb-attempt`,
+   then point `formal-plan` at the new commits. Because they descend from
+   `5750e18`, the branch stays a fast-forward of `origin/formal-plan`.
+   Export the 10 stashes as patches to the ignored
+   `formal/scratch/stashes/`.
+3. Do not commit `resume.md`. Refresh it outside the tree or delete it.
+4. Exit: `git status` is clean under `formal/`; the R7 verification baseline
+   is green on the tip. Nothing is pushed without the `AGENTS.md` audit and
+   fresh authorization.
+
+### R1 — Unconditional legal-move theorem on the current model (1–2 d)
+
+Small and independent of R2. It removes `hrec` from the headline statement
+and fixes the statement shape before R2 changes the block model.
+
+* Spec: `reachable_opp_not_in_check : Reachable p → p.inCheck p.side.opp =
+  false` (start position by `decide`, step by `legalMoves_safe`).
+* Spec: bundle `RulesInv p := Shaped ∧ KingsUnique ∧ materialOk ∧
+  inCheck side.opp = false`, with `reachable_rulesInv`
+  (`reachable_inv`, `reachable_kingsUnique`, `reachable_materialOk`, the
+  lemma above). `hand < 256` follows from `hand_lt_256_of_materialOk`.
+* Re-export the frame from `generate_legal_refines` (F5). Generalise fid 36
+  to any output block/offset (F6).
+* `shogi_generate_legal_mut_correct`: `RulesInv p`, the block hypotheses and
+  a simple budget (`n < 2^63`) imply that the output is a permutation of
+  `(legalMoves p).map (moveBytes p)`, the return value is its length, the
+  position block is unchanged, every other block is framed, and the
+  allocator stays bounded. Choose `fuel := p.pawnsInHands + 1` (so
+  `legalAux (fuel+1) = legalMoves` by definition of `legalFuel`) and
+  `rem := recBigEnough + pawnsInHands·recDelta` (≤ 1.18·10^15 ≤ 200·recDelta
+  since pawns ≤ 18). Discharge `hrec` with `RecSpec_discharge` on
+  `p.play mv` (`pawnsInHands_play_drop`, `play_materialOk`,
+  `play_kingCount_le`).
+* Optional (T2 promised it): `legalMoves_nodup`, so the permutation is also
+  a set equality.
+* Exit: the theorem has no `hrec`/`RecSpec`/`CopyGenSpec` hypothesis and is
+  listed in the axiom check.
+
+### R2 — Real `ShogiPosition` blocks (1–2 w) — the core of the remaining M6
+
+Goal: fid 35/36/38 theorems for any 41088-byte block whose live fields
+encode `p`, with any `move_number`/`hash`/history bytes. `CopyGenSpec` is
+deleted.
+
+Design (two independent pieces):
+
+1. **Block-extension simulation (MiniC, proved, not trusted).** Add
+   `MiniC/Extend.lean`. Relation `MemExt m m' := ∀ x, (m x = none ∧ m' x =
+   none) ∨ ∃ B T, m x = some B ∧ m' x = some (B ++ T)`. Theorem by fuel
+   induction, following the pattern of `MiniC/Fuel.lean`: a successful
+   `evalExpr`/`evalArgs`/`execStmt`/`callFunc` on `m` runs the same way on
+   `m'` (same outcome and locals), and the resulting memories are again
+   `MemExt`. Each primitive is monotone under extension: bounds checks in
+   `readBytes`/`writeBytes`/`ptrAdd`/`ptrAddN`/`memcpy`/`memset`/`memcmpAt`
+   only get easier; `strlenFrom` finds the same NUL; `alloc` reads the
+   counter from the prefix of block 0 and creates identical fresh blocks. A
+   success on the short block therefore lifts to the long block, and the
+   tail `T` is never inspected. Corollary `ExS_ext`.
+2. **The 12 bytes the generator ignores (`move_number`, `hash`).** These
+   are inside the 114-byte prefix, so extension does not cover them.
+   Decision: **parametrise the encoding** as `encodeW p w := (encode p).take
+   100 ++ w ++ (encode p).drop 112` with `w.length = 12`, so `encode p =
+   encodeW p zeros`. Only four proof files unfold `encode` directly
+   (`AddSlide`, `AddStep`, `FindKing`, `PlaySpec`); the others use about 150
+   `encode p` mentions through lemmas. Migration:
+   (i) add accessor lemmas (`encodeW_board`, `_hand`, `_side`, `_king`,
+   `_length`) and make the four files use only these;
+   (ii) generalise statements bottom-up (Helpers → FindKing/StepAttack/
+   SquareAttack/InCheck → Add*/Pseudo* → PlaySpec/Probe*/Unmake → KS* →
+   Legal* → RecDischarge → EntryPoints) with `{w} (hw : w.length = 12)`;
+   the probe results become `encodeW (p.play m) w` with the same `w`;
+   (iii) restate `RecSpec` with `w`.
+   Rejected alternatives: a simulation over arbitrary "don't-care" bytes
+   (not provable without a separate non-access proof); putting
+   `p.moveNumber` into `encode` (the probe does not bump the move number, so
+   `encode (p.play m)` would be wrong).
+3. **Predicate** `IsPos m b p := ∃ w T, w.length = 12 ∧ m b = some (encodeW p
+   w ++ T)`. The restated fid 35/36 theorems take `IsPos` (with
+   `(encodeW p w ++ T).length = 41088` where needed) and restore the block
+   exactly.
+4. **fid 38.** Drop the `100..111` conjuncts from `FieldsOK`, derive `IsPos
+   work p` from `shogi_position_copy_active_spec`, apply R2.3 and the R1
+   capstone, and restate the budget (F3). Result:
+   `shogi_generate_legal_correct` (source block untouched, frame kept).
+* Exit: R1's capstone restated on `IsPos` for fid 36 and fid 38;
+  `CopyGenSpec` and the 114-byte-only statements are removed or demoted to
+  internal lemmas; README no longer overclaims.
+
+### R3 — Remaining small refinements (3–5 d, parallel after R2)
+
+Write these directly against `IsPos`.
+
+* fid 29/30 `shogi_generate_pseudo{,_for_color}`: the output is a
+  permutation of the spec pseudo moves for the requested colour (add a spec
+  `pseudoMovesFor c` if needed). `pseudoMoves_le_7200` gives "no truncation"
+  for `cap ≥ 7200`; otherwise the count is `min`.
+* fid 15 + 18 `step_piece_attacks`, `shogi_piece_attacks_square`: equal to
+  the spec's from-centred geometric attack.
+* fid 32 `same_move`: byte equality of the 5 fields.
+* fid 48 `validate_material`: equal to `materialOk` plus whatever else the C
+  checks (pin down the exact C predicate first).
+
+### R4 — Hash and full-state abstraction (M7a, 1 w)
+
+* `Shogi/Zobrist.lean` (spec): `Keys` (board 81×32, hand 2×7×19, side), and
+  `zobrist K p` mirroring `position_hash` (hand count clamped at 18, side key
+  only for white). Incremental lemma: for `m ∈ p.pseudoMoves` with
+  `materialOk`, `zobrist K (p.play m) = zobrist K p ^^^ delta K p m`
+  (the clamp never triggers, because hands are ≤ 18).
+* `ZobristIn M K`: the after-init global blocks hold the bytes of `K`.
+  The proofs are **parametric in `K`**; the key values are never proved.
+* `FullRel M b K g`: block `b` is `IsPos` for `g.pos` with `w = le32
+  moveNumber ++ le64 (zobrist K g.pos)`; `history_length =
+  g.history.length ≤ 4096`; `history[i] = zobrist K eᵢ.key`; mover byte
+  (`none` ↦ `HISTORY_MOVER_NONE`) and check byte per entry; king squares
+  coherent. State it through `readBytes` facts at field offsets, never as a
+  41088-element list.
+* fid 39 `position_hash_refines`, fid 40 `reset_history_refines` (from a
+  block with the live fields of `p`, the result satisfies `FullRel` for
+  `Game.init p`).
+
+### R5 — make / unmake (M7b, 2 w)
+
+* fid 41 `shogi_make_move_internal`: for `m ∈ g.pos.legalMoves`, `FullRel g →
+  FullRel g'` where `Game.play g m = some g'`, and the function returns
+  true. Reuse the `PlaySpec` byte-edit lemmas, R4's incremental hash, and
+  `shogi_is_in_check_refines` on the new block (needs R2). Also prove that
+  the post-update `!shogi_can_promote` exit is unreachable. Optionally,
+  characterise C acceptance for pseudo-legal moves (the C does not check
+  king safety).
+* fid 42 wrapper; fid 43/44 `make_move_undo{,_internal}` and fid 46
+  `shogi_unmake_move`: the undo round trip restores the live state (the
+  `activeState` relation cdiff already uses), linked to the spec `unplay`.
+* fid 45 `_fast`, covered with the flag both on and off (decision): the
+  thread-local flag is modelled as a read-only global. With the flag `true`,
+  the result is the same `FullRel` as fid 41. With `false`, the check bytes
+  are 0; this refines a spec variant `Game.playNoCheck` in which the
+  perpetual-check rule collapses to a draw. That variant is documented as a
+  throughput mode, not a rules claim. The game-level capstone in R6 is
+  stated for both flag values.
+* fid 47 `shogi_search_null_move`: side/hash/history effect.
+
+### R6 — Repetition, declaration, game result (M7c, 1–1.5 w)
+
+* `NoCollision K g := ∀ e ∈ g.history, zobrist K e.key = zobrist K
+  g.pos.key → e.key = g.pos.key` (the other direction is automatic).
+* fid 51 `shogi_repetition_result`: under `FullRel` and `NoCollision`,
+  the return value and `*result` are exactly `Game.repetition g`.
+* fid 49/50: `declaration_points`/`shogi_is_declaration_win` =
+  `Declaration.declarationPoints`/`declarationWin`.
+* Append `shogi_game_result_with_moves`, `_with_moves_mut` and
+  `shogi_game_result` to the **end** of `c2lean.py` `FUNCTIONS` (existing fid
+  numbers stay stable), regenerate, and `--check`.
+* Game result = `Game.result g` (capacity ≥ 7200; `shogi_game_result` uses
+  `SHOGI_MAX_MOVES` = 7200 through fid 38 from R2).
+* Capstone: for any legal move sequence from `reset_history` on a position
+  `p`, the C block after the `shogi_make_move` chain is `FullRel` of the spec
+  game, and `shogi_game_result` = `Game.result`, under `NoCollision`. The
+  same holds for the `_fast` chain (with the undo records discarded) with
+  bookkeeping on; with bookkeeping off, it holds against
+  `Game.playNoCheck`/`Game.result`.
+
+### R7 — Statement audit, axiom check, docs (M8; 2 d at the end, plus per milestone)
+
+* `Shogi/C/Main.lean`: the headline end-to-end theorems with minimal,
+  readable hypotheses (`Reachable`/`RulesInv`, `IsPos`/`FullRel`, budget,
+  `NoCollision`), imported last.
+* Generate the axiom check instead of listing names: a meta script that
+  walks every theorem in `Shogi.*`/`MiniC.*` and fails on any other axiom
+  (F9). It is run by `lake env lean` and does not enter the trust base.
+* README/PLAN: a per-fid status table (proven / conditional / tested only /
+  excluded), fix the F7 items, trust-base notes (E5 never frees blocks; the
+  `_Thread_local` flag is modelled as a read-only global; `NoCollision` and
+  the key values are assumptions).
+* Measure the clean `lake build` time and record it in the README (F10).
+* Pre-push audit per `AGENTS.md` (credentials/personal paths, build
+  artefacts, binaries, then explicit authorization).
+
+### R8 — Text I/O: tested only (decided)
+
+SFEN/USI C functions are rejected by c2lean (`__ctype_b_loc`, `strtok_r`,
+`strcmp`, `snprintf`, pointer arithmetic). Decision: they stay covered by the
+spec theorems (`Sfen.parse_print`, `Usi.parse_print`) and the cdiff SFEN/USI
+runs only. They are listed as "tested only" in the trust base. Not pursued:
+MiniC E9 (grows the trusted semantics) and a libc-free C rewrite.
+
+### R9 — Infrastructure (optional)
+
+MiniC memory as arrays (faster cdiff); T12 shared `minic` package with
+tinygltf; CI cache keyed without `scratch/`; a toolchain bump together with
+tinygltf; a scratch-cleanup policy (`formal/scratch/` has about 450 ignored
+files).
+
+---
+
+## 3. Verification baseline
+
+After every proof change, in `formal/`:
+
+```sh
+lake build
+./tools/axiomcheck.sh
+python3 tools/c2lean.py --check          # note: running c2lean.py without --check rewrites Gen.lean
+lake exe gentables | diff -u ../src/shogi_tables.h -
+python3 tools/cdiff.py --n 500
+git diff --check
+```
+
+If `src/shogi.[ch]` or `src/shogi_tables.h` change, also run `make test`
+and the `web/` checks (`npm test`, `npm run test:wasm`, `npm run build`),
+because the web build compiles the same C. Before any push: the
+`AGENTS.md` pre-push audit and fresh authorization.
+
+---
+
+## 4. Risks and open questions (updated)
+
+1. **R2 churn.** About 25 proof files take `encode p`. Mitigation: switch to
+   accessor lemmas first (no statement change), then generalise bottom-up;
+   keep each step building.
+2. **Proof-time blow-up on 41088-byte blocks.** Never `rfl`/`decide` on a
+   full block. Keep tails symbolic (`B ++ T`), use `readBytes` facts at field
+   offsets, and track per-file elaboration time against the 60-minute CI
+   budget.
+3. **Allocation budget.** The `rem`/`recDelta` scheme must be threaded
+   through R5/R6 (`shogi_is_in_check` allocates). Fix a single budget
+   convention in `Main.lean`.
+4. **`NoCollision` cannot be discharged** for the dumped key values in
+   general. It stays a hypothesis; optionally it can be checked for a
+   concrete history window.
+5. **fid stability.** Append new `FUNCTIONS` entries at the end only.
+6. Open (from the original plan, still open): the exact reading of the
+   perpetual-check cycle (Appendix A §7.2) and the declaration variant (Appendix A §7.7).
+
+Decisions (user, 2026-11-19):
+* R0: commit the work in progress on `formal-plan`, keep the two
+  experimental commits under the tag `formal-plan-rb-attempt`, and export
+  the stashes as patches to `formal/scratch/stashes/`. The stashes
+  themselves are kept until the user asks to drop them.
+* R2: the `encodeW` parametrisation is accepted.
+* R8: text I/O stays spec + cdiff only (option a).
+* R5: the game-level theorem also covers `_fast`, with check bookkeeping
+  both on and off.
+
+---
+
+## 5. History of milestones M4–M6 (condensed)
+
+* **M4 (done, 2026-11-19)** — `RecSpec_discharge` (`RecDischarge.lean`):
+  strong induction on `pawnsInHands` with a decreasing allocation budget
+  (`RecSpec fuel rem q`, recursive call at `rem - recDelta`, `recDelta =
+  10^13`, ceiling `200·recDelta`, global bounds `401·rem`). The ceiling was
+  raised from `100·recDelta` because `recBigEnough = 100·recDelta` had made
+  the discharge vacuous for `pawnsInHands > 0`.
+* **M5 (done)** — `SHOGI_MAX_MOVES = 7200`, `pseudoMoves_le_7200`; `h600`
+  is gone.
+* **M6 (partial)** — fid 37 proven; fid 36 conditional; fid 38 under
+  `CopyGenSpec`. Completed by R1 + R2.
+
+---
+
+## Appendix A — original design (2026-11-15)
+
+*Historical. Superseded by §0–§4 where they conflict. Known stale facts:
+line numbers in §1.1 refer to a 1539-line `shogi.c` (now 1480);
+`SHOGI_MAX_MOVES` is 7200, not 600; `fast_check_bookkeeping` is
+`_Thread_local`; T8–T10 in §5 are re-planned as R1–R6.*
 
 The goal is a Lean 4 project under `formal/` that
 
@@ -53,12 +429,12 @@ no `native_decide`, no `bv_decide`, and only the three standard axioms
 
 ---
 
-## 1. Phase 0 findings
+### 1. Phase 0 findings
 
 Prior art: local tinygltf checkout, branch `release` @ `97789b3`, `formal/`
 (Lean `v4.35.0`, MiniC `GlTF/C/Semantics.lean` 620 lines, `tools/c2lean.py` 737 lines).
 
-### 1.1 The rules core
+#### 1.1 The rules core
 
 All of it is in **`src/shogi.c` (1539 lines) + `src/shogi.h` (157 lines)**. Nothing
 else is needed to define legality. `search.c`, `eval.c`, `nnue.c`, `simd.c`, the
@@ -119,7 +495,7 @@ Things in the C that the proofs must take into account (none of them is a known 
 * Repetition compares 64-bit Zobrist keys, not positions. The refinement theorem
   therefore carries a **no-collision hypothesis** over the history window (§3, T9).
 
-### 1.2 `c2lean.py` on unmodified `src/shogi.c`
+#### 1.2 `c2lean.py` on unmodified `src/shogi.c`
 
 `c2lean.py` hard-codes `tiny_gltf_v3.c` and stops at the first error. A throwaway
 driver (not committed) pointed it at `shogi.c` and translated **each of the 67
@@ -155,7 +531,7 @@ grouped:
 The hidden rows were found by reading the code; they will surface once G1–G5 are fixed.
 The rejection list is regenerated as part of T5 (`c2lean.py --report`).
 
-### 1.3 What MiniC cannot model, and what to do about it
+#### 1.3 What MiniC cannot model, and what to do about it
 
 | Construct | Where | Decision |
 |---|---|---|
@@ -168,7 +544,7 @@ The rejection list is regenerated as part of T5 (`c2lean.py --report`).
 | `printf`, `toupper`, `shogi_print_position` | display | excluded |
 | Unions, function pointers, `volatile`, SIMD | — | **none in `shogi.c`** |
 
-### 1.4 Existing fixtures to reuse
+#### 1.4 Existing fixtures to reuse
 
 * `tests/test_rules.c` (324 lines): perft 30 / 900 / 25470 from the start position.
   Per-rule SFENs for SFEN round-trip with `1R1r` hand normalisation, promotion,
@@ -187,7 +563,7 @@ and `cdiff` corpora.
 
 ---
 
-## 2. Vendor, share, or fork the tinygltf pipeline?
+### 2. Vendor, share, or fork the tinygltf pipeline?
 
 **Decision: vendor a fork into `formal/MiniC/` and `formal/tools/`, with attribution,
 and plan to extract a shared package later.**
@@ -207,7 +583,7 @@ and plan to extract a shared package later.**
   `Gen.lean` must still match. Any change to an extension that is generic (G1, G2,
   G4, G5, G11, the enum crash) is upstreamed to tinygltf as a separate PR.
 
-### MiniC extensions and how each is validated
+#### MiniC extensions and how each is validated
 
 Each extension gets (a) **negative controls** in `Tests.lean`: kernel-checked
 `decide` examples showing that the UB cases evaluate to `.ub`, following tinygltf's
@@ -233,7 +609,7 @@ stays in the trusted base (§6).
 
 ---
 
-## 3. Directory layout, build, and CI
+### 3. Directory layout, build, and CI
 
 ```
 formal/
@@ -307,9 +683,9 @@ The `.lake` cache is keyed on `lake-manifest.json` plus the toolchain.
 
 ---
 
-## 4. Lean → C: design and first target
+### 4. Lean → C: design and first target
 
-### Design (translation validation)
+#### Design (translation validation)
 
 1. **Source.** `Shogi/Tables.lean` defines the component in a **first-order Lean
    subset**: `Nat`/`UIntN` arithmetic, `if`, bounded `for` written as structural
@@ -332,7 +708,7 @@ The `.lake` cache is keyed on `lake-manifest.json` plus the toolchain.
    and `ray_correct : rays sq d = the squares reached by stepping d until the edge`.
    With these, the C attack functions in T7 only need table lookups.
 
-### First target: attack tables (`step_attack_probes`, `attack_rays`, `attack_ray_length`, `attack_ray_masks`)
+#### First target: attack tables (`step_attack_probes`, `attack_rays`, `attack_ray_length`, `attack_ray_masks`)
 
 Why tables first:
 
@@ -349,7 +725,7 @@ Why tables first:
 The second target, after T11, is `add_pseudo_drops` (nifu and dead-drop masks plus
 `ctz`). It is a real function with loops, so it exercises the function-form path.
 
-### Comparison
+#### Comparison
 
 | Option | Verified? | Adds to the trust base |
 |---|---|---|
@@ -360,18 +736,18 @@ The second target, after T11, is `add_pseudo_drops` (nifu and dead-drop masks pl
 
 ---
 
-## 5. Milestones
+### 5. Milestones
 
 The effort is in focused engineer-weeks (w), assuming someone who knows Lean;
 proof-heavy work has ±50 %. Each milestone ends with `lake build` green, no `sorry`,
 and a `README.md` status row.
 
-### T0 — scaffold (0.5 w)
+#### T0 — scaffold (0.5 w)
 Scope: `formal/` Lake project, vendored MiniC unchanged (renamed namespace), c2lean
 config with the 6 functions that already pass, CI job, `AxiomCheck`.
 Exit: CI green, and `Gen.lean` contains `shogi_piece`, `row_of`, `col_of`, `square_at`.
 
-### T1 — spec core and SFEN/USI (2 w)
+#### T1 — spec core and SFEN/USI (2 w)
 ```lean
 inductive Color | black | white
 inductive PieceType | pawn | lance | knight | silver | gold | bishop | rook | king
@@ -392,7 +768,7 @@ theorem usi_roundtrip : Usi.parse (Usi.print m) = some m
 Exit: every SFEN in `tests/test_rules.c` and in `fuzz/corpus` parses (or is rejected)
 exactly as the C does, checked by `decide` in `Tests.lean`.
 
-### T2 — pseudo moves, attacks, legality (3 w)
+#### T2 — pseudo moves, attacks, legality (3 w)
 ```lean
 def attacks (p : Position) (from to : Square) : Bool     -- geometric, needs empty path for sliders
 def attacked (p : Position) (sq : Square) (by : Color) : Bool
@@ -417,7 +793,7 @@ per drop of a checking pawn. This is the main design risk (§7).
 Exit: soundness and completeness proven. Fixtures for pin, discovered check, nifu,
 dead drop, forced promotion and uchifuzume are checked by `decide`.
 
-### T3 — invariants and make/unmake (2 w)
+#### T3 — invariants and make/unmake (2 w)
 ```lean
 inductive Reachable : Position → Prop | start : Reachable start | step : Reachable p → m ∈ legalMoves p → Reachable (apply p m)
 def WF (p : Position) : Prop   -- 40 pieces (board + hands, unpromoted counts 18/4/4/4/4/2/2/2), ≤ 1 king per side, no dead pieces, ≤ 1 unpromoted pawn per file per side
@@ -428,7 +804,7 @@ theorem kings_exact : Reachable p → ∀ c, kingCount p c = 1
 Exit: proven. `WF` also matches the C function `validate_material`
 (`theorem validate_material_iff` at the spec level).
 
-### T4 — perft and kernel-speed measurement (1 w)
+#### T4 — perft and kernel-speed measurement (1 w)
 ```lean
 theorem perft1 : perft start 1 = 30  := by decide
 theorem perft2 : perft start 2 = 900 := by decide
@@ -439,7 +815,7 @@ about 10 minutes, it moves to `cdiff` (Lean compiled `#eval`, which is allowed
 because it is a test and not a proof), together with depth 4 = 719731. Also
 measures `decide` on the table equality from §4 (≈ 15 KB).
 
-### T5 — MiniC extensions and translator (3 w)
+#### T5 — MiniC extensions and translator (3 w)
 Scope: E1–E10, the `collect_enums` crash fix, a config-driven `c2lean.py` with
 `--report` (the rejection list in §1.2), and translator unit tests.
 Negative controls go into `Tests.lean`.
@@ -457,7 +833,7 @@ USI parse/print. Excluded: `shogi_init` (atomics), `shogi_print_position`,
 after: `tests/test_rules` perft 1–4 is unchanged, `bench/` NPS changes by at most 1 %
 (median of 5 runs), and `make test` passes. The numbers go in the PR.
 
-### T6 — abstraction function and table refinement (1.5 w)
+#### T6 — abstraction function and table refinement (1.5 w)
 ```lean
 def Abs.position (m : MiniC.Mem) (ptr : MiniC.Ptr) : Option Shogi.Position   -- decode board/hand/side bytes
 def Abs.Inv (m : MiniC.Mem) (ptr : MiniC.Ptr) : Prop   -- WF + king_square cache coherent + history_length ≤ 4096
@@ -465,7 +841,7 @@ theorem tables_refine : MiniC.globalsOf GenTables.prog = Tables.encode Tables.in
 theorem probe_sound_complete, ray_correct                                                -- tables ↔ spec
 ```
 
-### T7 — bit helpers and attacks (2 w)
+#### T7 — bit helpers and attacks (2 w)
 ```lean
 theorem piece_type_correct  : ∀ b, runs Gen.shogi_piece_type [b] = .ok (decodeType b)
 theorem step_square_attacked_refines :
@@ -477,7 +853,7 @@ theorem king_safety_prepare_refines : … pinned[s] = true ↔ Pinned (abs m p) 
 All theorems have the tinygltf shape: no UB, terminates, the result equals the spec,
 and the frame is "writes nothing" (or only the out-parameter).
 
-### T8 — per-piece generators and pseudo generation (3 w)
+#### T8 — per-piece generators and pseudo generation (3 w)
 ```lean
 theorem add_step_refines / add_slide_refines / add_pseudo_drops_refines :
   writes exactly `encodeMoves (spec list)` at moves[count..], count' = count + len, nothing else
@@ -485,7 +861,7 @@ theorem generate_pseudo_refines : … moves[0..n) = encodeMoves (pseudoMoves (ab
 theorem pseudo_piece_field : m ∈ pseudo → m.piece = board[m.from]        -- makes unmake_legal_probe correct
 ```
 
-### T9 — make/unmake, legality filter, repetition (4 w)
+#### T9 — make/unmake, legality filter, repetition (4 w)
 ```lean
 theorem make_legal_probe_refines   : Abs (probe-state) = apply (abs m p) mv   (board/hand/side/king only)
 theorem unmake_legal_probe_restores : unmake ∘ make = id on the bytes it touched
@@ -500,12 +876,12 @@ theorem repetition_refines :
 The recursive uchifuzume call is proven by strong induction on `pawnsInHands`,
 reusing the T2 measure. The fuel bound is derived from it.
 
-### T10 — `_fast` make/unmake and game result (1.5 w)
+#### T10 — `_fast` make/unmake and game result (1.5 w)
 `shogi_make_move_undo_fast` and `shogi_unmake_move` round-trip;
 `shogi_game_result_with_moves{,_mut}` = `Game.result` (repetition → declaration → mate).
 Declaration is proven against `Shogi/Declaration.lean`, which is an optional module.
 
-### T11 — differential testing at full scale (1.5 w; starts in T5 and grows)
+#### T11 — differential testing at full scale (1.5 w; starts in T5 and grows)
 `tools/cdiff.py` runs four ways:
 
 1. compiled `src/shogi.c` + `cdiff_c.c` under `-fsanitize=address,undefined`;
@@ -524,7 +900,7 @@ compiled spec. Known oracle differences, if any (for example how python-shogi
 treats sennichite and declaration), are listed and excluded explicitly rather than
 silenced.
 
-### T12 — shared MiniC package (1 w, optional)
+#### T12 — shared MiniC package (1 w, optional)
 Extract `minic` as its own package, switch both tinyshogi and tinygltf to it, and
 check that tinygltf's `Gen.lean` is byte-identical.
 
@@ -533,7 +909,7 @@ and T5 + T6 deliver the first Lean → C artifact.
 
 ---
 
-## 6. Trust base
+### 6. Trust base
 
 * **The Lean 4 kernel** (`v4.35.0`) and the three standard axioms.
 * **The MiniC semantics** (`formal/MiniC/Semantics.lean`, vendored from tinygltf
@@ -556,7 +932,7 @@ and T5 + T6 deliver the first Lean → C artifact.
 
 ---
 
-## 7. Risks and open questions
+### 7. Risks and open questions
 
 1. **Uchifuzume proof cost.** `IsLegal` needs "the opponent has no legal reply",
    which recurses into legality. The measure `pawnsInHands` is sound because a
@@ -596,7 +972,7 @@ and T5 + T6 deliver the first Lean → C artifact.
 
 ---
 
-## 8. Out of scope (this effort)
+### 8. Out of scope (this effort)
 
 Search (`search.c`, PUCT, brute), evaluation and NNUE, int models, SIMD, the A64FX
 assembly, threading, the GPU/CUDA/ROCm back ends, WASM/web glue, the USI front end
@@ -606,7 +982,7 @@ implements, and any proof that reaches compiled machine code.
 
 ---
 
-### Appendix: references
+#### Appendix: references
 
 * tinygltf `formal/` (prior art, MIT) — `release` @ `97789b3`.
 * Arthur742Ramos/chess-lean — reachable-position invariant by induction and perft
@@ -614,33 +990,3 @@ implements, and any proof that reaches compiled machine code.
 * dwrensha/Chess.lean, elanroth/PuzzleProof — forced-mate theorems (future tsume work).
 * Wesselink et al., *Formal Verification of Minimax Algorithms*, arXiv 2509.20138 (future search work).
 * No earlier Lean/Coq/Isabelle formalization of shogi was found.
-
----
-
-## Continued work (post-`c37d829`, branch `formal-plan`)
-
-### M4 — Discharge `RecSpec` (strong induction on `pawnsInHands`)
-
-Scaffolding in place (Frame/Fresh exports, `checkingPawnDrops_le_one`).
-Remaining: strong induction on `pawnsInHands` using `generate_legal_main`.
-
-### M5 — 600 → 7200-move bound (done, verified)
-
-`SHOGI_MAX_MOVES = 7200`, `Gen.lean` regenerated with `shogi_position_copy_active`
-(fid 37) and `shogi_generate_legal` (fid 38). `pseudoMoves_le_7200` proved
-(`Shogi/MoveCount.lean`); `h600` no longer needed as a hypothesis of
-`generate_legal_main`. Build green (75 jobs), axiom check OK, `c2lean --check`,
-`cdiff` 0 mismatches.
-
-### M6 — Public entry points (translation half done; proof open)
-
-Translations of `shogi_position_copy_active` and `shogi_generate_legal`
-landed in `Gen.lean` (fid 37, 38) and `--check` passes. Remaining proof work:
-wrapper and copy-active bridge.
-
-### Other remaining
-
-- Discharge `RecSpec` via strong induction (M4c).
-- Wrapper and copy-active bridge proofs (M6 proof half).
-- make/unmake with hash and history, repetition (M7).
-- Docs refresh + pre-push audit (M8).
