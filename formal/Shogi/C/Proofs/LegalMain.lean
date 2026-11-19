@@ -170,15 +170,17 @@ theorem generate_legal_refines {p : Position} {fuel : Nat} {m : Mem} {n mb mo ca
       ⟨frameLocals Gen.generate_legal_mut_internal.params [posPtr' posBlock, .ptr mb mo, .int IntTy.u64 cap, .int IntTy.u8 1],
         m, false⟩ Gen.generate_legal_mut_internal.body (.ret (some (.int ⟨64, false⟩ K.length))) s' ∧
       Buf s'.mem mb mo cb 0 cap K ∧ s'.mem posBlock = some (encode p) ∧
+      (∀ x, x ≠ 0 → x ≠ mb → x < n → x ≠ posBlock → m x ≠ none → s'.mem x = m x) ∧
       ∃ f, Fresh s'.mem f ∧ f ≤ n + rem := by
-  obtain ⟨Ms, hperm, s', cb, e, hb, hp, _, f, hf, hflimit⟩ :=
+  obtain ⟨Ms, hperm, s', cb, e, hb, hp, hframe, f, hf, hflimit⟩ :=
     generate_legal_main (fuel := fuel) hS hK hw rem hrec hm ht hf hnc h64 hglobal hrembig hremub hmb hlen hmb0 hcap hpm hmbt
   have hk : (keepBytes p fuel Ms).length ≤ cap := by
     have : (keepBytes p fuel Ms).length ≤ Ms.length := List.length_filterMap_le _ _
     have := hperm.length_eq
     have := pseudoMoves_le_7200 p
     omega
-  refine ⟨keepBytes p fuel Ms, keepBytes_perm p fuel hperm, s', cb, ?_, hb, hp, ⟨f, hf, hflimit⟩⟩
+  refine ⟨keepBytes p fuel Ms, keepBytes_perm p fuel hperm, s', cb, ?_, hb, hp, hframe,
+    ⟨f, hf, hflimit⟩⟩
   rwa [Nat.min_eq_left hk] at e
 
 end Shogi.C.Proofs

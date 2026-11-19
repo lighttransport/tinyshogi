@@ -128,23 +128,24 @@ theorem shogi_generate_legal_mut_spec (p : Position) (hS : p.Shaped) (hK : Kings
     (rem : Nat)
     (hrec : ∀ mv ∈ p.pseudoMoves, Position.isPawnDrop mv →
       (p.play mv).inCheck (p.play mv).side → RecSpec (posBlock := posBlock) fuel (rem - recDelta) (p.play mv))
-    {m : Mem} {n cap : Nat} {blk : Block}
+    {m : Mem} {n cap mb mo : Nat} {blk : Block}
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (hf : Fresh m n)
     (hnc : p.inCheck p.side.opp = false)
     (h64 : n + rem + 2000000 < 2 ^ 64)
     (hglobal : n + 401 * rem < 2 ^ 64)
     (hrembig : recDelta ≤ rem) (hremub : rem ≤ 200 * recDelta)
-    (hmb : m movesBlock = some blk) (hlen : cap * 5 ≤ blk.length) (hmb0 : movesBlock ≠ 0)
-    (hcap : cap < 2 ^ 64) (hpm : posBlock ≠ movesBlock) (hmbt : movesBlock < 8192 ∨ 8196 < movesBlock)
+    (hmb : m mb = some blk) (hlen : mo + 5 * cap ≤ blk.length) (hmb0 : mb ≠ 0)
+    (hcap : cap < 2 ^ 64) (hpm : posBlock ≠ mb) (hmbt : mb < 8192 ∨ 8196 < mb)
     (hcap7200 : 7200 ≤ cap) :
     ∃ K : List (List UInt8), K.Perm ((Position.legalAux (fuel + 1) p).map (moveBytes p)) ∧ ∃ s' cb,
       ExS Gen.prog ⟨frameLocals Gen.shogi_generate_legal_mut.params
-          [posPtr' posBlock, .ptr movesBlock 0, .int IntTy.u64 cap], m, false⟩
+          [posPtr' posBlock, .ptr mb mo, .int IntTy.u64 cap], m, false⟩
         Gen.shogi_generate_legal_mut.body (.ret (some (.int ⟨64, false⟩ K.length))) s' ∧
-      Buf s'.mem movesBlock 0 cb 0 cap K ∧ s'.mem posBlock = some (encode p) ∧
+      Buf s'.mem mb mo cb 0 cap K ∧ s'.mem posBlock = some (encode p) ∧
+      (∀ x, x ≠ 0 → x ≠ mb → x < n → x ≠ posBlock → m x ≠ none → s'.mem x = m x) ∧
       ∃ f, Fresh s'.mem f ∧ f ≤ n + rem := by
   let s0 : State := ⟨frameLocals Gen.shogi_generate_legal_mut.params
-    [posPtr' posBlock, .ptr movesBlock 0, .int IntTy.u64 cap], m, false⟩
+    [posPtr' posBlock, .ptr mb mo, .int IntTy.u64 cap], m, false⟩
   -- argument guard: neither pointer is null, so the early return is not taken
   have hguard : EvE Gen.prog s0 (.lor (.bin .eq none (.var 0) (.const .null))
       (.bin .eq none (.var 1) (.const .null))) (boolVal false) := by
@@ -160,14 +161,14 @@ theorem shogi_generate_legal_mut_spec (p : Position) (hS : p.Shaped) (hK : Kings
     rfl
   have hargs : EvArgs Gen.prog s0 [(.var 0), (.var 1), (.var 2),
       (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩) (.const (.int ⟨32, true⟩ 1)) (.const (.int ⟨32, true⟩ 0))))]
-      [(.ptr posBlock 0), (.ptr movesBlock 0), (.int IntTy.u64 cap), (.int IntTy.u8 1)] :=
+      [(.ptr posBlock 0), (.ptr mb mo), (.int IntTy.u64 cap), (.int IntTy.u8 1)] :=
     EvArgs.cons (EvE.var rfl)
       (EvArgs.cons (EvE.var rfl)
         (EvArgs.cons (EvE.var rfl)
           (EvArgs.cons hne EvArgs.nil)))
-  obtain ⟨K, hperm, s', cb, e, hb, hp, f, hf, hfl⟩ :=
-    generate_legal_refines (fuel := fuel) (mb := movesBlock) (mo := 0) (cap := cap)
-      hS hK hw hcap7200 rem hrec hm ht hf hnc h64 hglobal hrembig hremub hmb (by omega) hmb0 hcap hpm hmbt
+  obtain ⟨K, hperm, s', cb, e, hb, hp, hframe, f, hf, hfl⟩ :=
+    generate_legal_refines (fuel := fuel) (mb := mb) (mo := mo) (cap := cap)
+      hS hK hw hcap7200 rem hrec hm ht hf hnc h64 hglobal hrembig hremub hmb hlen hmb0 hcap hpm hmbt
   have e1 : ExS Gen.prog s0
       (.call (some 3) Gen.fid_generate_legal_mut_internal
         [(.var 0), (.var 1), (.var 2),
@@ -182,7 +183,7 @@ theorem shogi_generate_legal_mut_spec (p : Position) (hS : p.Shaped) (hK : Kings
       { s0 with mem := s'.mem, locals := s0.locals.upd 3 (.int IntTy.u64 K.length) } :=
     ExS.ret (EvE.var rfl)
   refine ⟨K, hperm, { s0 with mem := s'.mem, locals := s0.locals.upd 3 (.int IntTy.u64 K.length) }, cb,
-    ?_, hb, hp, f, hf, hfl⟩
+    ?_, hb, hp, hframe, f, hf, hfl⟩
   · refine ExS.seq e0 (ExS.seq e1 e2)
 
 /-- A `memcpy` from `[src, soff+k)` into `[dst, off+k)`. -/

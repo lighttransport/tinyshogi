@@ -554,5 +554,17 @@ theorem reachable_materialOk {p : Position} (h : Reachable p) : p.materialOk = t
   intro i _
   simp [reachable_material h i]
 
+/-- **No side to move is in check.** A legal move always leaves the mover's
+    king safe; the side to move after the move is the opponent. This is the
+    `hnc` hypothesis of the C generator refinement. -/
+theorem reachable_opp_not_in_check {p : Position} (h : Reachable p) :
+    p.inCheck p.side.opp = false := by
+  induction h with
+  | start => decide
+  | step hr hm ih =>
+      rename_i p0 m0
+      have hsafe : (p0.play m0).inCheck p0.side = false := legalMoves_safe hm
+      cases p0.side <;> simpa [play] using hsafe
+
 end Position
 end Shogi
