@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Pseudo1
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def swCond (k : Nat) : Expr :=

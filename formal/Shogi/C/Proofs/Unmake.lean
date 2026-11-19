@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Probe9
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def um0 : Stmt := (.seq (.alloc 2 5) (.memcpy (.var 2) (.field (.var 1) 0) (.const (.int ⟨64, false⟩ 5))))
@@ -25,7 +26,7 @@ theorem enc_congr {pa1 pa2 : Square → Option Piece} {h1 h2 : Color → Fin 7 �
   rw [e1, e2, e3, hb, hw]
 
 section handx
-variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some posPtr)
+variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some (posPtr' posBlock))
   (hmp : s.mem posBlock = some P) {c : Color} (hl3 : s.locals 3 = some (.int IntTy.u32 c.idx))
   {e : Expr} {i : Nat} (hi : i < 7) (he : EvE Gen.prog s e (.int IntTy.u8 i))
 
@@ -37,7 +38,7 @@ theorem st_hand_e {ev : Expr} {v : Nat} (hv : EvE Gen.prog s ev (.int IntTy.u8 v
   have hptr : EvE Gen.prog s (.index (.index (.field (.var 0) 81) (.var 3) 7) e 1)
       (.ptr posBlock (81 + 7 * c.idx + i)) := by
     refine EvE.index (pb := .ptr posBlock (0 + 81 + c.idx * 7))
-      (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr, hmp, hP]))
+      (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr', hmp, hP]))
         (EvE.var hl3) (by simp [IntTy.u32, ptrAddN, hmp, hP]; omega)) he ?_
     simp [IntTy.u8, ptrAddN, hmp, hP]
     rw [if_pos (by omega)]; congr 2; omega
@@ -56,9 +57,9 @@ theorem um_pre {M : Mem} {ub n : Nat} {pa h sd kb kw} {c : Color} {kbc : UInt8} 
     (hMV : (U.drop 0).take 5 = MV) (hc : (U.drop 8).take 4 = le32 c.idx) (hk : U.getD 14 0 = kbc)
     (hf : Fresh M n) (h64 : n + 1 < 2 ^ 64) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
     ∃ s, (∀ {rest o s'}, ExS Gen.prog s rest o s' →
-        ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr, .ptr ub 0], M, false⟩
+        ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr' posBlock, .ptr ub 0], M, false⟩
         (.seq um0 (.seq um1 (.seq um2 (.seq um3 rest)))) o s') ∧
-      s.locals 0 = some posPtr ∧ s.locals 1 = some (.ptr ub 0) ∧ s.locals 2 = some (.ptr n 0) ∧
+      s.locals 0 = some (posPtr' posBlock) ∧ s.locals 1 = some (.ptr ub 0) ∧ s.locals 2 = some (.ptr n 0) ∧
       s.locals 3 = some (.int IntTy.u32 c.idx) ∧ s.ro = false ∧
       s.mem posBlock = some (enc pa h c (setKb c kbc kb kw).1 (setKb c kbc kb kw).2) ∧
       s.mem n = some MV ∧ s.mem ub = some U ∧ Fresh s.mem (n + 1) ∧
@@ -68,7 +69,7 @@ theorem um_pre {M : Mem} {ub n : Nat} {pa h sd kb kw} {c : Color} {kbc : UInt8} 
   have hn0 := hf.2.1
   let P := enc pa h sd kb kw
   have hP : P.length = 114 := enc_length _ _ _ _ _
-  let s0 : State := ⟨frameLocals Gen.unmake_legal_probe.params [posPtr, .ptr ub 0], M, false⟩
+  let s0 : State := ⟨frameLocals Gen.unmake_legal_probe.params [posPtr' posBlock, .ptr ub 0], M, false⟩
   let m1 := (M.upd 0 (encodeLE 8 (n + 1))).upd n (List.replicate 5 0)
   let s1 : State := { s0 with mem := m1, locals := s0.locals.upd 2 (.ptr n 0) }
   have ea : ExS Gen.prog s0 (.alloc 2 5) .normal s1 := exec_alloc (s := s0) (hf.allocAt (by omega)) 2 5
@@ -87,7 +88,7 @@ theorem um_pre {M : Mem} {ub n : Nat} {pa h sd kb kw} {c : Color} {kbc : UInt8} 
     show (m1.write n 0 MV) n = _; rw [write_some hm1n]; simp [wrb, hMVl]
   have hm2 : ∀ x, x ≠ n → m2 x = m1 x := fun x hx => Mem.write_ne hx
   have hm2u : m2 ub = some U := by rw [hm2 _ (Ne.symm hnu), hm1 _ hub0 (Ne.symm hnu)]; exact hub
-  have hm2p : m2 posBlock = some P := by rw [hm2 _ (Ne.symm hnp), hm1 _ (by decide) (Ne.symm hnp)]; exact hp
+  have hm2p : m2 posBlock = some P := by rw [hm2 _ (Ne.symm hnp), hm1 _ (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)) (Ne.symm hnp)]; exact hp
   let t2 : State := { s1 with mem := m2 }
   -- um1 : color
   have hc2 : c.idx < 2 := by cases c <;> decide
@@ -100,7 +101,7 @@ theorem um_pre {M : Mem} {ub n : Nat} {pa h sd kb kw} {c : Color} {kbc : UInt8} 
     rw [if_pos (by omega), hc]
     simp only [Res.bind_eq, Res.bind_ok, pure]
     rw [decode_le32 c.idx (by omega)]; rfl
-  have l0 : t3.locals 0 = some posPtr := by simp [t3, t2, s1, s0, Locals.upd]; rfl
+  have l0 : t3.locals 0 = some (posPtr' posBlock) := by simp [t3, t2, s1, s0, Locals.upd]; rfl
   have l3 : t3.locals 3 = some (.int IntTy.u32 c.idx) := by simp [t3, Locals.upd]
   -- um2 : side
   have e2 := store_int_field (s := t3) (o := 0) (b := posBlock) (j := 0) (t := ⟨32, false⟩) (i := 96)
@@ -133,7 +134,7 @@ theorem um_pre {M : Mem} {ub n : Nat} {pa h sd kb kw} {c : Color} {kbc : UInt8} 
     by show m4 n = _; rw [hm4o n hnp]; exact hm2n, by show m4 ub = _; rw [hm4o ub (Ne.symm hpu)]; exact hm2u, ?_, ?_⟩
   · have hpb : posBlock < n := Nat.lt_of_not_le (fun hc => by have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
     have hf2 : Fresh m2 (n + 1) := (hf.after_alloc _).write hn0
-    exact hf2.congr (by show m4 0 = _; rw [hm4o 0 (by decide)]) (fun x hx => by
+    exact hf2.congr (by show m4 0 = _; rw [hm4o 0 (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm]) (fun x hx => by
       show m4 x = _; rw [hm4o x (by omega)])
   · intro x a b d; show m4 x = _; rw [hm4o x d, hm2 x b, hm1 x a b]
 
@@ -177,7 +178,7 @@ theorem unmake_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mo
     {M : Mem} {ub n : Nat} {U : List UInt8}
     (hp : M posBlock = some (encode (p.play mv))) (hub : M ub = some U) (hR : UndoRec p mv U)
     (hf : Fresh M n) (h64 : n + 1 < 2 ^ 64) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
-    ∃ s', ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr, .ptr ub 0], M, false⟩
+    ∃ s', ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr' posBlock, .ptr ub 0], M, false⟩
         Gen.unmake_legal_probe.body .normal s' ∧
       s'.mem posBlock = some (encode p) ∧
       (∀ x, x ≠ 0 → x ≠ n → x ≠ posBlock → s'.mem x = M x) ∧ Fresh s'.mem (n + 1) := by
@@ -298,7 +299,7 @@ theorem unmake_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mo
     refine ⟨t4, e1 (ExS.seq e4 e5), hm4p, ?_, ?_⟩
     · intro x a b c; rw [hm4o x c]; show m3 x = _; rw [hm3o x c, ho1 x a b c]
     · have hpb : posBlock < n := Nat.lt_of_not_le (fun hc => by have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
-      exact hf1.congr (by rw [hm4o 0 (by decide)]; show m3 0 = _; rw [hm3o 0 (by decide)])
+      exact hf1.congr (by rw [hm4o 0 (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm]; show m3 0 = _; rw [hm3o 0 (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm])
         (fun x hx => by rw [hm4o x (by omega)]; show m3 x = _; rw [hm3o x (by omega)])
   | drop t d =>
     obtain ⟨i, hi, hh, hd0⟩ := pseudo_drop hm
@@ -359,7 +360,7 @@ theorem unmake_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv : Mo
         · rw [if_neg e, if_neg e]
     · intro x a b c; show (m2.write posBlock _ _) x = _; rw [Mem.write_ne c, hm2o x c, ho1 x a b c]
     · have hpb : posBlock < n := Nat.lt_of_not_le (fun hc => by have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
-      exact hf1.congr (by show (m2.write posBlock _ _) 0 = _; rw [Mem.write_ne (by decide), hm2o 0 (by decide)])
+      exact hf1.congr (by show (m2.write posBlock _ _) 0 = _; rw [Mem.write_ne (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm, hm2o 0 (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm])
         (fun x hx => by show (m2.write posBlock _ _) x = _; rw [Mem.write_ne (by omega), hm2o x (by omega)])
 
 /-- Probe then unprobe: the position block is `encode (p.play mv)` in between
@@ -369,9 +370,9 @@ theorem probe_roundtrip (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     (hp : M posBlock = some (encode p)) (hmv : M mvb = some (moveBytes p mv)) (hub : M ub = some UB)
     (hUB : UB.length = 20) (hf : Fresh M n) (h64 : n + 2 < 2 ^ 64)
     (hmvb0 : mvb ≠ 0) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
-    ∃ s1 s2, ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], M, false⟩
+    ∃ s1 s2, ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr' posBlock, .ptr mvb 0, .ptr ub 0], M, false⟩
         Gen.make_legal_probe.body .normal s1 ∧ s1.mem posBlock = some (encode (p.play mv)) ∧
-      ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr, .ptr ub 0], s1.mem, false⟩
+      ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr' posBlock, .ptr ub 0], s1.mem, false⟩
         Gen.unmake_legal_probe.body .normal s2 ∧ s2.mem posBlock = some (encode p) := by
   obtain ⟨s1, e1, hp1, _, _, ⟨U, hU, hR⟩, hf1⟩ := make_probe_spec p hS hK mv hm hp hmv hub hUB hf (by omega)
     hmvb0 hub0 hpu

@@ -6,26 +6,28 @@
 import Shogi.C.Proofs.LegalProbe
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co cap : Nat} {PB : List UInt8}
-    {L : List (List UInt8)} (hS : p.Shaped) (hK : KingsUnique p) (hm : m ∈ p.pseudoMoves) (fuel : Nat)
-    (hrec : Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec fuel (p.play m))
-    (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
+    {L : List (List UInt8)} (hS : p.Shaped) (hK : KingsUnique p) (hm : m ∈ p.pseudoMoves) (fuel rem : Nat)
+    (hrec : Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec (posBlock := posBlock) fuel (rem - recDelta) (p.play m))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
     (hl3 : s.locals 3 = some (.int IntTy.u8 1))
     (hl4 : s.locals 4 = some (.ptr pb 0)) (hl6 : s.locals 6 = some (.ptr cb co))
     (hl7 : s.locals 7 = some (.int IntTy.u32 p.side.idx))
     (hl8 : s.locals 8 = some (.ptr Sb 0)) (hl9 : s.locals 9 = some (.int IntTy.u64 i))
     (hpos : s.mem posBlock = some (encode p)) (hpb : s.mem pb = some PB) (hi : 5 * i + 5 ≤ PB.length)
     (hmv : (PB.drop (5 * i)).take 5 = moveBytes p m) (hSb : s.mem Sb = some (ksRec p p.side))
-    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 4000000200 < 2 ^ 64)
+    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n)
+    (hnc : p.inCheck p.side.opp = false) (h64 : n + rem + 2000000 < 2 ^ 64) (hglobalp : (n + 6) + 401 * (rem - recDelta) < 2 ^ 64) (hrembig : recDelta ≤ rem) (hremub : rem ≤ 200 * recDelta)
     (hro : s.ro = false) (hpb0 : pb ≠ 0) (hS0 : Sb ≠ 0) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb)
     (hslow : needsProbeC (ksRec p p.side) p m = true ∨ Position.isPawnDrop m = true) :
     ∃ s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel m then [moveBytes p m] else [])) ∧
       s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
-      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f ≤ n + 1000000030 := by
+      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f ≤ n + recCharge (rem - recDelta + 30) p m := by
   have hnpb : n ≠ pb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpb; cases hpb
   have hnS : n ≠ Sb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hSb; cases hSb
   have hnp' : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hpos; cases hpos
@@ -38,7 +40,7 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
   have hMl : (moveBytes p m).length = 5 := by cases m <;> rfl
   have hm1n : m1 n = some (moveBytes p m) := by
     simp only [m1]; rw [write_some Mem.upd_eq]; simp [wrb, hMl]
-  have hP0 : posBlock ≠ 0 := by decide
+  have hP0 : posBlock ≠ 0 := posBlock_ne_zero hf.1 hpos
   obtain ⟨s2, e1, hm2, hro2, l11, hl2'⟩ := np_spec (s := s1) hm (by simp [s1, Locals.upd]; exact hl0)
     (by simp [s1, Locals.upd]; exact hl8) (by show m1 Sb = _; rw [hm1o Sb hS0 (Ne.symm hnS)]; exact hSb)
     (by simp [s1, Locals.upd]) hm1n (by show m1 posBlock = _; rw [hm1o _ hP0 (Ne.symm hnp')]; exact hpos)
@@ -91,11 +93,11 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
         intro e; exact hnb.1 (by rw [e])) (by intro e; exact hnb.2 (by rw [e])) (by decide) hpm hpc
     obtain ⟨f1, f2, f3⟩ := fin s' hr' hl' hf'
     obtain ⟨ff, hff, hffb⟩ := hfr'
-    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, ff, hff, by omega⟩
+    refine ⟨s', hpre e', ?_, hp', f1, f2, f3, ff, hff, by rw [show recCharge (rem - recDelta + 30) p m = 7 by simp [recCharge, hpd]] at *; omega⟩
     have hk : specKeep p fuel m = !(p.play m).inCheck p.side := by simp [specKeep, hpd]
     rw [hk]; cases h : (p.play m).inCheck p.side <;> simp [h] at hb' ⊢ <;> exact hb'
   · -- a pawn drop: the probe path with the uchifuzume recursion
-    obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path_drop p hS hK m hm hpd fuel (hrec hpd) hI hn3 hf3 (by omega) hf.2.1 l3
+    obtain ⟨s', e', hb', hp', hr', hl', hf', hfr'⟩ := probe_path_drop p hS hK m hm hpd fuel rem (hrec hpd) hI hn3 hf3 (by omega) hglobalp (by omega) hremub hf.2.1 l3
       l11' (by rw [l17, hpd]; rfl) (by intro e; exact hnb.1 (by rw [e])) (by intro e; exact hnb.2 (by rw [e])) rfl hpm hpc
     obtain ⟨f1, f2, f3⟩ := fin s' hr' hl' hf'
     refine ⟨s', hpre e', hb', hp', f1, f2, f3, by obtain ⟨f, hf1, hf2⟩ := hfr'; exact ⟨f, hf1, by omega⟩⟩
@@ -104,22 +106,23 @@ theorem iter_slow {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
     when the spec's `legalAux (fuel + 1)` test does** (given the recursive
     reply count for checking pawn drops), and leaves the position unchanged. -/
 theorem iter_one {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co cap : Nat} {PB : List UInt8}
-    {L : List (List UInt8)} (hS : p.Shaped) (hK : KingsUnique p) (hm : m ∈ p.pseudoMoves) (fuel : Nat)
-    (hrec : Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec fuel (p.play m))
-    (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
+    {L : List (List UInt8)} (hS : p.Shaped) (hK : KingsUnique p) (hm : m ∈ p.pseudoMoves) (fuel rem : Nat)
+    (hrec : Position.isPawnDrop m → (p.play m).inCheck (p.play m).side → RecSpec (posBlock := posBlock) fuel (rem - recDelta) (p.play m))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
     (hl3 : s.locals 3 = some (.int IntTy.u8 1))
     (hl4 : s.locals 4 = some (.ptr pb 0)) (hl6 : s.locals 6 = some (.ptr cb co))
     (hl7 : s.locals 7 = some (.int IntTy.u32 p.side.idx))
     (hl8 : s.locals 8 = some (.ptr Sb 0)) (hl9 : s.locals 9 = some (.int IntTy.u64 i))
     (hpos : s.mem posBlock = some (encode p)) (hpb : s.mem pb = some PB) (hi : 5 * i + 5 ≤ PB.length)
     (hmv : (PB.drop (5 * i)).take 5 = moveBytes p m) (hSb : s.mem Sb = some (ksRec p p.side))
-    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 4000000200 < 2 ^ 64)
+    (hbuf : Buf s.mem mb mo cb co cap L) (htab : TablesIn s.mem) (hf : Fresh s.mem n)
+    (hnc : p.inCheck p.side.opp = false) (h64 : n + rem + 2000000 < 2 ^ 64) (hglobalp : (n + 6) + 401 * (rem - recDelta) < 2 ^ 64) (hrembig : recDelta ≤ rem) (hremub : rem ≤ 200 * recDelta)
     (hro : s.ro = false) (hpb0 : pb ≠ 0) (hS0 : Sb ≠ 0) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ o s', ExS Gen.prog s (.seq lp0 (.seq lp1 (.seq lp2 (.seq lp3 (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7
         (.seq lp8 lp9))))))))) o s' ∧ (o = .normal ∨ o = .cont) ∧
       Buf s'.mem mb mo cb co cap (L ++ (if specKeep p fuel m then [moveBytes p m] else [])) ∧
       s'.mem posBlock = some (encode p) ∧ s'.ro = false ∧ (∀ x, x < 10 → s'.locals x = s.locals x) ∧
-      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f ≤ n + 1000000030 := by
+      Frame s.mem s'.mem mb cb ∧ ∃ f, Fresh s'.mem f ∧ f ≤ n + recCharge (rem - recDelta + 30) p m := by
   by_cases hfast : needsProbeC (ksRec p p.side) p m = false ∧ Position.isPawnDrop m = false
   · obtain ⟨s', e', hb', hf2, hl2, hfr, hro'⟩ := iter_fast (.seq lp4 (.seq lp5 (.seq lp6 (.seq lp7 (.seq lp8 lp9))))) hm hl0 hl1 hl2
       hl4 hl6 hl8 hl9 hpos hpb hi hmv hSb hbuf hf (by omega) hro hpb0 hS0 hfast.1 hfast.2
@@ -128,12 +131,12 @@ theorem iter_one {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co ca
       unfold cKeep at this
       rw [if_pos (by simp [hfast.1, hfast.2])] at this
       exact this.symm
-    exact ⟨.cont, s', e', Or.inr rfl, by rw [hk]; simpa using hb', hfr.pos hpm hpc hpos, hro', hl2, hfr,
-      _, hf2, by omega⟩
+    exact ⟨.cont, s', e', Or.inr rfl, by rw [hk]; simpa using hb', hfr.pos hpm hpc hpos (posBlock_ne_zero hf.1 hpos), hro', hl2, hfr,
+      ⟨n + 2, hf2, by have hrc : 7 ≤ recCharge (rem - recDelta + 30) p m := (by unfold recCharge; split <;> omega); omega⟩⟩
   · have hslow : needsProbeC (ksRec p p.side) p m = true ∨ Position.isPawnDrop m = true := by
       cases h1 : needsProbeC (ksRec p p.side) p m <;> cases h2 : Position.isPawnDrop m <;> simp_all
-    obtain ⟨s', e', hb', hp', hx⟩ := iter_slow hS hK hm fuel hrec hl0 hl1 hl2 hl3 hl4 hl6 hl7 hl8 hl9 hpos hpb hi hmv hSb
-      hbuf htab hf h64 hro hpb0 hS0 hpm hpc hslow
+    obtain ⟨s', e', hb', hp', hx⟩ := iter_slow hS hK hm fuel rem hrec hl0 hl1 hl2 hl3 hl4 hl6 hl7 hl8 hl9 hpos hpb hi hmv hSb
+      hbuf htab hf hnc h64 hglobalp hrembig hremub hro hpb0 hS0 hpm hpc hslow
     exact ⟨.normal, s', e', Or.inl rfl, hb', hp', hx⟩
 
 end Shogi.C.Proofs

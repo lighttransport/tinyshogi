@@ -4,10 +4,11 @@
 import Shogi.C.Proofs.Probe3
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 section access
-variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some posPtr)
+variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some (posPtr' posBlock))
   (hmp : s.mem posBlock = some P)
 
 include hP hl0 hmp in
@@ -17,7 +18,7 @@ theorem ev_pos_u {e : Expr} {base x : Nat} {t : IntTy} (ht : t.signed = false)
     EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) base) e 1))
       (.int IntTy.u8 (P.getD (base + x) 0).toNat) := by
   refine load_u8_at (o := 0 + base + x * 1) (EvE.index (pb := .ptr posBlock (0 + base))
-    (EvE.field (off := base) (EvE.var hl0) (by simp [ptrAddN, posPtr, hmp, hP]; omega)) (elem := 1) he
+    (EvE.field (off := base) (EvE.var hl0) (by simp [ptrAddN, posPtr', hmp, hP]; omega)) (elem := 1) he
     (by simp [ht, ptrAddN, hmp, hP]; omega)) hmp (by rw [hP]; omega) |> fun h => by
       simpa using h
 
@@ -29,7 +30,7 @@ theorem st_pos_u {e ev : Expr} {base x v : Nat} {t : IntTy} (ht : t.signed = fal
       { s with mem := s.mem.write posBlock (base + x) (encodeLE 1 v) } := by
   have := ExS.store (p := Gen.prog) (s := s) (ty := .int ⟨8, false⟩) (pa := .ptr posBlock (0 + base + x * 1))
     (EvE.index (pb := .ptr posBlock (0 + base))
-      (EvE.field (off := base) (EvE.var hl0) (by simp [ptrAddN, posPtr, hmp, hP]; omega)) (elem := 1) he
+      (EvE.field (off := base) (EvE.var hl0) (by simp [ptrAddN, posPtr', hmp, hP]; omega)) (elem := 1) he
       (by simp [ht, ptrAddN, hmp, hP]; omega)) hv hro
     (by simp only [store, ite_true, show IntTy.u8 = (⟨8, false⟩ : IntTy) from rfl, IntTy.bytes]
         exact writeBytes_ok hmp (by simp [encodeLE_length, hP]; omega))
@@ -73,7 +74,7 @@ theorem pureS_type : pureS Gen.shogi_piece_type.body = true := by decide
 theorem pureS_piece : pureS Gen.shogi_piece.body = true := by decide
 
 section hand
-variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some posPtr)
+variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some (posPtr' posBlock))
   (hmp : s.mem posBlock = some P) {c : Color} (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx))
   {j : Nat} {i : Nat} (hi : i < 7) (hlj : s.locals j = some (i32 (i : Int)))
 
@@ -82,7 +83,7 @@ theorem hand_ptr (hc : c.idx < 2) :
     EvE Gen.prog s (.index (.index (.field (.var 0) 81) (.var 4) 7) (.var j) 1)
       (.ptr posBlock (81 + 7 * c.idx + i)) := by
   refine EvE.index (pb := .ptr posBlock (0 + 81 + c.idx * 7))
-    (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr, hmp, hP]))
+    (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr', hmp, hP]))
       (EvE.var hl4) (by simp [IntTy.u32, ptrAddN, hmp, hP]; omega)) (EvE.var hlj) ?_
   have hw : IntTy.i32.wrap (i : Int) = i := wrap_nat32 i (by omega)
   rw [hw]
@@ -110,7 +111,7 @@ theorem st_hand_slot {ev : Expr} {v : Nat} (hv : EvE Gen.prog s ev (.int IntTy.u
 end hand
 
 section handu
-variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some posPtr)
+variable {s : State} {P : List UInt8} (hP : P.length = 114) (hl0 : s.locals 0 = some (posPtr' posBlock))
   (hmp : s.mem posBlock = some P) {c : Color} (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx))
   {j : Nat} {i : Nat} (hi : i < 7) (hlj : s.locals j = some (.int IntTy.u32 i))
 
@@ -119,7 +120,7 @@ theorem hand_ptr_u (hc : c.idx < 2) :
     EvE Gen.prog s (.index (.index (.field (.var 0) 81) (.var 4) 7) (.var j) 1)
       (.ptr posBlock (81 + 7 * c.idx + i)) := by
   refine EvE.index (pb := .ptr posBlock (0 + 81 + c.idx * 7))
-    (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr, hmp, hP]))
+    (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var hl0) (by simp [ptrAddN, posPtr', hmp, hP]))
       (EvE.var hl4) (by simp [IntTy.u32, ptrAddN, hmp, hP]; omega)) (EvE.var hlj) ?_
   simp [IntTy.u32, ptrAddN, hmp, hP]
   rw [if_pos (by omega)]; congr 2; omega

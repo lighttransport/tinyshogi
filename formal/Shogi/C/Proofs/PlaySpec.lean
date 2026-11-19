@@ -6,6 +6,7 @@
 import Shogi.C.Proofs.PseudoSpec
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem pieceAt_setSq (p : Position) (b : List (Option Piece)) (hb : b.length = 81) (s : Square)

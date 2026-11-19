@@ -8,6 +8,7 @@ import Shogi.C.Gen
 import Shogi.Tables
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open Shogi.Tables
 
 theorem step_attack_probes_refine :

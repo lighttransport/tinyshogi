@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.AddDrops
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-! ### The column loop (`loop3`) -/
@@ -121,12 +122,12 @@ theorem allowedC_le (act : Nat) (pf : Bool) (c : Color) (r : Nat) : allowedC act
     · exact h1
 
 theorem ev_board_u8 {s : State} {p : Position} {j k : Nat} (hk : k < 81)
-    (h0 : s.locals 0 = some posPtr) (hj : s.locals j = some (.int IntTy.u8 k))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (hj : s.locals j = some (.int IntTy.u8 k))
     (hm : s.mem posBlock = some (encode p)) :
     EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var j) 1)) (.int IntTy.u8 (bb p k)) := by
   have hlen := encode_length p
   refine EvE.load (pa := .ptr posBlock k) (EvE.index (pb := .ptr posBlock (0 + 0))
-    (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr, hm, hlen])) (EvE.var hj) ?_) ?_
+    (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr', hm, hlen])) (EvE.var hj) ?_) ?_
   · simp [IntTy.u8, ptrAddN, hm, hlen, IntTy.toInt]; omega
   · simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl, readBoard hm k hk]
     simp [Res.bind, decodeLE, bb, hk]; rfl
@@ -149,7 +150,7 @@ def cellStmt : Stmt := .seq sq3 (.seq occ3 (.seq (.set 16 (.var 6)) (.seq pf3 (.
 
 theorem cell_spec {s : State} {p : Position} {c : Color} {act pfm r col mb mo cb co cap n : Nat}
     {L : List (List UInt8)} (hact : act < 128) (hpfm : pfm < 2 ^ 32) (hr : r < 9) (hcol : col < 9)
-    (h0 : s.locals 0 = some posPtr) (h1 : s.locals 1 = some (.int IntTy.u32 c.idx))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h1 : s.locals 1 = some (.int IntTy.u32 c.idx))
     (h2 : s.locals 2 = some (.ptr mb mo)) (h3 : s.locals 3 = some (.ptr cb co))
     (h4 : s.locals 4 = some (.int IntTy.u64 cap))
     (h5 : s.locals 5 = some (.int IntTy.u32 pfm)) (h6 : s.locals 6 = some (.int IntTy.u32 act))
@@ -224,7 +225,7 @@ theorem body3_eq : body3 = .ite (.bin .lt (some ⟨32, true⟩) (.var 13) (.cons
 theorem col_loop {p : Position} {c : Color} {act pfm r mb mo cb co cap : Nat}
     (hact : act < 128) (hpfm : pfm < 2 ^ 32) (hr : r < 9) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∀ d col (s : State) (L : List (List UInt8)) n, col + d = 9 →
-      s.locals 0 = some posPtr → s.locals 1 = some (.int IntTy.u32 c.idx) →
+      s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (.int IntTy.u32 c.idx) →
       s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
       s.locals 4 = some (.int IntTy.u64 cap) →
       s.locals 5 = some (.int IntTy.u32 pfm) → s.locals 6 = some (.int IntTy.u32 act) →
@@ -273,7 +274,7 @@ theorem col_loop {p : Position} {c : Color} {act pfm r mb mo cb co cap : Nat}
       (by rw [hl2 5 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h5)
       (by rw [hl2 6 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h6)
       (by rw [hl2 12 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h12)
-      (by simp [s2, Locals.upd]) (hfr1.pos hpm hpc hm) hro1 hb1 hf1 (by omega)
+      (by simp [s2, Locals.upd]) (hfr1.pos hpm hpc hm (posBlock_ne_zero hf.1 hm)) hro1 hb1 hf1 (by omega)
     have hout : colsOut p c act pfm r col (d + 1) = cellOut p c act pfm r col ++ colsOut p c act pfm r (col + 1) d := by
       simp [colsOut, List.range'_succ]
     refine ⟨s', ExS.loop_next (by rw [body3_eq]; exact ExS.ite (bc := true) hcond rfl e1) ho es e', ?_, ?_,
@@ -308,7 +309,7 @@ theorem colsOut_length (p : Position) (c : Color) (act pfm r col : Nat) :
 theorem row_loop {p : Position} {c : Color} {act pfm mb mo cb co cap : Nat}
     (hact : act < 128) (hpfm : pfm < 2 ^ 32) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∀ d r (s : State) (L : List (List UInt8)) n, r + d = 9 →
-      s.locals 0 = some posPtr → s.locals 1 = some (.int IntTy.u32 c.idx) →
+      s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (.int IntTy.u32 c.idx) →
       s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
       s.locals 4 = some (.int IntTy.u64 cap) →
       s.locals 5 = some (.int IntTy.u32 pfm) → s.locals 6 = some (.int IntTy.u32 act) →
@@ -364,7 +365,7 @@ theorem row_loop {p : Position} {c : Color} {act pfm mb mo cb co cap : Nat}
       (by rw [hl2 4 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h4)
       (by rw [hl2 5 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h5)
       (by rw [hl2 6 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h6)
-      (by simp [s2, Locals.upd]) (hfr1.pos hpm hpc hm) hro1 hb1 hf1 (by omega)
+      (by simp [s2, Locals.upd]) (hfr1.pos hpm hpc hm (posBlock_ne_zero hf.1 hm)) hro1 hb1 hf1 (by omega)
     have hout : rowsOut p c act pfm r (d + 1) = colsOut p c act pfm r 0 9 ++ rowsOut p c act pfm (r + 1) d := by
       simp [rowsOut, List.range'_succ]
     refine ⟨s', ExS.loop_next (ExS.ite (bc := true) hcond rfl (ExS.seq e0 e1)) (Or.inl rfl) es e', ?_, ?_,
@@ -396,12 +397,12 @@ theorem add_pseudo_drops_spec {p : Position} {c : Color} {m : Mem} {mb mo cb co 
     {L : List (List UInt8)} (hbuf : Buf m mb mo cb co cap L) (hf : Fresh m n) (h64 : n + 1296 < 2 ^ 64)
     (hm : m posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s' o, ExS Gen.prog ⟨frameLocals Gen.add_pseudo_drops.params
-        [posPtr, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+        [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
       Gen.add_pseudo_drops.body o s' ∧ (o = .normal ∨ o = .ret none) ∧
       Buf s'.mem mb mo cb co cap (L ++ dropsC p c) ∧
       Fresh s'.mem (n + 2 * (dropsC p c).length) ∧ Frame m s'.mem mb cb := by
   let s0 : State := ⟨frameLocals Gen.add_pseudo_drops.params
-    [posPtr, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+    [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
   let K := Piece.code ⟨c, .pawn⟩
   have hK : K < 256 := pawn_code_lt c
   let sa : State := { s0 with locals := s0.locals.upd 5 (.int IntTy.u32 0) }

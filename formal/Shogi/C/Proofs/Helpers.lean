@@ -16,6 +16,7 @@ import Shogi.C.Gen
 import Shogi.Basic
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC
 
 def m0 : Mem := fun _ => none

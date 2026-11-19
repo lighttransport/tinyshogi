@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Pseudo3
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem store_int_field {s : State} {j b o i v : Nat} {t : IntTy} {e : Expr} {blk : Block}
@@ -179,7 +180,7 @@ theorem swLoop_spec (t : PieceType) (f : Int) (hf : f = -1 ∨ f = 1)
     (s : State) (L : List (List UInt8)) (n : Nat)
     (hb : Buf s.mem mb mo cb co cap L) (hfr' : Fresh s.mem n) (h64 : n + 324 < 2 ^ 64)
     (hsb : s.mem sb = some (srcBytes fr pc c t row col cp iz)) (hm : s.mem posBlock = some (encode p))
-    (hro : s.ro = false) (a0 : s.locals 0 = some posPtr) (a16 : s.locals 16 = some (.ptr sb 0))
+    (hro : s.ro = false) (a0 : s.locals 0 = some (posPtr' posBlock)) (a16 : s.locals 16 = some (.ptr sb 0))
     (a2 : s.locals 2 = some (.ptr mb mo)) (a3 : s.locals 3 = some (.ptr cb co))
     (a4 : s.locals 4 = some (.int IntTy.u64 cap)) (a5 : s.locals 5 = some (i32 f))
     (a10 : s.locals 10 = some (u32 t.code)) :

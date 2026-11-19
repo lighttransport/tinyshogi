@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.Probe1
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def pb0 : Stmt := (.set 3 (.var 1))

@@ -39,10 +39,15 @@ def encode (p : Position) : List UInt8 :=
   let toKing := toSide ++ List.replicate (Gen.off_king_square - toSide.length) 0
   toKing ++ [kingByte p .black, kingByte p .white]
 
-/-- Block holding the position. -/
+/-- Block holding the position (1 in the reference harness). Proofs generalize
+    this to an arbitrary block bound with `variable {posBlock : Nat}`. -/
 def posBlock : Nat := 1
 
 def tablesMem : Mem := fun b => (Gen.globals.find? (·.1 == b)).map (·.2)
+
+/-- Position pointer at an arbitrary block. Proofs bind `posBlock` as a variable
+    and use `posPtr' posBlock`; the harness pins it to 1 via `posPtr`. -/
+def posPtr' (pb : Nat) : Val := .ptr pb 0
 
 def memOf (p : Position) : Mem := tablesMem.upd posBlock (encode p)
 

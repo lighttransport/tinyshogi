@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Unmake
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 section ksexprs

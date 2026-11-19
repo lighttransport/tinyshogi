@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Geom
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 /-- A pin found by the scan: an empty stretch, then the pinned own piece. -/

@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.Probe7
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem code_handIndex {t : PieceType} {i : Fin 7} (h : t.handIndex = some i) : t.code = i.val + 1 := by
@@ -18,7 +19,7 @@ theorem sub_i32 (a b : Int) (h1 : -2147483648 ≤ a - b) (h2 : a - b < 214748364
 
 theorem probe_drop {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List UInt8} {d : Square}
     {t : PieceType} {i : Fin 7}
-    (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr n 0)) (hl2 : s.locals 2 = some (.ptr ub 0))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl1 : s.locals 1 = some (.ptr n 0)) (hl2 : s.locals 2 = some (.ptr ub 0))
     (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx))
     (hmp : s.mem posBlock = some (enc pa h c kb kw))
     (hmn : s.mem n = some [255, d.val.toUInt8, 0, 0, t.code.toUInt8])
@@ -91,7 +92,7 @@ theorem probe_drop {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List U
     rw [Mem.write_ne hpu]; exact hmp
   -- pd3 : undo->hand_before = hand[c][hand]
   let t4 : State := { s2 with mem := m4 }
-  have l0t : t4.locals 0 = some posPtr := by simp [t4, s2, s1, Locals.upd]; exact hl0
+  have l0t : t4.locals 0 = some (posPtr' posBlock) := by simp [t4, s2, s1, Locals.upd]; exact hl0
   have l4t : t4.locals 4 = some (.int IntTy.u32 c.idx) := by simp [t4, s2, s1, Locals.upd]; exact hl4
   have l5t : t4.locals 5 = some (.int IntTy.u32 i.val) := by simp [t4, s2, s1, Locals.upd]
   have hv := ev_hand_slot_u (s := t4) hP l0t hm4p l4t hi7 l5t

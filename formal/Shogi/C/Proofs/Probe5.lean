@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.Probe4
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem toUInt8_mod (n : Nat) : (n % 256).toUInt8 = n.toUInt8 := by
@@ -19,7 +20,7 @@ def capStmt : Stmt := (.seq (.seq (.call (some 10) 2 [(.var 8)]) (.seq (.call (s
 theorem pn5_eq : pn5 = .ite (.bin .ne (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 8)) (.const (.int ⟨32, true⟩ 0))) capStmt .skip := rfl
 
 theorem cap_spec {s : State} {pa h kb kw} {c : Color} {ub : Nat} {U : List UInt8} {q : Piece} {i : Fin 7}
-    (hl0 : s.locals 0 = some posPtr) (hl2 : s.locals 2 = some (.ptr ub 0))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl2 : s.locals 2 = some (.ptr ub 0))
     (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx)) (hl8 : s.locals 8 = some (u8 q.code))
     (hmp : s.mem posBlock = some (enc pa h c kb kw)) (hmu : s.mem ub = some U) (hU : U.length = 20)
     (hpu : posBlock ≠ ub) (hro : s.ro = false) (hi : q.type.unpromote.handIndex = some i) :
@@ -61,7 +62,7 @@ theorem cap_spec {s : State} {pa h kb kw} {c : Color} {ub : Nat} {U : List UInt8
   have hm5u : m5 ub = some (U.set 15 i.val.toUInt8) := write1_set hmu (by omega) _
   have hm5p : m5 posBlock = some P := by simp only [m5]; rw [Mem.write_ne hpu]; exact hmp
   let t5 : State := { s4 with mem := m5 }
-  have l0' : t5.locals 0 = some posPtr := by
+  have l0' : t5.locals 0 = some (posPtr' posBlock) := by
     show s4.locals 0 = _; rw [l4 0 (by decide) (by decide) (by decide) (by decide)]; exact hl0
   have l4' : t5.locals 4 = some (.int IntTy.u32 c.idx) := by
     show s4.locals 4 = _; rw [l4 4 (by decide) (by decide) (by decide) (by decide)]; exact hl4

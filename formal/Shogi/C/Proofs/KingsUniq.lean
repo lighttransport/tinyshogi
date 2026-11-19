@@ -6,6 +6,7 @@ import Shogi.C.Proofs.LegalIter2
 import Shogi.Theorems
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open Shogi
 
 theorem kingsUnique_of_count (p : Position) (hS : p.Shaped) (h1 : ∀ c, p.kingCount c ≤ 1) : KingsUnique p := by
@@ -34,6 +35,7 @@ theorem reachable_kingsUnique {p : Position} (h : Position.Reachable p) : KingsU
 end Shogi.C.Proofs
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-- For positions reached by legal play, the probe round trip holds with no
@@ -43,9 +45,9 @@ theorem probe_roundtrip_reachable {p : Position} (hr : Position.Reachable p) (mv
     (hp : M posBlock = some (encode p)) (hmv : M mvb = some (moveBytes p mv)) (hub : M ub = some UB)
     (hUB : UB.length = 20) (hf : Fresh M n) (h64 : n + 2 < 2 ^ 64)
     (hmvb0 : mvb ≠ 0) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
-    ∃ s1 s2, ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], M, false⟩
+    ∃ s1 s2, ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr' posBlock, .ptr mvb 0, .ptr ub 0], M, false⟩
         Gen.make_legal_probe.body .normal s1 ∧ s1.mem posBlock = some (encode (p.play mv)) ∧
-      ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr, .ptr ub 0], s1.mem, false⟩
+      ExS Gen.prog ⟨frameLocals Gen.unmake_legal_probe.params [posPtr' posBlock, .ptr ub 0], s1.mem, false⟩
         Gen.unmake_legal_probe.body .normal s2 ∧ s2.mem posBlock = some (encode p) :=
   probe_roundtrip p (Position.reachable_inv hr).1 (reachable_kingsUnique hr) mv hm hp hmv hub hUB hf h64 hmvb0 hub0 hpu
 

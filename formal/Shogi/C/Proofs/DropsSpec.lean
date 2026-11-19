@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.AddDrops2
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem and_two_pow_ne (x i : Nat) : decide (x &&& 2 ^ i ≠ 0) = x.testBit i := by

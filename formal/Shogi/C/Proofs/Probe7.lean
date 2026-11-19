@@ -5,13 +5,14 @@
 import Shogi.C.Proofs.Probe6
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def kbAfter (c : Color) (M : Piece) (d : Square) (kb : UInt8) (me : Color) : UInt8 :=
   if M.type = .king ∧ c = me then d.val.toUInt8 else kb
 
 theorem probe_tail {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U MV : List UInt8} {d : Square} {M : Piece}
-    (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr n 0)) (hl2 : s.locals 2 = some (.ptr ub 0))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl1 : s.locals 1 = some (.ptr n 0)) (hl2 : s.locals 2 = some (.ptr ub 0))
     (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx))
     (hmp : s.mem posBlock = some (enc pa h c kb kw)) (hmn : s.mem n = some MV) (hMV : MV.length = 5)
     (hMV1 : MV.getD 1 0 = d.val.toUInt8) (hmu : s.mem ub = some U) (hU : U.length = 20)
@@ -58,7 +59,7 @@ theorem probe_tail {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U MV : Lis
     simp [evalExpr, h16, evalCast, evalBin, isPtr, evalBinInt, binInt, intOf, u32, IntTy.u32, IntTy.modulus,
       IntTy.toInt, IntTy.wrap, Res.bind, Nat.mod_eq_of_lt htk, this]
   have hl4' : s2.locals 4 = some (.int IntTy.u32 c.idx) := by simp [s2, s1, Locals.upd]; exact hl4
-  have hl0' : s2.locals 0 = some posPtr := by simp [s2, s1, Locals.upd]; exact hl0
+  have hl0' : s2.locals 0 = some (posPtr' posBlock) := by simp [s2, s1, Locals.upd]; exact hl0
   have hl1' : s2.locals 1 = some (.ptr n 0) := by simp [s2, s1, Locals.upd]; exact hl1
   have hmn' : s2.mem n = some MV := by show m1 n = _; rw [hm1o n (Ne.symm hpn)]; exact hmn
   have hc2 : c.idx < 2 := by cases c <;> decide
@@ -87,7 +88,7 @@ theorem probe_tail {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U MV : Lis
     have h4 : s3.locals 4 = some (.int IntTy.u32 c.idx) := by rw [hl3]; exact hl4'
     cases c <;> simp [evalExpr, h4, evalCast, evalBin, isPtr, evalBinInt, binInt, intOf, IntTy.u32,
       IntTy.modulus, IntTy.toInt, IntTy.wrap, Res.bind, Color.idx, Color.opp] <;> rfl
-  have hl0'' : s3.locals 0 = some posPtr := by rw [hl3]; exact hl0'
+  have hl0'' : s3.locals 0 = some (posPtr' posBlock) := by rw [hl3]; exact hl0'
   have st := store_int_field (s := s3) (o := 0) (b := posBlock) (j := 0) (t := ⟨32, false⟩) (i := 96)
     (v := c.opp.idx) (blk := enc (fun y => if y = d then some M else pa y) h c
         (kbAfter c M d kb .black) (kbAfter c M d kw .white)) hl0'' hm3p (by rw [enc_length]; decide) hxor

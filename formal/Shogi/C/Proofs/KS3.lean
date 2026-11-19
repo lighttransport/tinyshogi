@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.KS2
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 theorem opp_of_ne {x c : Color} (h : x ≠ c) : x = c.opp := by cases x <;> cases c <;> simp_all [Color.opp]

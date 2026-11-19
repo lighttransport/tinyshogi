@@ -7,6 +7,7 @@
 import Shogi.C.Proofs.AddSlide
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def dropBits : Nat → Nat → List Nat
@@ -66,7 +67,7 @@ theorem ev_bor_shl {s : State} {j k a i : Nat} {ti : IntTy} (ha : a < 2 ^ 32) (h
     show (i : Int) < 32 by omega]
 
 theorem ev_hand {s : State} {p : Position} {c : Color} {i : Nat} (hi : i < 7)
-    (h0 : s.locals 0 = some posPtr) (h1 : s.locals 1 = some (.int IntTy.u32 c.idx))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h1 : s.locals 1 = some (.int IntTy.u32 c.idx))
     (h9 : s.locals 9 = some (.int IntTy.u32 i)) (hm : s.mem posBlock = some (encode p)) :
     EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.index (.field (.var 0) 81) (.var 1) 7) (.var 9) 1))
       (.int IntTy.u8 (hb p c i)) := by
@@ -74,7 +75,7 @@ theorem ev_hand {s : State} {p : Position} {c : Color} {i : Nat} (hi : i < 7)
   have hlen := encode_length p
   refine EvE.load (pa := .ptr posBlock (0 + 81 + c.idx * 7 + i * 1))
     (EvE.index (pb := .ptr posBlock (0 + 81 + c.idx * 7))
-      (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr, hm, hlen]))
+      (EvE.index (pb := .ptr posBlock (0 + 81)) (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr', hm, hlen]))
         (EvE.var h1) (by simp [IntTy.u32, ptrAddN, hm, hlen]; omega))
       (EvE.var h9) (by simp [IntTy.u32, ptrAddN, hm, hlen]; omega)) ?_
   simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl]
@@ -87,7 +88,7 @@ def handStep : Stmt := (.set 9 (.cast ⟨32, false⟩ (.bin .add (some ⟨32, fa
 theorem add_pseudo_drops_loop0_eq : Gen.add_pseudo_drops_loop0 = .loop handBody handStep := rfl
 
 theorem hand_loop (p : Position) (c : Color) :
-    ∀ d i (s : State), i + d = 7 → s.locals 0 = some posPtr → s.locals 1 = some (.int IntTy.u32 c.idx) →
+    ∀ d i (s : State), i + d = 7 → s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (.int IntTy.u32 c.idx) →
       s.locals 9 = some (.int IntTy.u32 i) → s.locals 6 = some (.int IntTy.u32 (actUpTo p c i)) →
       s.mem posBlock = some (encode p) →
       ∃ s', ExS Gen.prog s (.loop handBody handStep) .normal s' ∧ s'.mem = s.mem ∧ s'.ro = s.ro ∧
@@ -140,12 +141,12 @@ theorem hand_loop (p : Position) (c : Color) :
     rw [ho' x a b]; simp [s2, Locals.upd, b]; exact hs1o x a
 
 theorem ev_board_i32 {s : State} {p : Position} {j k : Nat} (hk : k < 81)
-    (h0 : s.locals 0 = some posPtr) (hj : s.locals j = some (.int IntTy.i32 k))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (hj : s.locals j = some (.int IntTy.i32 k))
     (hm : s.mem posBlock = some (encode p)) :
     EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var j) 1)) (.int IntTy.u8 (bb p k)) := by
   have hlen := encode_length p
   refine EvE.load (pa := .ptr posBlock k) (EvE.index (pb := .ptr posBlock (0 + 0))
-    (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr, hm, hlen])) (EvE.var hj) ?_) ?_
+    (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr', hm, hlen])) (EvE.var hj) ?_) ?_
   · simp [IntTy.i32, ptrAdd, hm, hlen, IntTy.toInt, show ¬ (2147483648 ≤ k) by omega]; omega
   · simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl, readBoard hm k hk]
     simp [Res.bind, decodeLE, bb, hk]; rfl
@@ -178,7 +179,7 @@ def pawnStep : Stmt := (.set 10 (.cast ⟨32, true⟩ (.bin .add (some ⟨32, tr
 theorem add_pseudo_drops_loop1_eq : Gen.add_pseudo_drops_loop1 = .loop pawnBody pawnStep := rfl
 
 theorem pawn_loop (p : Position) (K : Nat) (hK : K < 256) :
-    ∀ d k (s : State), k + d = 81 → s.locals 0 = some posPtr → s.locals 7 = some (.int IntTy.u8 K) →
+    ∀ d k (s : State), k + d = 81 → s.locals 0 = some (posPtr' posBlock) → s.locals 7 = some (.int IntTy.u8 K) →
       s.locals 10 = some (.int IntTy.i32 k) → s.locals 5 = some (.int IntTy.u32 (pawnUpTo p K k)) →
       s.mem posBlock = some (encode p) →
       ∃ s', ExS Gen.prog s (.loop pawnBody pawnStep) .normal s' ∧ s'.mem = s.mem ∧ s'.ro = s.ro ∧

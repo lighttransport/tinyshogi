@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.AddStep
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def slideSq : Stmt := (.seq (.call (some 11) 10 [(.var 7), (.var 8)]) (.set 10 (.var 11)))
@@ -74,7 +75,7 @@ variable (p : Position) (sb fr pc mb mo cb co cap row col : Nat) (cl : Color) (t
 
 /-- The loop invariant of `add_slide`. -/
 structure SlideInv (s : State) (r c : Int) (L : List (List UInt8)) (n : Nat) : Prop where
-  l0 : s.locals 0 = some posPtr
+  l0 : s.locals 0 = some (posPtr' posBlock)
   l1 : s.locals 1 = some (.ptr sb 0)
   l2 : s.locals 2 = some (i32 dr)
   l3 : s.locals 3 = some (i32 dc)
@@ -104,7 +105,7 @@ def slideS5 (p : Position) (s : State) (d : Square) : State :=
 
 /-- On a board square: `on_board`, `square_at` and the target load. -/
 theorem slide_prefix {s : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
-    (hI : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n) {d : Square}
+    (hI : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n) {d : Square}
     (hsq : Square.mk? r c = some d) (hr : -1 ≤ r ∧ r ≤ 9) (hc : -1 ≤ c ∧ c ≤ 9) :
     ∀ {o s'}, ExS Gen.prog (slideS5 p s d) (.seq slideTgt slideCall) o s' → ExS Gen.prog s slideBody o s' := by
   intro o s' hX
@@ -137,8 +138,8 @@ theorem slide_prefix {s : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
   have hrd := readBoard hI.hm d.val hdv
   have e5 : ExS Gen.prog s4 slideLd .normal (slideS5 p s d) := by
     refine ExS.set (EvE.load (pa := .ptr posBlock (0 + 0 + d.val * 1)) (EvE.index (pb := .ptr posBlock (0 + 0))
-      (EvE.field (EvE.var (v := posPtr) (by simp [s4, s4a, s3, Locals.upd]; exact hI.l0))
-        (by simp [ptrAddN, posPtr, s4, s4a, s3, hI.hm, hlen]))
+      (EvE.field (EvE.var (v := posPtr' posBlock) (by simp [s4, s4a, s3, Locals.upd]; exact hI.l0))
+        (by simp [ptrAddN, posPtr', s4, s4a, s3, hI.hm, hlen]))
       (EvE.var (v := .int IntTy.u8 d.val) (by simp [s4, Locals.upd]; rfl)) ?_) ?_)
     · simp [IntTy.u8, ptrAddN, s4, s4a, s3, hI.hm, hlen]; omega
     · simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl, s4, s4a, s3]
@@ -147,7 +148,7 @@ theorem slide_prefix {s : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
     (ExS.seq e4 (ExS.seq e5 hX)))
 
 theorem slide_off {s : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
-    (hI : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n)
+    (hI : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n)
     (hsq : Square.mk? r c = none) (hr : -9 ≤ r ∧ r < 18) (hc : -9 ≤ c ∧ c < 18) :
     ExS Gen.prog s slideBody .brk { s with locals := s.locals.upd 9 (bool8 false) } := by
   have hob : run Gen.fid_on_board [i32 r, i32 c] = some (some (bool8 false)) := by
@@ -160,18 +161,18 @@ theorem slide_off {s : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
 
 /-- Locals preserved by one iteration's scratch writes. -/
 theorem SlideInv.locals {s s' : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
-    (hI : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n)
+    (hI : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n)
     (hl : ∀ x, x ≤ 8 → s'.locals x = s.locals x) (hro : s'.ro = false)
     (hm : s'.mem posBlock = some (encode p)) (hsb : s'.mem sb = some (srcBytes fr pc cl t row col cp iz))
     {L' : List (List UInt8)} {n' : Nat} (hb : Buf s'.mem mb mo cb co cap L') (hf : Fresh s'.mem n') :
-    SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s' r c L' n' :=
+    SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s' r c L' n' :=
   ⟨by rw [hl 0 (by omega)]; exact hI.l0, by rw [hl 1 (by omega)]; exact hI.l1, by rw [hl 2 (by omega)]; exact hI.l2,
    by rw [hl 3 (by omega)]; exact hI.l3, by rw [hl 4 (by omega)]; exact hI.l4, by rw [hl 5 (by omega)]; exact hI.l5,
    by rw [hl 6 (by omega)]; exact hI.l6, by rw [hl 7 (by omega)]; exact hI.l7, by rw [hl 8 (by omega)]; exact hI.l8,
    hro, hm, hsb, hb, hf⟩
 
 theorem slide_step {s : State} {r c : Int} {L : List (List UInt8)} {n : Nat}
-    (hI : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n)
+    (hI : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n)
     (hr : -9 ≤ r ∧ r < 18) (hc : -9 ≤ c ∧ c < 18) (hdr : -1 ≤ dr ∧ dr ≤ 1) (hdc : -1 ≤ dc ∧ dc ≤ 1) :
     ExS Gen.prog s slideStep .normal
       { s with locals := (s.locals.upd 7 (i32 (r + dr))).upd 8 (i32 (c + dc)) } := by
@@ -191,13 +192,14 @@ theorem promoC_length (c : Color) (t : PieceType) (r : Nat) (cp iz : Bool) :
   · split <;> simp
 
 theorem Frame.pos {m m' : Mem} {mb cb : Nat} (h : Frame m m' mb cb) (hpm : posBlock ≠ mb)
-    (hpc : posBlock ≠ cb) {blk : Block} (hm : m posBlock = some blk) : m' posBlock = some blk := by
-  rw [h posBlock (by decide) hpm hpc (by rw [hm]; simp)]; exact hm
+    (hpc : posBlock ≠ cb) {blk : Block} (hm : m posBlock = some blk) (hposb : posBlock ≠ 0) :
+    m' posBlock = some blk := by
+  rw [h posBlock hposb hpm hpc (by rw [hm]; simp)]; exact hm
 
 theorem slide_loop (hdr : -1 ≤ dr ∧ dr ≤ 1) (hdc : -1 ≤ dc ∧ dc ≤ 1) (hfr : fr < 256) (hpc : pc < 256)
     (hsb0 : sb ≠ 0) (hsbm : sb ≠ mb) (hsbc : sb ≠ cb) (hpm : posBlock ≠ mb) (hpc' : posBlock ≠ cb) :
     ∀ (k : Nat) (s : State) (r c : Int) (L : List (List UInt8)) (n : Nat),
-      SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n →
+      SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s r c L n →
       (-1 ≤ r ∧ r ≤ 9) → (-1 ≤ c ∧ c ≤ 9) →
       (∃ j : Nat, j ≤ k ∧ Square.mk? (r + j * dr) (c + j * dc) = none) → n + 4 * k < 2 ^ 64 →
       ∃ s', ExS Gen.prog s (.loop slideBody slideStep) .normal s' ∧
@@ -252,13 +254,13 @@ theorem slide_loop (hdr : -1 ≤ dr ∧ dr ≤ 1) (hdc : -1 ≤ dc ∧ dc ≤ 1)
           (by rw [l5 1 (by omega)]; exact hI.l1) l10 l7R (by rw [l5 4 (by omega)]; exact hI.l4)
           (by rw [l5 5 (by omega)]; exact hI.l5) (by rw [l5 6 (by omega)]; exact hI.l6)
         let emit := (promoC cl t d.row cp iz).map (nmBytes fr d.val pc)
-        have hI6 : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s6 r c (L ++ emit)
+        have hI6 : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s6 r c (L ++ emit)
             (n + 2 * (promoC cl t d.row cp iz).length) :=
           hI.locals (fun x hx => by rw [hl6]; exact l5 x hx) (by rw [hro6]; exact hI.ro)
-            (hfr6.pos hpm hpc' hI.hm) (by rw [hsb6]; exact hI.hsb) hb6 hf6
+            (hfr6.pos hpm hpc' hI.hm (posBlock_ne_zero hf5.1 hI.hm)) (by rw [hsb6]; exact hI.hsb) hb6 hf6
         have e7 := slide_step hI6 (by omega) (by omega) hdr hdc
         let s7 : State := { s6 with locals := (s6.locals.upd 7 (i32 (r + dr))).upd 8 (i32 (c + dc)) }
-        have hI7 : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s7 (r + dr) (c + dc) (L ++ emit)
+        have hI7 : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s7 (r + dr) (c + dc) (L ++ emit)
             (n + 2 * (promoC cl t d.row cp iz).length) :=
           ⟨by simp [s7, Locals.upd]; exact hI6.l0, by simp [s7, Locals.upd]; exact hI6.l1,
            by simp [s7, Locals.upd]; exact hI6.l2, by simp [s7, Locals.upd]; exact hI6.l3,
@@ -380,13 +382,13 @@ theorem add_slide_spec (hrow : row < 9) (hcol : col < 9) (hdr : -1 ≤ dr ∧ dr
     (hm : m posBlock = some (encode p))
     (hsb0 : sb ≠ 0) (hsbm : sb ≠ mb) (hsbc : sb ≠ cb) (hpm : posBlock ≠ mb) (hpc' : posBlock ≠ cb) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.add_slide.params
-        [posPtr, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+        [posPtr' posBlock, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
       Gen.add_slide.body .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ slideC p cl t fr pc cp iz dr dc 9 (row + dr) (col + dc)) ∧
       Fresh s'.mem (n + 2 * (slideC p cl t fr pc cp iz dr dc 9 (row + dr) (col + dc)).length) ∧
       Frame m s'.mem mb cb := by
   let s0 : State := ⟨frameLocals Gen.add_slide.params
-    [posPtr, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+    [posPtr' posBlock, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
   have l1 : s0.locals 1 = some (.ptr sb 0) := rfl
   have hR : EvE Gen.prog s0 (.load (.int ⟨32, true⟩) (.field (.var 1) 12)) (i32 (row : Int)) := by
     have := load_i32_field (i := 12) l1 hsb (by simp [srcBytes_length])
@@ -406,7 +408,7 @@ theorem add_slide_spec (hrow : row < 9) (hcol : col < 9) (hdr : -1 ≤ dr ∧ dr
       (by omega) (by omega))))
       (ExS.set (EvE.bin hC (EvE.var rfl) (add_i32 _ _ (by omega) (by omega) (by omega) (by omega)
         (by omega) (by omega))))
-  have hI : SlideInv p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s2 (row + dr) (col + dc) L n :=
+  have hI : SlideInv (posBlock := posBlock) p sb fr pc mb mo cb co cap row col cl t cp iz dr dc s2 (row + dr) (col + dc) L n :=
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, by simp [s2, s1, Locals.upd], by simp [s2, Locals.upd],
      rfl, hm, hsb, hbuf, hf⟩
   have hexit : ∃ j : Nat, j ≤ 9 ∧ Square.mk? (((row : Int) + dr) + j * dr) (((col : Int) + dc) + j * dc) = none := by

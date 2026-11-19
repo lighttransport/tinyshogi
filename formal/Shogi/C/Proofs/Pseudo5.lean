@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Pseudo4
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-- What the board loop appends for square `fr`. -/
@@ -34,7 +35,7 @@ theorem sq_body {p : Position} {c : Color} {mb mo cb co cap : Nat} (hpm : posBlo
     (fr : Nat) (hfr : fr < 81) (s : State) (L : List (List UInt8)) (n : Nat)
     (hb : Buf s.mem mb mo cb co cap L) (hf : Fresh s.mem n) (h64 : n + 400 < 2 ^ 64)
     (hm : s.mem posBlock = some (encode p)) (hro : s.ro = false)
-    (a0 : s.locals 0 = some posPtr) (a1 : s.locals 1 = some (u32 c.idx))
+    (a0 : s.locals 0 = some (posPtr' posBlock)) (a1 : s.locals 1 = some (u32 c.idx))
     (a2 : s.locals 2 = some (.ptr mb mo)) (a3 : s.locals 3 = some (.ptr cb co))
     (a4 : s.locals 4 = some (.int IntTy.u64 cap)) (a5 : s.locals 5 = some (i32 c.fwd))
     (a6 : s.locals 6 = some (u8 fr)) :
@@ -140,7 +141,7 @@ theorem sq_body {p : Position} {c : Color} {mb mo cb co cap : Nat} (hpm : posBlo
         (by simp [s5, s5a, s4, Locals.upd]) (by simp [s5, Locals.upd])
       have hnb := hb.ne_fresh hf
       have hnp := pos_ne_fresh hf hm
-      have hm6p : s6.mem posBlock = some (encode p) := by rw [hm6o posBlock (by decide) hnp.symm]; exact hm
+      have hm6p : s6.mem posBlock = some (encode p) := by rw [hm6o posBlock (posBlock_ne_zero hf.1 hm) hnp.symm]; exact hm
       have hb6 : Buf s6.mem mb mo cb co cap L :=
         hb.frame (hm6o mb hb.mb0 hnb.1.symm) (hm6o cb hb.cb0 hnb.2.symm)
       have hs6 : ∀ x, x ≤ 6 → s6.locals x = s.locals x := fun x hx => by
@@ -190,7 +191,7 @@ theorem board_loop {p : Position} {c : Color} {mb mo cb co cap : Nat} (hpm : pos
     ∀ (d fr : Nat) (s : State) (L : List (List UInt8)) (n : Nat), fr + d = 81 →
       Buf s.mem mb mo cb co cap L → Fresh s.mem n → n + 400 * d < 2 ^ 64 →
       s.mem posBlock = some (encode p) → s.ro = false →
-      s.locals 0 = some posPtr → s.locals 1 = some (u32 c.idx) →
+      s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (u32 c.idx) →
       s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
       s.locals 4 = some (.int IntTy.u64 cap) → s.locals 5 = some (i32 c.fwd) →
       s.locals 6 = some (u8 fr) →
@@ -218,7 +219,7 @@ theorem board_loop {p : Position} {c : Color} {mb mo cb co cap : Nat} (hpm : pos
     have hl2 : ∀ x, x ≤ 5 → s2.locals x = s.locals x := fun x hx => by
       simp [s2, Locals.upd, show x ≠ 6 by omega]; exact hl1 x (by omega)
     obtain ⟨s', n', e', hro', hl', hb', hf', hn', hfr'⟩ := ih (fr + 1) s2 _ n1 (by omega) hb1 hf1 (by omega)
-      (hfr1.pos hpm hpc hm) hro1
+      (hfr1.pos hpm hpc hm (posBlock_ne_zero hf.1 hm)) hro1
       (by rw [hl2 0 (by omega)]; exact a0) (by rw [hl2 1 (by omega)]; exact a1)
       (by rw [hl2 2 (by omega)]; exact a2) (by rw [hl2 3 (by omega)]; exact a3)
       (by rw [hl2 4 (by omega)]; exact a4) (by rw [hl2 5 (by omega)]; exact a5) (by simp [s2, Locals.upd])
@@ -235,11 +236,11 @@ theorem generate_pseudo_spec {p : Position} {c : Color} {m : Mem} {mb mo cb co c
     {L : List (List UInt8)} (hbuf : Buf m mb mo cb co cap L) (hf : Fresh m n) (h64 : n + 40000 < 2 ^ 64)
     (hm : m posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s' n', ExS Gen.prog ⟨frameLocals Gen.generate_pseudo_for_color.params
-        [posPtr, u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+        [posPtr' posBlock, u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
       Gen.generate_pseudo_for_color.body .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ pseudoC p c) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧ Frame m s'.mem mb cb := by
   let s0 : State := ⟨frameLocals Gen.generate_pseudo_for_color.params
-    [posPtr, u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+    [posPtr' posBlock, u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
   let s1 : State := { s0 with locals := s0.locals.upd 5 (i32 c.fwd) }
   have e1 : ExS Gen.prog s0 (.set 5 (.cond (.bin .eq (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.var 1))
       (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 0)))) (.un .neg ⟨32, true⟩ (.const (.int ⟨32, true⟩ 1)))
@@ -261,11 +262,11 @@ theorem generate_pseudo_spec {p : Position} {c : Color} {m : Mem} {mb mo cb co c
     (by rw [hl2 3 (by omega)]; rfl) (by rw [hl2 4 (by omega)]; rfl) (by simp [s2, s1, Locals.upd])
     (by simp [s2, Locals.upd])
   obtain ⟨s4, o4, e4, ho4, hb4, hf4, hfr4⟩ := add_pseudo_drops_spec (p := p) (c := c) hb3 hf3
-    (Nat.lt_of_le_of_lt (by omega) h64) (hfr3.pos hpm hpc hm) hpm hpc
+    (Nat.lt_of_le_of_lt (by omega) h64) (hfr3.pos hpm hpc hm (posBlock_ne_zero hf.1 hm)) hpm hpc
   have hl3' : ∀ x, x ≤ 4 → s3.locals x = s0.locals x := fun x hx => by
     rw [hl3 x (by omega), hl2 x hx]
   have hargs : EvArgs Gen.prog s3 [(.var 0), (.var 1), (.var 2), (.var 3), (.var 4)]
-      [posPtr, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap] :=
+      [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap] :=
     EvArgs.cons (EvE.var (by rw [hl3' 0 (by omega)]; rfl)) (EvArgs.cons (EvE.var (by rw [hl3' 1 (by omega)]; rfl))
       (EvArgs.cons (EvE.var (by rw [hl3' 2 (by omega)]; rfl)) (EvArgs.cons (EvE.var (by rw [hl3' 3 (by omega)]; rfl))
       (EvArgs.cons (EvE.var (by rw [hl3' 4 (by omega)]; rfl)) EvArgs.nil))))

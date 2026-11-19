@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Pseudo2
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def kRow (dr : Int) : Nat → Int → List Op
@@ -67,7 +68,7 @@ theorem king_inner (hrow : row < 9) (hcol : col < 9) (hfr : fr < 256) (hpc : pc 
     ∀ (d : Nat) (dc : Int) (s : State) (L : List (List UInt8)) (n : Nat), dc + d = 2 → -1 ≤ dc →
       Buf s.mem mb mo cb co cap L → Fresh s.mem n → n + 36 * d < 2 ^ 64 →
       s.mem sb = some (srcBytes fr pc c t row col cp iz) → s.mem posBlock = some (encode p) → s.ro = false →
-      s.locals 0 = some posPtr → s.locals 16 = some (.ptr sb 0) →
+      s.locals 0 = some (posPtr' posBlock) → s.locals 16 = some (.ptr sb 0) →
       s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
       s.locals 4 = some (.int IntTy.u64 cap) → s.locals 19 = some (i32 dr) → s.locals 20 = some (i32 dc) →
       ∃ s', ExS Gen.prog s (.loop kBody (kStep 20)) .normal s' ∧ s'.ro = s.ro ∧
@@ -114,7 +115,7 @@ theorem king_inner (hrow : row < 9) (hcol : col < 9) (hfr : fr < 256) (hpc : pc 
     have es : ExS Gen.prog s1 (kStep 20) .normal s2 := incr_i32z (by omega) (by omega) (by rw [hl1]; exact h20)
     have hl2 : ∀ x, x ≠ 20 → s2.locals x = s.locals x := fun x hx => by simp [s2, Locals.upd, hx, hl1]
     obtain ⟨s', e', hro', hl', hb', hf', hfr'⟩ := ih (dc + 1) s2 _ _ (by omega) (by omega) hb1 hf1 (by omega)
-      (hfr1.keep hsb0 hsbm hsbc hsb) (hfr1.pos hpm hpc' hm) (by simp [s2]; rw [hro1]; exact hro)
+      (hfr1.keep hsb0 hsbm hsbc hsb) (hfr1.pos hpm hpc' hm (posBlock_ne_zero hf.1 hm)) (by simp [s2]; rw [hro1]; exact hro)
       (by rw [hl2 0 (by decide)]; exact a0) (by rw [hl2 16 (by decide)]; exact a16)
       (by rw [hl2 2 (by decide)]; exact a2) (by rw [hl2 3 (by decide)]; exact a3)
       (by rw [hl2 4 (by decide)]; exact a4) (by rw [hl2 19 (by decide)]; exact h19) (by simp [s2, Locals.upd])
@@ -141,7 +142,7 @@ theorem king_outer (hrow : row < 9) (hcol : col < 9) (hfr : fr < 256) (hpc : pc 
     ∀ (d : Nat) (dr : Int) (s : State) (L : List (List UInt8)) (n : Nat), dr + d = 2 → -1 ≤ dr →
       Buf s.mem mb mo cb co cap L → Fresh s.mem n → n + 108 * d < 2 ^ 64 →
       s.mem sb = some (srcBytes fr pc c t row col cp iz) → s.mem posBlock = some (encode p) → s.ro = false →
-      s.locals 0 = some posPtr → s.locals 16 = some (.ptr sb 0) →
+      s.locals 0 = some (posPtr' posBlock) → s.locals 16 = some (.ptr sb 0) →
       s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
       s.locals 4 = some (.int IntTy.u64 cap) → s.locals 19 = some (i32 dr) →
       ∃ s', ExS Gen.prog s (.loop kOuter (kStep 19)) .normal s' ∧ s'.ro = s.ro ∧
@@ -179,7 +180,7 @@ theorem king_outer (hrow : row < 9) (hcol : col < 9) (hfr : fr < 256) (hpc : pc 
     have hl2 : ∀ x, x ≠ 19 → x ≠ 20 → s2.locals x = s.locals x := fun x a b => by
       simp [s2, Locals.upd, a]; exact hl1' x b
     obtain ⟨s', e', hro', hl', hb', hf', hfr'⟩ := ih (dr + 1) s2 _ _ (by omega) (by omega) hb1 hf1 (by omega)
-      (hfr1.keep hsb0 hsbm hsbc hsb) (hfr1.pos hpm hpc' hm) (by simp [s2]; rw [hro1]; exact hro)
+      (hfr1.keep hsb0 hsbm hsbc hsb) (hfr1.pos hpm hpc' hm (posBlock_ne_zero hf.1 hm)) (by simp [s2]; rw [hro1]; exact hro)
       (by rw [hl2 0 (by decide) (by decide)]; exact a0) (by rw [hl2 16 (by decide) (by decide)]; exact a16)
       (by rw [hl2 2 (by decide) (by decide)]; exact a2) (by rw [hl2 3 (by decide) (by decide)]; exact a3)
       (by rw [hl2 4 (by decide) (by decide)]; exact a4) (by simp [s2, Locals.upd])

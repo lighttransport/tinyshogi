@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.FastPath
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 set_option maxRecDepth 100000 in

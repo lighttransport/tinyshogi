@@ -8,6 +8,7 @@
 import Shogi.C.Proofs.InCheck
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem wr_window {α} (blk bs : List α) (o j : Nat) (h : o + j + bs.length ≤ blk.length) :
@@ -43,6 +44,11 @@ theorem Fresh.allocAt {m : Mem} {n : Nat} (h : Fresh m n) (h64 : n < 2 ^ 64) : A
 
 theorem Fresh.lt {m : Mem} {n x : Nat} (h : Fresh m n) (hx : m x ≠ none) : x < n :=
   Nat.lt_of_not_le fun hle => hx (h.2.2 x hle)
+
+/-- The position block is below the fresh water line. -/
+theorem posBlock_lt_of_fresh {m : Mem} {p : Position} {n : Nat} (hf : Fresh m n)
+    (hm : m posBlock = some (encode p)) : posBlock < n :=
+  Fresh.lt hf (by rw [hm]; simp)
 
 /-- After `alloc` of block `n`. -/
 theorem Fresh.after_alloc {m : Mem} {n : Nat} (h : Fresh m n) (blk : Block) :

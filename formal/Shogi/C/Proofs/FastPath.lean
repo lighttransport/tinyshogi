@@ -6,6 +6,7 @@
 import Shogi.C.Proofs.SameRay
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 /-- The first occupied square of `L` holds an attacker slider (colour `a`, mask `mk`). -/

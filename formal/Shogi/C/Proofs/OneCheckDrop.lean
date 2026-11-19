@@ -12,6 +12,7 @@ import Shogi.Theorems
 import Shogi.C.Proofs.PlaySpec
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open Shogi
 
 /-! ### The board after a pawn drop -/
@@ -531,5 +532,31 @@ theorem play_drop_hand_le {p : Position} (hS : p.Shaped)
   show (p.hands.set p.side 0 (p.hand p.side 0 - 1)).get p.side.opp i < 256
   rw [Position.Hands.get_set_len hbl hbw, if_neg (by simp [hne])]
   simpa [Position.hand] using h p.side.opp i
+
+
+/-- For any reordering `Ms` of the pseudo-legal moves, at most one move can be
+    a checking pawn drop (given that the side not to move is not already in
+    check).  Hence at most one iteration of `generate_legal_mut_internal` can
+    enter the uchifuzume recursion. -/
+theorem at_most_one_checking_pawn_drop_in {p : Position} {Ms : List Move}
+    (hS : p.Shaped) (hK : KingsUnique p) (hnc : p.inCheck p.side.opp = false)
+    (hperm : Ms.Perm p.pseudoMoves) :
+    (Ms.filter (fun m => Position.isPawnDrop m &&
+      (p.play m).inCheck (p.play m).side)).length ≤ 1 := by
+  rw [(hperm.filter _).length_eq]
+  exact checkingPawnDrops_le_one hS hK hnc
+
+
+/-- The bound survives dropping a prefix of `Ms`, as needed by `legal_loop`'s
+    induction over `Ms.drop i`. -/
+theorem at_most_one_checking_pawn_drop_in_drop {p : Position} {Ms : List Move}
+    (hS : p.Shaped) (hK : KingsUnique p) (hnc : p.inCheck p.side.opp = false)
+    (hperm : Ms.Perm p.pseudoMoves) (j : Nat) :
+    ((Ms.drop j).filter (fun m => Position.isPawnDrop m &&
+      (p.play m).inCheck (p.play m).side)).length ≤ 1 := by
+  let f := fun m : Move => Position.isPawnDrop m && (p.play m).inCheck (p.play m).side
+  exact Nat.le_trans ((List.Sublist.filter f (List.drop_sublist j Ms)).length_le)
+    (at_most_one_checking_pawn_drop_in hS hK hnc hperm)
+
 
 end Shogi.C.Proofs

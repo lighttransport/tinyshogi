@@ -6,6 +6,7 @@ import Shogi.C.Proofs.AddNormal
 import Shogi.C.Proofs.Pure
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem toInt_wrap32 (z : Int) (h1 : -2147483648 ≤ z) (h2 : z < 2147483648) :
@@ -122,12 +123,12 @@ theorem add_step_spec (hrow : row < 9) (hcol : col < 9) (hdr : -2 ≤ dr ∧ dr 
     (hm : m posBlock = some (encode p))
     (hsb0 : sb ≠ 0) (hsbm : sb ≠ mb) (hsbc : sb ≠ cb) (hpm : posBlock ≠ mb) (hpc' : posBlock ≠ cb) :
     ∃ o s', ExS Gen.prog ⟨frameLocals Gen.add_step.params
-        [posPtr, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+        [posPtr' posBlock, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
       Gen.add_step.body o s' ∧ (o = .normal ∨ o = .ret none) ∧
       Buf s'.mem mb mo cb co cap (L ++ stepOut p c t fr pc row col cp iz dr dc) ∧
       Fresh s'.mem (n + 2 * (stepOut p c t fr pc row col cp iz dr dc).length) ∧ Frame m s'.mem mb cb := by
   let s0 : State := ⟨frameLocals Gen.add_step.params
-    [posPtr, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+    [posPtr' posBlock, .ptr sb 0, i32 dr, i32 dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
   have l1 : s0.locals 1 = some (.ptr sb 0) := rfl
   -- to_row, to_col
   have hR : EvE Gen.prog s0 (.load (.int ⟨32, true⟩) (.field (.var 1) 12)) (i32 (row : Int)) := by
@@ -208,7 +209,7 @@ theorem add_step_spec (hrow : row < 9) (hcol : col < 9) (hdr : -2 ≤ dr ∧ dr 
     let s5 : State := { s4 with locals := s4.locals.upd 12 (.int IntTy.u8 bt) }
     have e5 : ExS Gen.prog s4 stepLoad .normal s5 := by
       refine ExS.set (EvE.load (pa := .ptr posBlock (0 + 0 + d.val * 1)) (EvE.index (pb := .ptr posBlock (0 + 0))
-        (EvE.field (EvE.var (v := posPtr) rfl) (by simp [ptrAddN, posPtr, s4, s4a, s3, s2, s1, s0, hm, hlen]))
+        (EvE.field (EvE.var (v := posPtr' posBlock) rfl) (by simp [ptrAddN, posPtr', s4, s4a, s3, s2, s1, s0, hm, hlen]))
         (EvE.var (v := .int IntTy.u8 d.val) (by simp [s4, Locals.upd]; rfl)) ?_) ?_)
       · simp [IntTy.u8, ptrAddN, s4, s4a, s3, s2, s1, s0, hm, hlen]; omega
       · simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl, s4, s4a, s3, s2, s1, s0]

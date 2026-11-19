@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.KS1
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 def kc0 : Stmt := (.set 10 (.load (.int ⟨8, false⟩) (.index (.index (.index (.const (.ptr 8194 0)) (.load (.int ⟨8, false⟩) (.field (.var 3) 0)) 64) (.var 7) 8) (.var 9) 1)))
@@ -49,12 +50,12 @@ def ownByte : Option Square → Nat
   | none => 255
 
 theorem evBoard1 {s : State} {p : Position} {j k : Nat} (hk : k < 81)
-    (h1 : s.locals 1 = some posPtr) (hj : s.locals j = some (.int IntTy.u8 k))
+    (h1 : s.locals 1 = some (posPtr' posBlock)) (hj : s.locals j = some (.int IntTy.u8 k))
     (hm : s.mem posBlock = some (encode p)) :
     EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.field (.var 1) 0) (.var j) 1)) (.int IntTy.u8 (bb p k)) := by
   have hlen := encode_length p
   refine EvE.load (pa := .ptr posBlock k) (EvE.index (pb := .ptr posBlock (0 + 0))
-    (EvE.field (EvE.var h1) (by simp [ptrAddN, posPtr, hm, hlen])) (EvE.var hj) ?_) ?_
+    (EvE.field (EvE.var h1) (by simp [ptrAddN, posPtr', hm, hlen])) (EvE.var hj) ?_) ?_
   · simp [IntTy.u8, ptrAddN, hm, hlen]; omega
   · simp only [load, Ty.size, IntTy.bytes, show (8 : Nat) / 8 = 1 by rfl, readBoard hm k hk]
     simp [Res.bind, decodeLE, bb, hk]; rfl
@@ -63,7 +64,7 @@ theorem evBoard1 {s : State} {p : Position} {j k : Nat} (hk : k < 81)
 structure KInv (p : Position) (c a : Color) (t : Square) (r : Nat) (Sb : Nat) (S : List UInt8) (v0 : Val)
     (s : State) (k : Nat) (own : Option Square) : Prop where
   l0 : s.locals 0 = some v0
-  l1 : s.locals 1 = some posPtr
+  l1 : s.locals 1 = some (posPtr' posBlock)
   l2 : s.locals 2 = some (.int IntTy.u32 c.idx)
   l3 : s.locals 3 = some (.ptr Sb 0)
   l5 : s.locals 5 = some (.int IntTy.u32 a.idx)
@@ -88,9 +89,9 @@ theorem ownByte_lt (o : Option Square) : ownByte o < 256 := by
 
 theorem kbody_spec {p : Position} {c a : Color} {t : Square} {r Sb : Nat} {S : List UInt8} {v0 : Val} (hr : r < 8)
     (ha : a = c.opp) {s : State} {k : Nat} {own : Option Square} (hk : k < (ray t (rdir r)).length)
-    (hI : KInv p c a t r Sb S v0 s k own) :
+    (hI : KInv (posBlock := posBlock) p c a t r Sb S v0 s k own) :
     ∃ o s1, ExS Gen.prog s kBody0 o s1 ∧
-      ((o = .cont ∧ s1.mem = s.mem ∧ ∃ own', KInv p c a t r Sb S v0 s1 k own' ∧
+      ((o = .cont ∧ s1.mem = s.mem ∧ ∃ own', KInv (posBlock := posBlock) p c a t r Sb S v0 s1 k own' ∧
           kres p c (rayMask a (rdir r)) ((ray t (rdir r)).drop k) own =
           kres p c (rayMask a (rdir r)) ((ray t (rdir r)).drop (k + 1)) own') ∨
        (o = .brk ∧ s1.mem Sb = some (applyK S (kres p c (rayMask a (rdir r)) ((ray t (rdir r)).drop k) own)) ∧
@@ -128,7 +129,7 @@ theorem kbody_spec {p : Position} {c a : Color} {t : Square} {r Sb : Nat} {S : L
     fun h => ExS.ite (bc := true) hcond rfl h
   have hI2 : ∀ (st : State) (o : Option Square), st.mem = s.mem → st.ro = s.ro →
       (∀ x, x ≠ 8 → x ≠ 10 → x ≠ 11 → x ≠ 12 → x ≠ 13 → x ≠ 14 → st.locals x = s.locals x) →
-      st.locals 8 = some (.int IntTy.u8 (ownByte o)) → KInv p c a t r Sb S v0 st k o := by
+      st.locals 8 = some (.int IntTy.u8 (ownByte o)) → KInv (posBlock := posBlock) p c a t r Sb S v0 st k o := by
     intro st o hm hro hl h8
     exact ⟨by rw [hl 0 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact hI.l0,
       by rw [hl 1 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact hI.l1,
@@ -318,7 +319,7 @@ theorem kres_nil (p : Position) (c : Color) (mk : Nat) (own : Option Square) : k
 theorem kray_loop {p : Position} {c a : Color} {t : Square} {r Sb : Nat} {S : List UInt8} {v0 : Val} (hr : r < 8)
     (ha : a = c.opp) :
     ∀ (d k : Nat) (s : State) (own : Option Square), k + d = (ray t (rdir r)).length →
-      KInv p c a t r Sb S v0 s k own →
+      KInv (posBlock := posBlock) p c a t r Sb S v0 s k own →
       ∃ s', ExS Gen.prog s (.loop kBody0 kStep9) .normal s' ∧
         s'.mem Sb = some (applyK S (kres p c (rayMask a (rdir r)) ((ray t (rdir r)).drop k) own)) ∧
         (∀ x, x ≠ Sb → s'.mem x = s.mem x) ∧ s'.ro = s.ro ∧
@@ -346,7 +347,7 @@ theorem kray_loop {p : Position} {c a : Color} {t : Square} {r Sb : Nat} {S : Li
     · subst ho
       let s2 : State := { s1 with locals := s1.locals.upd 9 (.int IntTy.u8 (k + 1)) }
       have es := kStep9_spec (s := s1) (by omega) hI1.l9
-      have hI2 : KInv p c a t r Sb S v0 s2 (k + 1) own' :=
+      have hI2 : KInv (posBlock := posBlock) p c a t r Sb S v0 s2 (k + 1) own' :=
         ⟨by simp [s2, Locals.upd]; exact hI1.l0, by simp [s2, Locals.upd]; exact hI1.l1, by simp [s2, Locals.upd]; exact hI1.l2,
          by simp [s2, Locals.upd]; exact hI1.l3, by simp [s2, Locals.upd]; exact hI1.l5,
          by simp [s2, Locals.upd]; exact hI1.l7, by simp [s2, Locals.upd]; exact hI1.l8,
@@ -391,7 +392,7 @@ theorem ks_loop1_eq : Gen.king_safety_prepare_loop1 = .loop kOuter1 kStep7 := rf
 
 theorem kouter_loop {p : Position} {c a : Color} {t : Square} {Sb : Nat} {S : List UInt8} {v0 : Val} (ha : a = c.opp) :
     ∀ (d r : Nat) (s : State), r + d = 8 →
-      s.locals 0 = some v0 → s.locals 1 = some posPtr → s.locals 2 = some (.int IntTy.u32 c.idx) → s.locals 3 = some (.ptr Sb 0) →
+      s.locals 0 = some v0 → s.locals 1 = some (posPtr' posBlock) → s.locals 2 = some (.int IntTy.u32 c.idx) → s.locals 3 = some (.ptr Sb 0) →
       s.locals 5 = some (.int IntTy.u32 a.idx) → s.locals 7 = some (.int IntTy.u32 r) →
       s.mem posBlock = some (encode p) → s.mem Sb = some (ksAll p c a t S r) →
       s.mem 8194 = some Gen.global_attack_rays → s.mem 8195 = some Gen.global_attack_ray_length →
@@ -425,7 +426,7 @@ theorem kouter_loop {p : Position} {c a : Color} {t : Square} {Sb : Nat} {S : Li
     have e9 : ExS Gen.prog s0 (.set 9 (.cast ⟨8, false⟩ (.const (.int ⟨32, true⟩ 0)))) .normal s1 :=
       ExS.set (EvE_of_eval (n := 3) (by rfl))
     have hs1 : ∀ x, x ≠ 8 → x ≠ 9 → s1.locals x = s.locals x := fun x a b => by simp [s1, s0, Locals.upd, a, b]
-    have hI : KInv p c a t r Sb (ksAll p c a t S r) v0 s1 0 none :=
+    have hI : KInv (posBlock := posBlock) p c a t r Sb (ksAll p c a t S r) v0 s1 0 none :=
       ⟨by rw [hs1 0 (by decide) (by decide)]; exact h0, by rw [hs1 1 (by decide) (by decide)]; exact h1, by rw [hs1 2 (by decide) (by decide)]; exact h2,
        by rw [hs1 3 (by decide) (by decide)]; exact h3, by rw [hs1 5 (by decide) (by decide)]; exact h5,
        by rw [hs1 7 (by decide) (by decide)]; exact h7, by simp [s1, s0, Locals.upd, ownByte],
@@ -488,14 +489,14 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
     (g3 : m 8194 = some Gen.global_attack_rays) (g4 : m 8195 = some Gen.global_attack_ray_length)
     (g5 : m 8196 = some Gen.global_attack_ray_masks)
     (hf : Fresh m n) (h64 : n + 1 < 2 ^ 64) (hob0 : ob ≠ 0) (hobp : ob ≠ posBlock) :
-    ∃ s', ExS Gen.prog ⟨frameLocals Gen.king_safety_prepare.params [.ptr ob 0, posPtr, .int IntTy.u32 c.idx], m, false⟩
+    ∃ s', ExS Gen.prog ⟨frameLocals Gen.king_safety_prepare.params [.ptr ob 0, posPtr' posBlock, .int IntTy.u32 c.idx], m, false⟩
         Gen.king_safety_prepare.body (.ret none) s' ∧ s'.mem ob = some (ksRec p c) ∧
       (∀ x, x ≠ 0 → x ≠ n → x ≠ ob → s'.mem x = m x) ∧ s'.mem 0 = some (encodeLE 8 (n + 1)) := by
   have hn0 := hf.2.1
   have hnob : n ≠ ob := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hob; cases hob
   have hnp : n ≠ posBlock := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hm; cases hm
   have hng : ∀ g, m g ≠ none → n ≠ g := fun g hg e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hg; exact hg rfl
-  let s0 : State := ⟨frameLocals Gen.king_safety_prepare.params [.ptr ob 0, posPtr, .int IntTy.u32 c.idx], m, false⟩
+  let s0 : State := ⟨frameLocals Gen.king_safety_prepare.params [.ptr ob 0, posPtr' posBlock, .int IntTy.u32 c.idx], m, false⟩
   let Z : List UInt8 := List.replicate 84 0
   let m1 := (m.upd 0 (encodeLE 8 (n + 1))).upd n Z
   let s1 : State := { s0 with mem := m1, locals := s0.locals.upd 3 (.ptr n 0) }
@@ -513,10 +514,10 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
   have hm20 : m2 0 = some (encodeLE 8 (n + 1)) := by
     show (m1.write n 0 Z) 0 = _; rw [Mem.write_ne hn0.symm]; simp only [m1]; rw [Mem.upd_ne hn0.symm, Mem.upd_eq]
   let s2 : State := { s1 with mem := m2 }
-  have hm2p : m2 posBlock = some (encode p) := by rw [hm2 _ (by decide) (Ne.symm hnp)]; exact hm
+  have hm2p : m2 posBlock = some (encode p) := by rw [hm2 _ (posBlock_ne_zero hf.1 hm) (Ne.symm hnp)]; exact hm
   have hfk := find_king_refines p c m2 n Z hm2p hm2n (by simp [Z])
-  have hargs : EvArgs Gen.prog s2 [(.var 1), (.var 2), (.field (.var 3) 0)] [posPtr, .int IntTy.u32 c.idx, .ptr n 0] :=
-    EvArgs.cons (EvE.var (v := posPtr) (by simp [s2, s1, s0, Locals.upd]; rfl))
+  have hargs : EvArgs Gen.prog s2 [(.var 1), (.var 2), (.field (.var 3) 0)] [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr n 0] :=
+    EvArgs.cons (EvE.var (v := posPtr' posBlock) (by simp [s2, s1, s0, Locals.upd]; rfl))
       (EvArgs.cons (EvE.var (v := .int IntTy.u32 c.idx) (by simp [s2, s1, s0, Locals.upd]; rfl))
       (EvArgs.cons (EvE.field (pb := .ptr n 0) (EvE.var (by simp [s2, l3])) (by simp [ptrAddN, s2, hm2n, Z]))
         EvArgs.nil))
@@ -589,7 +590,7 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
       show (s3.mem.write n _ _) x = _; rw [Mem.write_ne hx, hm3o x hx]
     have hmg : ∀ g, g ≠ 0 → m g ≠ none → m4 g = m g := fun g h0 hg => by
       rw [hm4o g (Ne.symm (hng g hg)), hm2 g h0 (Ne.symm (hng g hg))]
-    have hm4p : m4 posBlock = some (encode p) := by rw [hmg _ (by decide) (by rw [hm]; simp)]; exact hm
+    have hm4p : m4 posBlock = some (encode p) := by rw [hmg _ (posBlock_ne_zero hf.1 hm) (by rw [hm]; simp)]; exact hm
     have l3_5 : s5.locals 3 = some (.ptr n 0) := by simp [s5, s4, Locals.upd]; exact l3'
     have hS20 : S2.getD 0 0 = k.val.toUInt8 := by simp [S2, S1, Z, List.getD_eq_getElem?_getD, List.getElem?_set]
     have hk8 := ev_blk_u8 (s := s5) (j := 3) (b := n) (B := S2) l3_5 hm4n (k := 0) (by simp [S2, S1, Z])
@@ -600,7 +601,7 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
     let s6 : State := { s5 with mem := ss.mem, locals := s5.locals.upd 6 v }
     have ec6 : ExS Gen.prog s5 (.call (some 6) 16 [(.var 1), (.load (.int ⟨8, false⟩) (.field (.var 3) 0)), (.var 5)])
         .normal s6 :=
-      ExS.call_dst (EvArgs.cons (EvE.var (v := posPtr) (by simp [s5, s4, s3, s2, s1, s0, Locals.upd]; rfl))
+      ExS.call_dst (EvArgs.cons (EvE.var (v := posPtr' posBlock) (by simp [s5, s4, s3, s2, s1, s0, Locals.upd]; rfl))
         (EvArgs.cons hk8 (EvArgs.cons (EvE.var (by simp [s5, Locals.upd])) EvArgs.nil))) rfl rfl es
     have hm6 : s6.mem = m4 := hss
     let bv := if stepAttacked p k c.opp then 1 else 0
@@ -633,7 +634,7 @@ theorem king_safety_spec (p : Position) (c : Color) {m : Mem} {ob n : Nat} {OB :
       (by simp [s8, s7, s6, s5, s4, s3, s2, s1, s0, Locals.upd]; rfl)
       (by simp [s8, s7, s6, s5, s4, Locals.upd]; exact l3')
       (by simp [s8, s7, s6, s5, Locals.upd]) (by simp [s8, Locals.upd])
-      (by show m7 posBlock = _; rw [hmg7 _ (by decide) (by rw [hm]; simp)]; exact hm)
+      (by show m7 posBlock = _; rw [hmg7 _ (posBlock_ne_zero hf.1 hm) (by rw [hm]; simp)]; exact hm)
       (by show m7 n = _; rw [hm7n, hS3]; rfl)
       (by show m7 8194 = _; rw [hmg7 _ (by decide) (by rw [g3]; simp)]; exact g3)
       (by show m7 8195 = _; rw [hmg7 _ (by decide) (by rw [g4]; simp)]; exact g4)

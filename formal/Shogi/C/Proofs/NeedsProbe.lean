@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.FastGlue
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 section bools
@@ -81,7 +82,7 @@ theorem pd_spec {s : State} {p : Position} {m : Move} {n : Nat}
   exact ExS.set hall
 
 theorem np_spec {s : State} {p : Position} {m : Move} {n Sb : Nat} (hm : m ∈ p.pseudoMoves)
-    (hl0 : s.locals 0 = some posPtr) (hl8 : s.locals 8 = some (.ptr Sb 0)) (hSb : s.mem Sb = some (ksRec p p.side))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl8 : s.locals 8 = some (.ptr Sb 0)) (hSb : s.mem Sb = some (ksRec p p.side))
     (hl10 : s.locals 10 = some (.ptr n 0)) (hn : s.mem n = some (moveBytes p m))
     (hpos : s.mem posBlock = some (encode p)) :
     ∃ s', ExS Gen.prog s npSeg .normal s' ∧ s'.mem = s.mem ∧ s'.ro = s.ro ∧

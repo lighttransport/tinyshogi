@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.Probe5
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def normHands (pa : Square → Option Piece) (h : Color → Fin 7 → Nat) (c : Color) (d : Square) :
@@ -34,7 +35,7 @@ theorem unpromote_hand (t : PieceType) (h : t ≠ .king) : ∃ i, t.unpromote.ha
 
 theorem probe_norm {s : State} {pa h kb kw} {c : Color} {n ub : Nat} {U : List UInt8}
     {sq d : Square} {pc : Piece} {pr : Bool}
-    (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr n 0)) (hl2 : s.locals 2 = some (.ptr ub 0))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl1 : s.locals 1 = some (.ptr n 0)) (hl2 : s.locals 2 = some (.ptr ub 0))
     (hl4 : s.locals 4 = some (.int IntTy.u32 c.idx))
     (hmp : s.mem posBlock = some (enc pa h c kb kw))
     (hmn : s.mem n = some [sq.val.toUInt8, d.val.toUInt8, pc.code.toUInt8, if pr then 1 else 0, 0])

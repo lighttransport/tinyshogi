@@ -6,6 +6,7 @@ import Shogi.C.Proofs.AddMove
 import Shogi.C.Proofs.Helpers
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-- Bytes of a `MoveSource` local (24 bytes, as the generator stores them). -/
@@ -217,6 +218,7 @@ theorem src_type (fr pc : Nat) (c : Color) (t : PieceType) (row col : Nat) (cp i
 end Shogi.C.Proofs
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 section anm

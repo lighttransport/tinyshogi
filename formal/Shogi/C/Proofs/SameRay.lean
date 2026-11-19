@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.KS3
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def iabs (z : Int) : Int := if z < 0 then -z else z

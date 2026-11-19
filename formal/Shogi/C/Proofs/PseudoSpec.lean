@@ -6,6 +6,7 @@
 import Shogi.C.Proofs.Pseudo5
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-- Spec bytes for a move of piece `q` from `s` to `d` (the `boardMoves` body). -/

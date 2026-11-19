@@ -11,6 +11,7 @@ import Shogi.C.Proofs.NoWrite
 import Shogi.AttackSpec
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables Shogi.Position
 
 theorem ray_length_le (t : Square) (d : Int × Int) : (ray t d).length ≤ 8 := by
@@ -219,7 +220,7 @@ theorem evRayCond (hr : r < 8) (hk : k < 256)
   · simp [h, show ¬ ((k : Int) < (ray t (rdir r)).length) by omega]
 
 theorem evRayPiece (hr : r < 8) (hk : k < (ray t (rdir r)).length)
-    (h0 : s.locals 0 = some posPtr) (h6 : s.locals 6 = some (.int IntTy.u8 k))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h6 : s.locals 6 = some (.int IntTy.u8 k))
     (h1 : s.locals 1 = some (.int IntTy.u8 t.val)) (h5 : s.locals 5 = some (.int IntTy.u32 r))
     (hm : s.mem posBlock = some (encode p)) (hG : s.mem 8194 = some Gen.global_attack_rays) :
     evalExpr Gen.prog 8 s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0)
@@ -235,7 +236,7 @@ theorem evRayPiece (hr : r < 8) (hk : k < (ray t (rdir r)).length)
   have hbb : bb p ((ray t (rdir r))[k]).val = (pieceByte (p.pieceAt ⟨_, hsqlt⟩)).toNat := by
     simp [bb, hsqlt]
   simp only [evalExpr, h0, h6, h1, h5, Res.bind_eq, Res.bind_ok, IntTy.u32, IntTy.u8, Bool.false_eq_true,
-    ite_false, Res.bind, ptrAddN, hG, G3_len, Nat.zero_add, Nat.mul_one, posPtr, hm, hle]
+    ite_false, Res.bind, ptrAddN, hG, G3_len, Nat.zero_add, Nat.mul_one, posPtr', hm, hle]
   simp only [hG, G3_len, show t.val * 64 ≤ 5184 by omega, show t.val * 64 + r * 8 ≤ 5184 by omega,
     show t.val * 64 + r * 8 + k ≤ 5184 by omega, ite_true, Res.bind, load, Ty.size, IntTy.bytes,
     show (8:Nat) / 8 = 1 by rfl, show (0:Nat) ≤ 114 by omega]
@@ -308,7 +309,7 @@ theorem rayHitFrom_step (p : Position) (c : Color) (t : Square) (r k : Nat)
 /-- The inner loop over one ray. -/
 theorem ray_loop (p : Position) (c : Color) (t : Square) (r : Nat) (hr : r < 8) :
     ∀ d k (s : State), k + d = (ray t (rdir r)).length →
-    s.locals 0 = some posPtr → s.locals 1 = some (.int IntTy.u8 t.val) →
+    s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (.int IntTy.u8 t.val) →
     s.locals 2 = some (.int IntTy.u32 c.idx) → s.locals 4 = some (.int IntTy.u8 (16 * c.idx)) →
     s.locals 5 = some (.int IntTy.u32 r) → s.locals 6 = some (.int IntTy.u8 k) →
     s.mem posBlock = some (encode p) → s.mem 8194 = some Gen.global_attack_rays →
@@ -483,7 +484,7 @@ theorem evOuterStep (s : State) (r : Nat) (hr : r < 8) (h5 : s.locals 5 = some (
 /-- The outer loop over the 8 rays. -/
 theorem rays_loop (p : Position) (c : Color) (t : Square) :
     ∀ d r (s : State), r + d = 8 →
-    s.locals 0 = some posPtr → s.locals 1 = some (.int IntTy.u8 t.val) →
+    s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (.int IntTy.u8 t.val) →
     s.locals 2 = some (.int IntTy.u32 c.idx) → s.locals 4 = some (.int IntTy.u8 (16 * c.idx)) →
     s.locals 5 = some (.int IntTy.u32 r) →
     s.mem posBlock = some (encode p) → s.mem 8194 = some Gen.global_attack_rays →
@@ -562,10 +563,10 @@ theorem square_attacked_refines (p : Position) (t : Square) (c : Color) (m : Mem
     (hG3 : m 8194 = some Gen.global_attack_rays) (hG4 : m 8195 = some Gen.global_attack_ray_length)
     (hG5 : m 8196 = some Gen.global_attack_ray_masks) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.square_attacked.params
-        [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx], m, false⟩
+        [posPtr' posBlock, .int IntTy.u8 t.val, .int IntTy.u32 c.idx], m, false⟩
       Gen.square_attacked.body (.ret (some (if p.attacked t c then true8 else false8))) s' ∧ s'.mem = m := by
   have hci : c.idx < 2 := by cases c <;> decide
-  let L0 := frameLocals Gen.square_attacked.params [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx]
+  let L0 := frameLocals Gen.square_attacked.params [posPtr' posBlock, .int IntTy.u8 t.val, .int IntTy.u32 c.idx]
   let s0 : State := ⟨L0, m, false⟩
   obtain ⟨ss, hss, hssm⟩ := step_square_attacked_refines p t c m hm hG1 hG2
   let v3 := if stepAttacked p t c then true8 else false8

@@ -8,6 +8,7 @@
 import Shogi.C.Model
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-- `shogi_piece(c, KING)` in any memory. -/
@@ -66,7 +67,7 @@ theorem ev_lt81 {i : Nat} (hk : k < 256) (h8 : s.locals i = some (.int IntTy.u8 
   · simp [h, show ¬ ((k : Int) < 81) by omega]
 
 theorem ev_cmp {i j : Nat} (hk : k < 81) (hK : K < 256) (hm : s.mem posBlock = some (encode p))
-    (h0 : s.locals 0 = some posPtr) (h6 : s.locals j = some (.int IntTy.u8 K))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h6 : s.locals j = some (.int IntTy.u8 K))
     (h8 : s.locals i = some (.int IntTy.u8 k)) :
     evalExpr Gen.prog 6 s (.bin .eq (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩)
       (.index (.field (.var 0) 0) (.var i) 1))) (.cast ⟨32, true⟩ (.var j)))
@@ -75,7 +76,7 @@ theorem ev_cmp {i j : Nat} (hk : k < 81) (hK : K < 256) (hm : s.mem posBlock = s
   have hr := readBoard hm k hk
   have hbb : bb p k = (pieceByte (p.pieceAt ⟨k, hk⟩)).toNat := by simp [bb, hk]
   have hlt := bb_lt p k
-  simp only [evalExpr, h0, h6, h8, posPtr, Res.bind_eq, Res.bind_ok, ptrAddN, hm, hlen]
+  simp only [evalExpr, h0, h6, h8, posPtr', Res.bind_eq, Res.bind_ok, ptrAddN, hm, hlen]
   simp only [show 0 + 0 ≤ 114 by omega, ite_true, Res.bind, IntTy.u8, Bool.false_eq_true,
     ite_false, hm, hlen, Nat.zero_add, Nat.mul_one, show k ≤ 114 by omega, load, Ty.size,
     IntTy.bytes, show (8:Nat) / 8 = 1 by rfl, hr]
@@ -156,7 +157,7 @@ theorem store_u8_ok {m : Mem} {ob : Nat} {blk : Block} (hob : m ob = some blk)
 
 theorem find_king_loop (p : Position) (K ob : Nat) (hK : K < 256) :
     ∀ d k (s : State), k + d = 81 →
-    s.locals 0 = some posPtr → s.locals 2 = some (.ptr ob 0) →
+    s.locals 0 = some (posPtr' posBlock) → s.locals 2 = some (.ptr ob 0) →
     s.locals 6 = some (.int IntTy.u8 K) → s.locals 8 = some (.int IntTy.u8 k) →
     s.mem posBlock = some (encode p) → s.ro = false →
     (∃ blk, s.mem ob = some blk ∧ 1 ≤ blk.length) →
@@ -225,6 +226,30 @@ theorem find_king_loop (p : Position) (K ob : Nat) (hK : K < 256) :
 theorem encode_length (p : Position) : (encode p).length = 114 := by
   simp [encode, Gen.off_side, Gen.off_king_square, le32]
 
+/-- The position block is never the allocator block 0. -/
+theorem posBlock_ne_zero {m : Mem} {p : Position} {n : Nat} (h0 : m 0 = some (encodeLE 8 n))
+    (hm : m posBlock = some (encode p)) : posBlock ≠ 0 := by
+  intro e
+  rw [e] at hm
+  simp only [h0] at hm
+  have h1 : encodeLE 8 n = encode p := Option.some.inj hm
+  have h2 := congrArg List.length h1
+  have h3 : (encodeLE 8 n).length = 8 := by simp [encodeLE]
+  rw [h3, encode_length] at h2
+  omega
+
+/-- The position block is never the allocator block 0 (arbitrary 114-byte contents). -/
+theorem posBlock_ne_zero_of_len {m : Mem} {B : List UInt8} {n : Nat} (h0 : m 0 = some (encodeLE 8 n))
+    (hm : m posBlock = some B) (hB : B.length = 114) : posBlock ≠ 0 := by
+  intro e
+  rw [e] at hm
+  rw [h0] at hm
+  simp only [Option.some.injEq] at hm
+  have h2 := congrArg List.length hm
+  have h3 : (encodeLE 8 n).length = 8 := by simp [encodeLE]
+  rw [h3, hB] at h2
+  omega
+
 theorem encode_king (p : Position) (c : Color) :
     (encode p).getD (112 + c.idx) 0 = kingByte p c := by
   cases c <;> simp [encode, Gen.off_side, Gen.off_king_square, le32, List.getD, Color.idx,
@@ -259,7 +284,7 @@ theorem firstFrom_kingSquare (p : Position) (c : Color) :
 def false8 : Val := .int IntTy.u8 0
 
 theorem ev_cache (p : Position) (s : State) (c : Color) (hm : s.mem posBlock = some (encode p))
-    (h0 : s.locals 0 = some posPtr) (h1 : s.locals 1 = some (.int IntTy.u32 c.idx)) :
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h1 : s.locals 1 = some (.int IntTy.u32 c.idx)) :
     evalExpr Gen.prog 5 s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 112) (.var 1) 1))
       = .ok (.int IntTy.u8 (kingByte p c).toNat) := by
   have hl := encode_length p
@@ -270,7 +295,7 @@ theorem ev_cache (p : Position) (s : State) (c : Color) (hm : s.mem posBlock = s
     congr 1
     rw [List.take_one, List.head?_drop]
     simp [List.getD, show 112 + c.idx < (encode p).length by omega]
-  simp only [evalExpr, h0, h1, posPtr, Res.bind_eq, Res.bind_ok, ptrAddN, hm, hl,
+  simp only [evalExpr, h0, h1, posPtr', Res.bind_eq, Res.bind_ok, ptrAddN, hm, hl,
     show 0 + 112 ≤ 114 by omega, ite_true, Res.bind, IntTy.u32, Bool.false_eq_true, ite_false,
     Nat.zero_add, Nat.mul_one, show 112 + c.idx ≤ 114 by omega, load, Ty.size, IntTy.bytes,
     show (8:Nat) / 8 = 1 by rfl, hr]
@@ -300,15 +325,15 @@ theorem find_king_refines (p : Position) (c : Color) (m : Mem) (ob : Nat) (blk :
     (hm : m posBlock = some (encode p)) (hob : m ob = some blk) (hl : 1 ≤ blk.length) :
     match p.kingSquare c with
     | some sq => ∃ s', ExS Gen.prog ⟨frameLocals Gen.find_king.params
-          [posPtr, .int IntTy.u32 c.idx, .ptr ob 0], m, false⟩ Gen.find_king.body
+          [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr ob 0], m, false⟩ Gen.find_king.body
           (.ret (some true8)) s' ∧ store m (.int IntTy.u8) (.ptr ob 0) (.int IntTy.u8 sq.val) = .ok s'.mem
     | none => ∃ s', ExS Gen.prog ⟨frameLocals Gen.find_king.params
-          [posPtr, .int IntTy.u32 c.idx, .ptr ob 0], m, false⟩ Gen.find_king.body
+          [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr ob 0], m, false⟩ Gen.find_king.body
           (.ret (some false8)) s' ∧ s'.mem = m := by
   have hci : c.idx < 2 := by cases c <;> decide
   have hkb : kb c < 256 := by unfold kb; omega
-  let L0 := frameLocals Gen.find_king.params [posPtr, .int IntTy.u32 c.idx, .ptr ob 0]
-  have h0 : L0 0 = some posPtr := rfl
+  let L0 := frameLocals Gen.find_king.params [posPtr' posBlock, .int IntTy.u32 c.idx, .ptr ob 0]
+  have h0 : L0 0 = some (posPtr' posBlock) := rfl
   have h1 : L0 1 = some (.int IntTy.u32 c.idx) := rfl
   have h2 : L0 2 = some (.ptr ob 0) := rfl
   let s0 : State := ⟨L0, m, false⟩

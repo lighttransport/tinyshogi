@@ -5,31 +5,33 @@
 import Shogi.C.Proofs.LegalLoop
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem generate_pseudo_wrap {p : Position} {m : Mem} {mb mo cb co cap n : Nat}
     {L : List (List UInt8)} (hbuf : Buf m mb mo cb co cap L) (hf : Fresh m n) (h64 : n + 4000000100 < 2 ^ 64)
     (hm : m posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) :
     ∃ s' n', ExS Gen.prog ⟨frameLocals Gen.generate_pseudo.params
-        [posPtr, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+        [posPtr' posBlock, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
       Gen.generate_pseudo.body .normal s' ∧
       Buf s'.mem mb mo cb co cap (L ++ pseudoC p p.side) ∧ Fresh s'.mem n' ∧ n' ≤ n + 40000 ∧
       Frame m s'.mem mb cb := by
   obtain ⟨sg, n', eg, hb, hf', hn', hfr⟩ := generate_pseudo_spec (p := p) (c := p.side) hbuf hf (by omega) hm hpm hpc
-  let s0 : State := ⟨frameLocals Gen.generate_pseudo.params [posPtr, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
+  let s0 : State := ⟨frameLocals Gen.generate_pseudo.params [posPtr' posBlock, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap], m, false⟩
   have hside : EvE Gen.prog s0 (.load (.int ⟨32, false⟩) (.field (.var 0) 96)) (u32 p.side.idx) := by
-    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var rfl) (by simp [s0, ptrAddN, posPtr, hm, encode_length])) ?_
+    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var rfl) (by simp [s0, ptrAddN, posPtr', hm, encode_length])) ?_
     simp only [load, readBytes, s0, hm, encode_length, Ty.size, IntTy.bytes]
     rw [if_pos (by omega), encode_enc, enc_side]
     simp only [Res.bind_eq, Res.bind_ok, pure]
     rw [decode_le32 _ (by cases p.side <;> decide)]; rfl
-  refine ⟨{ s0 with mem := sg.mem }, n', ExS.call (vs := [posPtr, u32 p.side.idx, .ptr mb mo, .ptr cb co,
+  refine ⟨{ s0 with mem := sg.mem }, n', ExS.call (vs := [posPtr' posBlock, u32 p.side.idx, .ptr mb mo, .ptr cb co,
     .int IntTy.u64 cap]) (EvArgs.cons (EvE.var rfl) (EvArgs.cons hside (EvArgs.cons (EvE.var rfl)
       (EvArgs.cons (EvE.var rfl) (EvArgs.cons (EvE.var rfl) EvArgs.nil))))) rfl rfl eg (Or.inl rfl), hb, hf', hn', hfr⟩
 
 end Shogi.C.Proofs
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 
 theorem perm_map_inv {α β : Type} [DecidableEq α] (f : α → β) :
     ∀ (l : List β) (L : List α), l.Perm (L.map f) → ∃ M : List α, M.Perm L ∧ l = M.map f := by
@@ -57,6 +59,7 @@ theorem pseudoC_moves (p : Position) (hw : ∀ i, p.hand p.side i < 256) :
 end Shogi.C.Proofs
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 
 /-- Filtering any permutation of `pseudoMoves` with the spec's test gives the
     spec's legal moves, up to order. -/
@@ -70,6 +73,7 @@ theorem keepBytes_perm (p : Position) (fuel : Nat) {Ms : List Move} (h : Ms.Perm
 end Shogi.C.Proofs
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem buf_empty {m : Mem} {mb cb : Nat} {R C : Block} (hm : m mb = some R) (hc : m cb = some C)
@@ -125,7 +129,7 @@ theorem legal_prologue {s : State} {n : Nat} (hf : Fresh s.mem n) (h64 : n + 400
 /-- The `generate_pseudo(position, pseudo, &pseudo_count, 7200)` call of
     `generate_legal_mut_internal`. -/
 theorem legal_call_pseudo {s : State} {p : Position} {mb cb n : Nat}
-    (h0 : s.locals 0 = some posPtr) (h4 : s.locals 4 = some (.ptr mb 0)) (h5 : s.locals 5 = some (.ptr cb 0))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h4 : s.locals 4 = some (.ptr mb 0)) (h5 : s.locals 5 = some (.ptr cb 0))
     (hb : Buf s.mem mb 0 cb 0 7200 []) (hf : Fresh s.mem n) (h64 : n + 4000000100 < 2 ^ 64)
     (hm : s.mem posBlock = some (encode p)) (hpm : posBlock ≠ mb) (hpc : posBlock ≠ cb) (hro : s.ro = false) :
     ∃ s' n', ExS Gen.prog s (.call none 28 [(.var 0), (.var 4), (.var 5),
@@ -136,7 +140,7 @@ theorem legal_call_pseudo {s : State} {p : Position} {mb cb n : Nat}
   obtain ⟨sg, n', eg, hb', hf', hn', hfr⟩ := generate_pseudo_wrap (L := []) hb hf h64 hm hpm hpc
   have hc : EvE Gen.prog s (.cast ⟨64, false⟩ (.const (.int ⟨32, true⟩ 7200))) (.int IntTy.u64 7200) :=
     EvE_of_eval (n := 2) (by simp [evalExpr, evalCast, IntTy.wrap, IntTy.toInt, IntTy.modulus, IntTy.u64])
-  refine ⟨{ s with mem := sg.mem }, n', ExS.call (vs := [posPtr, .ptr mb 0, .ptr cb 0, .int IntTy.u64 7200])
+  refine ⟨{ s with mem := sg.mem }, n', ExS.call (vs := [posPtr' posBlock, .ptr mb 0, .ptr cb 0, .int IntTy.u64 7200])
     (EvArgs.cons (EvE.var h0) (EvArgs.cons (EvE.var h4) (EvArgs.cons (EvE.var h5) (EvArgs.cons hc EvArgs.nil))))
     rfl rfl (by rw [hro]; exact eg) (Or.inl rfl), rfl, rfl, by simpa using hb', hf', hn', hfr⟩
 
@@ -182,7 +186,7 @@ theorem legal_count_init {s : State} {n mb mo cap : Nat} {blk : Block} (hf : Fre
 
 /-- `mover = position->side_to_move; king_safety_prepare(&safety, position, mover)`
     in `generate_legal_mut_internal`. -/
-theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = some posPtr)
+theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = some (posPtr' posBlock))
     (hm : s.mem posBlock = some (encode p)) (ht : TablesIn s.mem) (hf : Fresh s.mem n) (h64 : n + 4000000100 < 2 ^ 64)
     (hro : s.ro = false) :
     ∃ s1 s', ExS Gen.prog s (.set 7 (.load (.int ⟨32, false⟩) (.field (.var 0) 96))) .normal s1 ∧
@@ -191,7 +195,7 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
       s'.locals 8 = some (.ptr n 0) ∧ (∀ x, x ≠ 7 → x ≠ 8 → s'.locals x = s.locals x) ∧ s'.ro = s.ro ∧
       (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → s'.mem b = s.mem b) ∧ Fresh s'.mem (n + 2) := by
   have hside : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.field (.var 0) 96)) (u32 p.side.idx) := by
-    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr, hm, encode_length])) ?_
+    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var h0) (by simp [ptrAddN, posPtr', hm, encode_length])) ?_
     simp only [load, readBytes, hm, encode_length, Ty.size, IntTy.bytes]
     rw [if_pos (by omega), encode_enc, enc_side]
     simp only [Res.bind_eq, Res.bind_ok, pure]
@@ -206,7 +210,7 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
   have hMg : ∀ g, g ≠ 0 → g ≠ n → M g = s.mem g := fun g a c => by rw [← hM, Mem.upd_ne c, Mem.upd_ne a]
   have hMn : M n = some (List.replicate 84 0) := by rw [← hM]; exact Mem.upd_eq
   have hf1 : Fresh M (n + 1) := by rw [← hM]; exact hf.after_alloc _
-  have hmM : M posBlock = some (encode p) := by rw [hMg _ (by decide) (Ne.symm hnp)]; exact hm
+  have hmM : M posBlock = some (encode p) := by rw [hMg _ (posBlock_ne_zero hf.1 hm) (Ne.symm hnp)]; exact hm
   have tg : ∀ g, 8192 ≤ g → g ≤ 8196 → M g = s.mem g := fun g a b => hMg g (by omega)
     (hgn g (by
       rcases (show g = 8192 ∨ g = 8193 ∨ g = 8194 ∨ g = 8195 ∨ g = 8196 by omega) with h | h | h | h | h <;>
@@ -217,7 +221,7 @@ theorem legal_safety {s : State} {p : Position} {n : Nat} (h0 : s.locals 0 = som
     hf1 (by omega) hn0 hnp
   let s2 : State := { s1 with mem := M, locals := s1.locals.upd 8 (.ptr n 0) }
   have h7 : s2.locals 7 = some (u32 p.side.idx) := by simp [s2, s1, Locals.upd]
-  refine ⟨_, { s2 with mem := sk.mem }, e1, (ExS.seq e2 (ExS.call (vs := [.ptr n 0, posPtr, u32 p.side.idx])
+  refine ⟨_, { s2 with mem := sk.mem }, e1, (ExS.seq e2 (ExS.call (vs := [.ptr n 0, posPtr' posBlock, u32 p.side.idx])
     (EvArgs.cons (EvE.var (by simp [s2, Locals.upd])) (EvArgs.cons (EvE.var (by simp [s2, s1, Locals.upd, h0]))
       (EvArgs.cons (EvE.var h7) EvArgs.nil))) rfl rfl (by simp only [s2, s1]; rw [hro]; exact ek) (Or.inr rfl))),
     hk, h7, by simp [s2, Locals.upd], fun x a b => by simp [s2, s1, Locals.upd, a, b], rfl, fun b a c d => ?_,

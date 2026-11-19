@@ -6,6 +6,7 @@
 import Shogi.C.Proofs.SquareAttack
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables Shogi.Position
 
 theorem Mem.upd_ne {m : Mem} {b x : Nat} {blk : Block} (h : x ≠ b) : (m.upd b blk) x = m x := by
@@ -47,6 +48,61 @@ theorem TablesIn.fresh {m : Mem} (h : TablesIn m) {b : Nat} (hb : m b = none) :
   · rw [h.g4] at hb; cases hb
   · rw [h.g5] at hb; cases hb
 
+theorem posBlock_ne_8192 {m : Mem} {p : Position} (hm : m posBlock = some (encode p))
+    (g : m 8192 = some Gen.global_step_attack_probes) : posBlock ≠ 8192 := by
+  intro e
+  rw [e, g] at hm
+  have h1 : encode p = Gen.global_step_attack_probes := (Option.some.inj hm).symm
+  have h2 := congrArg List.length h1
+  rw [encode_length] at h2
+  have h3 : List.length Gen.global_step_attack_probes = 6480 := by set_option maxRecDepth 1000000 in decide
+  rw [h3] at h2
+  omega
+
+theorem posBlock_ne_8193 {m : Mem} {p : Position} (hm : m posBlock = some (encode p))
+    (g : m 8193 = some Gen.global_step_attack_probe_count) : posBlock ≠ 8193 := by
+  intro e
+  rw [e, g] at hm
+  have h1 : encode p = Gen.global_step_attack_probe_count := (Option.some.inj hm).symm
+  have h2 := congrArg List.length h1
+  rw [encode_length] at h2
+  have h3 : List.length Gen.global_step_attack_probe_count = 162 := by set_option maxRecDepth 1000000 in decide
+  rw [h3] at h2
+  omega
+
+theorem posBlock_ne_8194 {m : Mem} {p : Position} (hm : m posBlock = some (encode p))
+    (g : m 8194 = some Gen.global_attack_rays) : posBlock ≠ 8194 := by
+  intro e
+  rw [e, g] at hm
+  have h1 : encode p = Gen.global_attack_rays := (Option.some.inj hm).symm
+  have h2 := congrArg List.length h1
+  rw [encode_length] at h2
+  have h3 : List.length Gen.global_attack_rays = 5184 := by set_option maxRecDepth 1000000 in decide
+  rw [h3] at h2
+  omega
+
+theorem posBlock_ne_8195 {m : Mem} {p : Position} (hm : m posBlock = some (encode p))
+    (g : m 8195 = some Gen.global_attack_ray_length) : posBlock ≠ 8195 := by
+  intro e
+  rw [e, g] at hm
+  have h1 : encode p = Gen.global_attack_ray_length := (Option.some.inj hm).symm
+  have h2 := congrArg List.length h1
+  rw [encode_length] at h2
+  have h3 : List.length Gen.global_attack_ray_length = 648 := by set_option maxRecDepth 1000000 in decide
+  rw [h3] at h2
+  omega
+
+theorem posBlock_ne_8196 {m : Mem} {p : Position} (hm : m posBlock = some (encode p))
+    (g : m 8196 = some Gen.global_attack_ray_masks) : posBlock ≠ 8196 := by
+  intro e
+  rw [e, g] at hm
+  have h1 : encode p = Gen.global_attack_ray_masks := (Option.some.inj hm).symm
+  have h2 := congrArg List.length h1
+  rw [encode_length] at h2
+  have h3 : List.length Gen.global_attack_ray_masks = 2592 := by set_option maxRecDepth 1000000 in decide
+  rw [h3] at h2
+  omega
+
 theorem TablesIn.upd0 {m : Mem} (h : TablesIn m) (blk : Block) : TablesIn (m.upd 0 blk) :=
   ⟨by rw [Mem.upd_ne (by decide)]; exact h.g1, by rw [Mem.upd_ne (by decide)]; exact h.g2,
    by rw [Mem.upd_ne (by decide)]; exact h.g3, by rw [Mem.upd_ne (by decide)]; exact h.g4,
@@ -78,13 +134,13 @@ theorem exec_alloc {s : State} {n : Nat} (ha : AllocAt s.mem n) (i size : Nat) :
     attacked by the opponent (0 when it has no king). -/
 theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
     (hm : m posBlock = some (encode p)) (ht : TablesIn m) (ha : AllocAt m n) :
-    ∃ s', ExS Gen.prog ⟨frameLocals Gen.shogi_is_in_check.params [posPtr, .int IntTy.u32 c.idx], m, false⟩
+    ∃ s', ExS Gen.prog ⟨frameLocals Gen.shogi_is_in_check.params [posPtr' posBlock, .int IntTy.u32 c.idx], m, false⟩
       Gen.shogi_is_in_check.body (.ret (some (if p.inCheck c then true8 else false8))) s' ∧
       (∀ x, x ≠ 0 → x ≠ n → s'.mem x = m x) ∧ s'.mem 0 = some (encodeLE 8 (n + 1)) ∧ (s'.mem n).isSome := by
   have hci : c.idx < 2 := by cases c <;> decide
   have ⟨_, hn0, _, hfree⟩ := ha
   have hnpos : n ≠ posBlock := fun e => by rw [e, hm] at hfree; cases hfree
-  let L0 := frameLocals Gen.shogi_is_in_check.params [posPtr, .int IntTy.u32 c.idx]
+  let L0 := frameLocals Gen.shogi_is_in_check.params [posPtr' posBlock, .int IntTy.u32 c.idx]
   let s0 : State := ⟨L0, m, false⟩
   -- argument guard
   have hguard : ExS Gen.prog s0 (.ite (.lor (.bin .eq none (.var 0) (.const .null)) (.land (.bin .ne
@@ -99,7 +155,8 @@ theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
   let s1 : State := { s0 with mem := m1, locals := s0.locals.upd 2 (.ptr n 0) }
   have halloc : ExS Gen.prog s0 (.alloc 2 1) .normal s1 := exec_alloc ⟨ha.1, hn0, ha.2.2.1, hfree⟩ 2 1
   have hm1 : m1 posBlock = some (encode p) := by
-    simp only [m1]; rw [Mem.upd_ne (Ne.symm hnpos), Mem.upd_ne (by decide)]; exact hm
+    have hposb : posBlock ≠ 0 := posBlock_ne_zero ha.1 hm
+    simp only [m1]; rw [Mem.upd_ne (Ne.symm hnpos), Mem.upd_ne hposb]; exact hm
   have ht1 : TablesIn m1 := (ht.upd0 _).upd _ (by rw [Mem.upd_ne hn0]; exact hfree)
   have hob : m1 n = some (List.replicate 1 0) := Mem.upd_eq
   have hfk := find_king_refines p c m1 n _ hm1 hob (by simp)
@@ -129,7 +186,7 @@ theorem shogi_is_in_check_refines (p : Position) (c : Color) (m : Mem) (n : Nat)
     have hargs : evalArgs Gen.prog 10 s2 [(.var 0), (.load (.int ⟨8, false⟩) (.var 2)),
         (.cast ⟨32, false⟩ (.bin .bxor (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.var 1))
           (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 1)))))] =
-        .ok [posPtr, .int IntTy.u8 sq.val, .int IntTy.u32 c.opp.idx] := by
+        .ok [posPtr' posBlock, .int IntTy.u8 sq.val, .int IntTy.u32 c.opp.idx] := by
       have hr : readBytes sF.mem n 0 1 = .ok [sq.val.toUInt8] := by simp [readBytes, hnF]
       simp only [evalArgs, evalExpr, s2, s1, s0, L0, Locals.upd, Res.bind_eq, Res.bind_ok, load,
         Ty.size, IntTy.bytes, hr]

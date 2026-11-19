@@ -5,6 +5,7 @@
 import MiniC.Logic
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC
 
 def noWrite : Stmt → Bool

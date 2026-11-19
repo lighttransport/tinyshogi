@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.DropsSpec
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 inductive Op where
@@ -41,7 +42,7 @@ theorem op_call {s : State} {p : Position} {sb fr pc mb mo cb co cap n row col :
     (hm : s.mem posBlock = some (encode p))
     (hsb0 : sb ≠ 0) (hsbm : sb ≠ mb) (hsbc : sb ≠ cb) (hpm : posBlock ≠ mb) (hpc' : posBlock ≠ cb)
     (hro : s.ro = false)
-    (a0 : s.locals 0 = some posPtr) (a16 : s.locals 16 = some (.ptr sb 0))
+    (a0 : s.locals 0 = some (posPtr' posBlock)) (a16 : s.locals 16 = some (.ptr sb 0))
     (hdr : EvE Gen.prog s edr (i32 o.dr)) (hdc : EvE Gen.prog s edc (i32 o.dc))
     (a2 : s.locals 2 = some (.ptr mb mo)) (a3 : s.locals 3 = some (.ptr cb co))
     (a4 : s.locals 4 = some (.int IntTy.u64 cap)) :
@@ -49,7 +50,7 @@ theorem op_call {s : State} {p : Position} {sb fr pc mb mo cb co cap n row col :
       Buf s'.mem mb mo cb co cap (L ++ opOut p c t fr pc row col cp iz o) ∧
       Fresh s'.mem (n + 2 * (opOut p c t fr pc row col cp iz o).length) ∧ Frame s.mem s'.mem mb cb := by
   have hargs : EvArgs Gen.prog s [(.var 0), (.var 16), edr, edc, (.var 2), (.var 3), (.var 4)]
-      [posPtr, .ptr sb 0, i32 o.dr, i32 o.dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap] :=
+      [posPtr' posBlock, .ptr sb 0, i32 o.dr, i32 o.dc, .ptr mb mo, .ptr cb co, .int IntTy.u64 cap] :=
     EvArgs.cons (EvE.var a0) (EvArgs.cons (EvE.var a16) (EvArgs.cons hdr (EvArgs.cons hdc
       (EvArgs.cons (EvE.var a2) (EvArgs.cons (EvE.var a3) (EvArgs.cons (EvE.var a4) EvArgs.nil))))))
   cases o with
@@ -112,7 +113,7 @@ theorem chain_spec {p : Position} {sb fr pc mb mo cb co cap row col : Nat} {c : 
       ArgsOk s.locals ops →
       Buf s.mem mb mo cb co cap L → Fresh s.mem n → n + 36 * ops.length < 2 ^ 64 →
       s.mem sb = some (srcBytes fr pc c t row col cp iz) → s.mem posBlock = some (encode p) → s.ro = false →
-      s.locals 0 = some posPtr → s.locals 16 = some (.ptr sb 0) →
+      s.locals 0 = some (posPtr' posBlock) → s.locals 16 = some (.ptr sb 0) →
       s.locals 2 = some (.ptr mb mo) → s.locals 3 = some (.ptr cb co) →
       s.locals 4 = some (.int IntTy.u64 cap) →
       ∃ s', ExS Gen.prog s (chainStmt ops) .brk s' ∧ s'.locals = s.locals ∧ s'.ro = s.ro ∧
@@ -134,7 +135,7 @@ theorem chain_spec {p : Position} {sb fr pc mb mo cb co cap row col : Nat} {c : 
     have hlen := opOut_length p c t fr pc row col cp iz o
     obtain ⟨s', e', hl', hro', hb', hf', hfr'⟩ := ih s1 _ _
       (fun y hy => by rw [hl1]; exact ha y (by simp [hy])) hb1 hf1 (by simp at h64; omega)
-      (hfr1.keep hsb0 hsbm hsbc hsb) (hfr1.pos hpm hpc' hm) (by rw [hro1]; exact hro)
+      (hfr1.keep hsb0 hsbm hsbc hsb) (hfr1.pos hpm hpc' hm (posBlock_ne_zero hf.1 hm)) (by rw [hro1]; exact hro)
       (by rw [hl1]; exact a0) (by rw [hl1]; exact a16) (by rw [hl1]; exact a2) (by rw [hl1]; exact a3)
       (by rw [hl1]; exact a4)
     refine ⟨s', ExS.seq e1 e', by rw [hl', hl1], by rw [hro', hro1], ?_, ?_, Frame.trans hfr1 hfr'⟩

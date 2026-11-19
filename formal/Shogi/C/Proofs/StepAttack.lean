@@ -12,6 +12,7 @@ import Shogi.TablesSpec
 import Shogi.C.Proofs.Tables
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 /-- `step_attack_probe_count[c][t]`, read from the translated table bytes. -/
@@ -391,7 +392,7 @@ theorem prb_mask_lt (c : Color) (t : Fin 81) (i : Nat) (hi : i < cnt c t) :
   exact this.2
 
 theorem evPiece (p : Position) (c : Color) (t : Fin 81) (s : State) (i : Nat) (hi : i < cnt c t)
-    (h0 : s.locals 0 = some posPtr) (h5 : s.locals 5 = some (.ptr 8192 (pbase c t i)))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h5 : s.locals 5 = some (.ptr 8192 (pbase c t i)))
     (hm : s.mem posBlock = some (encode p))
     (hG1 : s.mem 8192 = some Gen.global_step_attack_probes) :
     evalExpr Gen.prog 6 s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0)
@@ -405,7 +406,7 @@ theorem evPiece (p : Position) (c : Color) (t : Fin 81) (s : State) (i : Nat) (h
   have hl := encode_length p
   have hr2 := readBoard hm _ hsq
   have hbb : bb p (prb c t i).square = (pieceByte (p.pieceAt ⟨_, hsq⟩)).toNat := by simp [bb, hsq]
-  simp only [evalExpr, h0, h5, Res.bind_eq, Res.bind_ok, posPtr, ptrAddN, hm, hl, hG1, G1_len,
+  simp only [evalExpr, h0, h5, Res.bind_eq, Res.bind_ok, posPtr', ptrAddN, hm, hl, hG1, G1_len,
     show pbase c t i + 0 ≤ 6480 by omega, show (0 : Nat) + 0 ≤ 114 by omega, ite_true, Nat.add_zero,
     load, Ty.size, IntTy.bytes, show (8:Nat) / 8 = 1 by rfl, hr1, Res.bind, IntTy.u8,
     Bool.false_eq_true, ite_false, Nat.zero_add, Nat.mul_one]
@@ -431,7 +432,7 @@ theorem mask_bytes (c : Color) (t : Fin 81) (i : Nat) (hi : i < cnt c t) :
 
 theorem step_loop (p : Position) (c : Color) (t : Fin 81) :
     ∀ d i (s : State), i + d = cnt c t →
-    s.locals 0 = some posPtr → s.locals 1 = some (.int IntTy.u8 t.val) →
+    s.locals 0 = some (posPtr' posBlock) → s.locals 1 = some (.int IntTy.u8 t.val) →
     s.locals 2 = some (.int IntTy.u32 c.idx) → s.locals 3 = some (.int IntTy.u8 (16 * c.idx)) →
     s.locals 4 = some (.int IntTy.u8 i) →
     s.mem posBlock = some (encode p) → s.mem 8192 = some Gen.global_step_attack_probes →
@@ -543,11 +544,11 @@ theorem step_square_attacked_refines (p : Position) (t : Square) (c : Color) (m 
     (hm : m posBlock = some (encode p)) (hG1 : m 8192 = some Gen.global_step_attack_probes)
     (hG2 : m 8193 = some Gen.global_step_attack_probe_count) :
     ∃ s', ExS Gen.prog ⟨frameLocals Gen.step_square_attacked.params
-        [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx], m, false⟩
+        [posPtr' posBlock, .int IntTy.u8 t.val, .int IntTy.u32 c.idx], m, false⟩
       Gen.step_square_attacked.body
       (.ret (some (if stepAttacked p t c then true8 else false8))) s' ∧ s'.mem = m := by
   have hci : c.idx < 2 := by cases c <;> decide
-  let L0 := frameLocals Gen.step_square_attacked.params [posPtr, .int IntTy.u8 t.val, .int IntTy.u32 c.idx]
+  let L0 := frameLocals Gen.step_square_attacked.params [posPtr' posBlock, .int IntTy.u8 t.val, .int IntTy.u32 c.idx]
   let s0 : State := ⟨L0, m, false⟩
   let s1 : State := { s0 with locals := s0.locals.upd 3 (.int IntTy.u8 (16 * c.idx)) }
   have hset3 : ExS Gen.prog s0 (.set 3 (.cast ⟨8, false⟩ (.bin .shl (some ⟨32, false⟩)

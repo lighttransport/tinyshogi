@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Geom2
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 /-- `needs_probe` as the C computes it from the record and the move. -/

@@ -4,6 +4,7 @@
 import Shogi.C.Proofs.NeedsProbe
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C Shogi.Tables
 
 def lp0 : Stmt := (.seq (.alloc 10 5) (.memcpy (.var 10) (.index (.var 4) (.var 9) 5) (.const (.int ⟨64, false⟩ 5))))
@@ -50,7 +51,7 @@ theorem lp0_spec {s : State} {pb i n : Nat} {PB MV : List UInt8} (hl4 : s.locals
     that is not a pawn drop, the iteration appends the move and continues. -/
 theorem iter_fast {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co cap : Nat} {PB : List UInt8}
     {L : List (List UInt8)} (rest : Stmt) (hm : m ∈ p.pseudoMoves)
-    (hl0 : s.locals 0 = some posPtr) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
+    (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl1 : s.locals 1 = some (.ptr mb mo)) (hl2 : s.locals 2 = some (.int IntTy.u64 cap))
     (hl4 : s.locals 4 = some (.ptr pb 0)) (hl6 : s.locals 6 = some (.ptr cb co))
     (hl8 : s.locals 8 = some (.ptr Sb 0)) (hl9 : s.locals 9 = some (.int IntTy.u64 i))
     (hpos : s.mem posBlock = some (encode p)) (hpb : s.mem pb = some PB) (hi : 5 * i + 5 ≤ PB.length)
@@ -73,7 +74,7 @@ theorem iter_fast {s : State} {p : Position} {m : Move} {pb i n Sb mb mo cb co c
   have hMl : (moveBytes p m).length = 5 := by cases m <;> rfl
   have hm1n : m1 n = some (moveBytes p m) := by
     simp only [m1]; rw [write_some Mem.upd_eq]; simp [wrb, hMl]
-  have hP0 : posBlock ≠ 0 := by decide
+  have hP0 : posBlock ≠ 0 := posBlock_ne_zero hf.1 hpos
   obtain ⟨s2, e1, hm2, hro2, l11, hl2'⟩ := np_spec (s := s1) hm (by simp [s1, Locals.upd]; exact hl0)
     (by simp [s1, Locals.upd]; exact hl8) (by show m1 Sb = _; rw [hm1o Sb hS0 (Ne.symm hnS)]; exact hSb)
     (by simp [s1, Locals.upd]) hm1n (by show m1 posBlock = _; rw [hm1o _ hP0 (Ne.symm hnp')]; exact hpos)

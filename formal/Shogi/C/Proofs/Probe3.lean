@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Probe2
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 def wrb (blk : List UInt8) (o : Nat) (bs : List UInt8) : List UInt8 := blk.take o ++ bs ++ blk.drop (o + bs.length)
@@ -34,7 +35,7 @@ def pbPre (rest : Stmt) : Stmt :=
 
 /-- After the prefix: locals and the three blocks the probe touches. -/
 structure PreOut (s : State) (m : Mem) (mvb ub n : Nat) (sd : Color) (P MV U : List UInt8) : Prop where
-  l0 : s.locals 0 = some posPtr
+  l0 : s.locals 0 = some (posPtr' posBlock)
   l1 : s.locals 1 = some (.ptr n 0)
   l2 : s.locals 2 = some (.ptr ub 0)
   l4 : s.locals 4 = some (.int IntTy.u32 sd.idx)
@@ -50,9 +51,9 @@ theorem probe_pre {m : Mem} {mvb ub n : Nat} {pa h sd kb kw} {MV UB : List UInt8
     (hMV : MV.length = 5) (hUB : UB.length = 20) (hf : Fresh m n) (h64 : n + 1 < 2 ^ 64)
     (hmvb0 : mvb ≠ 0) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
     ∃ s, (∀ {rest o s'}, ExS Gen.prog s rest o s' →
-        ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], m, false⟩
+        ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr' posBlock, .ptr mvb 0, .ptr ub 0], m, false⟩
         (pbPre rest) o s') ∧
-      PreOut s m mvb ub n sd (enc pa h sd kb kw) MV
+      PreOut (posBlock := posBlock) s m mvb ub n sd (enc pa h sd kb kw) MV
         (ub1 UB MV sd.idx ((enc pa h sd kb kw).getD (112 + sd.idx) 0)) := by
   have hnmv : n ≠ mvb := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hmv; cases hmv
   have hnub : n ≠ ub := fun e => by rw [← e, hf.2.2 n (Nat.le_refl _)] at hub; cases hub
@@ -60,7 +61,7 @@ theorem probe_pre {m : Mem} {mvb ub n : Nat} {pa h sd kb kw} {MV UB : List UInt8
   have hn0 := hf.2.1
   let P := enc pa h sd kb kw
   have hPl : P.length = 114 := enc_length _ _ _ _ _
-  let s0 : State := ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], m, false⟩
+  let s0 : State := ⟨frameLocals Gen.make_legal_probe.params [posPtr' posBlock, .ptr mvb 0, .ptr ub 0], m, false⟩
   -- pb0
   let sA : State := { s0 with locals := s0.locals.upd 3 (.ptr mvb 0) }
   have e0 : ExS Gen.prog s0 pb0 .normal sA := ExS.set (EvE.var rfl)
@@ -85,10 +86,17 @@ theorem probe_pre {m : Mem} {mvb ub n : Nat} {pa h sd kb kw} {MV UB : List UInt8
   -- pb3 : color
   let c := sd
   let sD : State := { sC with locals := sC.locals.upd 4 (.int IntTy.u32 c.idx) }
-  have hmp2 : m2 posBlock = some P := by rw [hm2 _ hnp.symm, hm1 _ (by decide) hnp.symm]; exact hp
+  have hposb : posBlock ≠ 0 := by
+    intro e
+    rw [e, hf.1] at hp
+    simp only [Option.some.injEq] at hp
+    have h2 := congrArg List.length hp
+    rw [show (encodeLE 8 n).length = 8 by simp [encodeLE], hPl] at h2
+    omega
+  have hmp2 : m2 posBlock = some P := by rw [hm2 _ hnp.symm, hm1 _ hposb hnp.symm]; exact hp
   have e3 : ExS Gen.prog sC pb3 .normal sD := by
     apply ExS.set
-    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var rfl) (by simp [ptrAddN, posPtr, sC, hmp2, hPl])) ?_
+    refine EvE.load (pa := .ptr posBlock 96) (EvE.field (EvE.var rfl) (by simp [ptrAddN, posPtr', sC, hmp2, hPl])) ?_
     simp only [load, readBytes, sC, hmp2, hPl, Ty.size, IntTy.bytes]
     rw [if_pos (by omega), enc_side]
     simp only [Res.bind_eq, Res.bind_ok, pure]
@@ -130,8 +138,8 @@ theorem probe_pre {m : Mem} {mvb ub n : Nat} {pa h sd kb kw} {MV UB : List UInt8
       (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 112) (.var 4) 1)) (.int IntTy.u8 (P.getD (0 + 112 + c.idx * 1) 0).toNat) :=
     load_u8_at (b := posBlock) (o := 0 + 112 + c.idx * 1)
       (EvE.index (pb := .ptr posBlock (0 + 112))
-        (EvE.field (EvE.var (show ({ sE with mem := m5 } : State).locals 0 = some posPtr from rfl))
-          (by simp [ptrAddN, posPtr, hmp5, hPl]))
+        (EvE.field (EvE.var (show ({ sE with mem := m5 } : State).locals 0 = some (posPtr' posBlock) from rfl))
+          (by simp [ptrAddN, posPtr', hmp5, hPl]))
         (EvE.var (show ({ sE with mem := m5 } : State).locals 4 = some (.int IntTy.u32 c.idx) by
           simp [sE, sD, Locals.upd]))
         (by simp [ptrAdd, IntTy.u32, hmp5, hPl, ptrAddN]; omega))

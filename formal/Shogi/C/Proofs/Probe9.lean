@@ -5,6 +5,7 @@
 import Shogi.C.Proofs.Probe8
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 theorem pseudo_normal {p : Position} {s d : Square} {pr : Bool} (h : Move.normal s d pr ∈ p.pseudoMoves) :
@@ -207,7 +208,7 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
     (hp : M posBlock = some (encode p)) (hmv : M mvb = some (moveBytes p mv)) (hub : M ub = some UB)
     (hUB : UB.length = 20) (hf : Fresh M n) (h64 : n + 1 < 2 ^ 64)
     (hmvb0 : mvb ≠ 0) (hub0 : ub ≠ 0) (hpu : posBlock ≠ ub) :
-    ∃ s', ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr, .ptr mvb 0, .ptr ub 0], M, false⟩
+    ∃ s', ExS Gen.prog ⟨frameLocals Gen.make_legal_probe.params [posPtr' posBlock, .ptr mvb 0, .ptr ub 0], M, false⟩
         Gen.make_legal_probe.body .normal s' ∧
       s'.mem posBlock = some (encode (p.play mv)) ∧
       (∀ x, x ≠ 0 → x ≠ n → x ≠ ub → x ≠ posBlock → s'.mem x = M x) ∧ s'.ro = false ∧
@@ -262,7 +263,7 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
           have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
         have hu1 : ub < n := Nat.lt_of_not_le (fun hc => by
           have := hf.2.2 ub hc; rw [this] at hub; cases hub)
-        exact hP.fresh.congr (by rw [ho3 0 (by decide), ho2 0 (by decide) (Ne.symm hub0)])
+        exact hP.fresh.congr (by rw [ho3 0 (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm, ho2 0 ((posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm) (Ne.symm hub0)])
           (fun x hx => by rw [ho3 x (by omega), ho2 x (by omega) (by omega)])
   | drop t d =>
     obtain ⟨i, hi, hh, hd⟩ := pseudo_drop hm
@@ -297,7 +298,7 @@ theorem make_probe_spec (p : Position) (hS : p.Shaped) (hK : KingsUnique p) (mv 
           have := hf.2.2 posBlock hc; rw [this] at hp; cases hp)
         have hu1 : ub < n := Nat.lt_of_not_le (fun hc => by
           have := hf.2.2 ub hc; rw [this] at hub; cases hub)
-        exact hP.fresh.congr (by rw [ho3 0 (by decide), ho2 0 (by decide) (Ne.symm hub0)])
+        exact hP.fresh.congr (by rw [ho3 0 (posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm, ho2 0 ((posBlock_ne_zero_of_len hf.1 hp (enc_length _ _ _ _ _)).symm) (Ne.symm hub0)])
           (fun x hx => by rw [ho3 x (by omega), ho2 x (by omega) (by omega)])
 
 end Shogi.C.Proofs

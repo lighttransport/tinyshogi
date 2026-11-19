@@ -8,6 +8,7 @@ import Shogi.C.Proofs.Helpers
 import MiniC.Logic
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC
 
 def pureE : Expr → Bool
@@ -63,6 +64,7 @@ theorem pure_ret {f : Nat} {fn : Func} {e : Expr} {args : List Val} {v : Val}
 end Shogi.C.Proofs
 
 namespace Shogi.C.Proofs
+variable {posBlock : Nat}
 open MiniC Shogi Shogi.C
 
 /-- `if`/`return` trees over pure expressions. -/
