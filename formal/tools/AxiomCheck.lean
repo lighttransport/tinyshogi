@@ -100,6 +100,8 @@ import Shogi
 #print axioms Shogi.C.Proofs.checkingPawnDrops_le_one
 #print axioms Shogi.C.Proofs.dropMoves_nodup
 #print axioms Shogi.pseudoMoves_le_7200
+#print axioms Shogi.C.Proofs.shogi_position_copy_active_spec
+#print axioms Shogi.C.Proofs.shogi_generate_legal_spec
 #print axioms Shogi.unplay_normal
 #print axioms Shogi.unplay_drop
 #print axioms Shogi.unplay_pseudo_drop
@@ -110,6 +112,7 @@ import Shogi
 #print axioms Shogi.stepOffsets_ne_zero_color
 #print axioms Shogi.slideTargets_sub
 #print axioms Shogi.boardMoves_mem_attack
+#print axioms Shogi.C.Proofs.shogi_generate_legal_mut_spec
 #print axioms Shogi.unplay_pseudo
 #print axioms Shogi.pawn_attackSquares_mem
 #print axioms Shogi.square_offset_injective
