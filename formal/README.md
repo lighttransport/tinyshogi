@@ -47,8 +47,8 @@ squares, clamped history length, history keys, mover/check, stored length).
 carries the uchifuzume `RecSpec` hypothesis *locally* as its induction
 hypothesis; `Shogi.C.Proofs.RecSpec_discharge` proves that sub-spec outright
 (strong induction on `pawnsInHands`, decreasing allocation budget, axiom-clean).
-The two have not yet been composed into a single theorem without `hrec`
-(PLAN.md R1).
+They are composed by `Shogi.C.Main.shogi_generate_legal_mut_correct` (R1),
+which states the fid 36 result with no `hrec`/`RecSpec` hypothesis.
 `shogi_generate_legal_spec`
 (fid 38) proves the wrapper around it: guard, fresh 41088-byte work block, the
 fid 37 copy call, the internal-generator call and the returned count, under

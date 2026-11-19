@@ -1,16 +1,19 @@
 # tinyshogi `formal/` — plan for a Lean 4 formalization of the shogi rules
 
-Status (2026-11-19 review): the spec (T1–T4), the Lean → C tables (T6), the
+Status (2026-11-19): R0 (commit the work in progress) and R1 (unconditional
+legal-move theorem) are done. The spec (T1–T4), the Lean → C tables (T6), the
 attack/king layer (T7) and the whole legal-move generator (T8–T9: pseudo
 moves, king safety, probe make/unmake, legality loop, uchifuzume recursion
 via `RecSpec_discharge`, 7200-move bound) are proven against the MiniC model,
-axiom-clean. **Two structural gaps remain before any of it reaches the C
-objects the engine actually uses** (findings F2 and F4 below), and
-make/unmake, hashing, repetition, declaration and the game result (old
-T9/T10, "M7") have spec-level scaffolding only. The remaining work is
-re-planned as R0–R9 below. The original design (§1–§8) is kept at the end
-for reference; where it conflicts with the sections above it, the sections
-above win.
+axiom-clean. `Shogi.C.Main.shogi_generate_legal_mut_correct` now states the
+fid 36 result without `hrec`/`RecSpec`. **The main structural gap remains:
+all position-block theorems still assume the 114-byte `encode p` block**
+(finding F2), so they do not yet cover the 41088-byte `ShogiPosition` the
+engine builds. Make/unmake, hashing, repetition, declaration and the game
+result (old T9/T10, "M7") have spec-level scaffolding only. The remaining
+work is R2–R9 below. The original design (§1–§8) is kept at the end for
+reference; where it conflicts with the sections above it, the sections above
+win.
 
 ---
 
@@ -156,17 +159,22 @@ Estimates are focused engineer-days (d) or weeks (w), ±50 % for proofs.
    is green on the tip. Nothing is pushed without the `AGENTS.md` audit and
    fresh authorization.
 
-### R1 — Unconditional legal-move theorem on the current model (1–2 d)
+### R1 — Unconditional legal-move theorem on the current model — DONE (2026-11-19)
 
-Small and independent of R2. It removes `hrec` from the headline statement
-and fixes the statement shape before R2 changes the block model.
+`Shogi.C.Main` proves `shogi_generate_legal_mut_correct` with no `hrec` or
+`RecSpec` hypothesis; all five new theorems are axiom-clean. R1 removed
+`hrec` from the headline statement and fixed its shape before R2 changes the
+block model. Implemented as follows.
 
 * Spec: `reachable_opp_not_in_check : Reachable p → p.inCheck p.side.opp =
   false` (start position by `decide`, step by `legalMoves_safe`).
-* Spec: bundle `RulesInv p := Shaped ∧ KingsUnique ∧ materialOk ∧
+* Spec: bundle `RulesInv p := Shaped ∧ (∀ c, kingCount c ≤ 1) ∧ materialOk ∧
   inCheck side.opp = false`, with `reachable_rulesInv`
-  (`reachable_inv`, `reachable_kingsUnique`, `reachable_materialOk`, the
-  lemma above). `hand < 256` follows from `hand_lt_256_of_materialOk`.
+  (`reachable_inv`, `reachable_kings`, `reachable_materialOk`, the lemma
+  above). `KingsUnique` is derived by `kingsUnique_of_count`, and
+  `hand < 256` by `hand_lt_256_of_materialOk`. (Deviation from the original
+  wording: the count bound is stored instead of `KingsUnique`, which is
+  equivalent and avoids a second invariant proof.)
 * Re-export the frame from `generate_legal_refines` (F5). Generalise fid 36
   to any output block/offset (F6).
 * `shogi_generate_legal_mut_correct`: `RulesInv p`, the block hypotheses and
@@ -175,8 +183,8 @@ and fixes the statement shape before R2 changes the block model.
   position block is unchanged, every other block is framed, and the
   allocator stays bounded. Choose `fuel := p.pawnsInHands + 1` (so
   `legalAux (fuel+1) = legalMoves` by definition of `legalFuel`) and
-  `rem := recBigEnough + pawnsInHands·recDelta` (≤ 1.18·10^15 ≤ 200·recDelta
-  since pawns ≤ 18). Discharge `hrec` with `RecSpec_discharge` on
+  `rem := recBigEnough + pawnsInHands·recDelta` (≤ 1.36·10^15 ≤ 200·recDelta
+  since the two hands hold at most 18 pawns each). Discharge `hrec` with `RecSpec_discharge` on
   `p.play mv` (`pawnsInHands_play_drop`, `play_materialOk`,
   `play_kingCount_le`).
 * Optional (T2 promised it): `legalMoves_nodup`, so the permutation is also
