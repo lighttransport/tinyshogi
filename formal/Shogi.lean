@@ -35,6 +35,7 @@ import Shogi.C.Proofs.Pseudo4
 import Shogi.C.Proofs.Pseudo5
 import Shogi.C.Proofs.PseudoSpec
 import Shogi.C.Proofs.PlaySpec
+import Shogi.C.Proofs.SameMove
 import Shogi.C.Proofs.OneCheckDrop
 import Shogi.C.Proofs.Probe1
 import Shogi.C.Proofs.Probe2

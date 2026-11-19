@@ -142,3 +142,4 @@ import Shogi
 #print axioms Shogi.Position.zobrist_side_flip
 #print axioms MiniC.ExS_ext
 #print axioms MiniC.ExS_mem_ext
+#print axioms Shogi.C.Proofs.same_move_spec
