@@ -133,3 +133,5 @@ import Shogi
 #print axioms Shogi.C.reachable_rulesInv
 #print axioms Shogi.C.RulesInv.kingsUnique
 #print axioms Shogi.C.shogi_generate_legal_mut_correct
+#print axioms Shogi.C.encodeW_length
+#print axioms Shogi.C.encode_length

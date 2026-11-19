@@ -39,8 +39,19 @@ def encode (p : Position) : List UInt8 :=
   let toKing := toSide ++ List.replicate (Gen.off_king_square - toSide.length) 0
   toKing ++ [kingByte p .black, kingByte p .white]
 
-/-- Block holding the position (1 in the reference harness). Proofs generalize
-    this to an arbitrary block bound with `variable {posBlock : Nat}`. -/
+theorem encode_length (p : Position) : (encode p).length = 114 := by
+  simp [encode, Gen.off_side, Gen.off_king_square, le32]
+
+/-- The 12 implementation-only bytes of `ShogiPosition` (move_number, hash).
+    The rules core never reads them, so the R2 proofs keep them parametric:
+    `encode p` is `encodeW p` with zeros. -/
+def encodeW (p : Position) (w : List UInt8) : Block :=
+  (encode p).take 100 ++ w ++ (encode p).drop 112
+
+theorem encodeW_length (p : Position) {w : List UInt8} (hw : w.length = 12) :
+    (encodeW p w).length = 114 := by
+  simp [encodeW, encode_length p, hw]
+
 def posBlock : Nat := 1
 
 def tablesMem : Mem := fun b => (Gen.globals.find? (·.1 == b)).map (·.2)
