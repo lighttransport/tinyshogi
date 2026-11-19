@@ -1,7 +1,8 @@
 # tinyshogi `formal/` — plan for a Lean 4 formalization of the shogi rules
 
-Status (2026-11-19): R0 (commit the work in progress) and R1 (unconditional
-legal-move theorem) are done. The spec (T1–T4), the Lean → C tables (T6), the
+Status (2026-11-19): R0 (commit the work in progress), R1 (unconditional
+legal-move theorem) and the first two pieces of R2 (`MiniC/Extend.lean`
+byte-level lemmas; `encodeW` in `Shogi/C/Model.lean`) are done. The spec (T1–T4), the Lean → C tables (T6), the
 attack/king layer (T7) and the whole legal-move generator (T8–T9: pseudo
 moves, king safety, probe make/unmake, legality loop, uchifuzume recursion
 via `RecSpec_discharge`, 7200-move bound) are proven against the MiniC model,
@@ -193,6 +194,17 @@ block model. Implemented as follows.
   listed in the axiom check.
 
 ### R2 — Real `ShogiPosition` blocks (1–2 w) — the core of the remaining M6
+
+**Progress:** both foundations are in place. (1) `MiniC/Extend.lean` proves
+`MemExt` and the byte-level extension lemmas for `readBytes`, `writeBytes`,
+`load`, `store`, pointer arithmetic, `memcmp`, `strlen` and `alloc`'s counter.
+(2) `Shogi.C.encodeW p w` replaces the 12 implementation-only bytes with a
+symbolic word, with `encodeW_length` proved. **Remaining:** the mutual
+fuel-induction `ext_step` that lifts successful `evalExpr`/`evalArgs`/
+`execStmt` runs to extended memories. All expression, argument and statement
+constructors except `alloc`/`memcpy`/`memset` were proved in draft form; the
+three memory-writing constructors and the final `ExS` corollary still need
+work. The draft was reverted so the tree stays green.
 
 Goal: fid 35/36/38 theorems for any 41088-byte block whose live fields
 encode `p`, with any `move_number`/`hash`/history bytes. `CopyGenSpec` is
