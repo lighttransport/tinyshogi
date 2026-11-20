@@ -874,7 +874,7 @@ def l1OverCond : Expr :=
     (.load (.int ⟨32, false⟩) (.index (.var 1) (.var 9) 4))
 def l1Store : Stmt := .store (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4) l1Val
 def l1Ret : Stmt := .ret (some (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩)
-  (.const (.int ⟨32, true⟩ 1)) (.const (.int ⟨32, true⟩ 0)))))
+  (.const (.int ⟨32, true⟩ 0)) (.const (.int ⟨32, true⟩ 0)))))
 def loop1BodyStmt : Stmt := .ite (l1Cond 0) (.seq l1Store (.ite l1OverCond l1Ret .skip)) .brk
 
 theorem loop1_body (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
@@ -1025,5 +1025,59 @@ theorem loop1_body (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
       simpa [s1, T', Mem.upd_ne htb_x] using hframe bb hb0 hmbx htb_x
     · simpa [s1] using hro
   · simp [s1]
+
+def loop1StepStmt : Stmt :=
+  .set 9 (.cast ⟨32, false⟩ (.bin .add (some ⟨32, false⟩)
+    (.cast ⟨32, false⟩ (.var 9)) (.const (.int ⟨32, false⟩ 1))))
+
+theorem loop1_runs (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
+    (m : Mem) (mb tb : Nat) (s0 : State) (h9zero : s0.locals 9 = some (u32 0))
+    (hInv0 : Loop1Inv (posBlock := posBlock) p m mb tb 0 s0) :
+    ∃ s', ExS Gen.prog s0 Gen.validate_material_loop1 .normal s' ∧
+      Loop1Inv (posBlock := posBlock) p m mb tb 7 s' ∧ s'.locals 9 = some (u32 7) := by
+  let P : Nat → Prop := fun d => d ≤ 7 → ∀ (s : State),
+    s.locals 9 = some (u32 (7 - d)) →
+    Loop1Inv (posBlock := posBlock) p m mb tb (7 - d) s →
+      ∃ s', ExS Gen.prog s Gen.validate_material_loop1 .normal s' ∧
+        Loop1Inv (posBlock := posBlock) p m mb tb 7 s' ∧ s'.locals 9 = some (u32 7)
+  have hP : ∀ d, P d := by
+    intro d
+    induction d with
+    | zero =>
+        intro hd s h9 hInv
+        refine ⟨s, ?_, ?_, h9⟩
+        · unfold Gen.validate_material_loop1
+          apply ExS.loop_brk
+          have hcond : EvE Gen.prog s (l1Cond 7) (boolVal false) := by
+            refine EvE_of_eval (n := 10) ?_
+            simp [l1Cond, evalExpr, evalCast, intOf, isPtr, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+              evalBin, evalBinInt, binInt, u32, i32, h9, IntTy.u32, IntTy.i32, boolVal]
+          exact ExS.ite hcond rfl ExS.brk
+        · simpa using hInv
+    | succ d ih =>
+        intro hd s h9 hInv
+        have hInv_copy := hInv
+        let j := 7 - (d + 1)
+        have hj : j < 7 := by dsimp [j]; omega
+        have hd_le : d ≤ 7 := by omega
+        have hjeq : j + 1 = 7 - d := by dsimp [j]; omega
+        obtain ⟨s1, hbody, hInv1, hl9⟩ := loop1_body p hs hmat m mb tb s j hj h9 hInv_copy
+        let s2 : State := { s1 with locals := s1.locals.upd 9 (u32 (j+1)) }
+        have hstep : ExS Gen.prog s1 loop1StepStmt .normal s2 := by
+          have h9s1 : s1.locals 9 = some (u32 j) := by rw [hl9]; exact h9
+          have hev : evalExpr Gen.prog 10 s1 (.cast ⟨32, false⟩
+              (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.var 9)) (.const (.int ⟨32, false⟩ 1))))
+              = .ok (u32 (j+1)) := by
+            simp [evalExpr, evalCast, evalBin, evalBinInt, binInt, intOf, isPtr,
+              IntTy.toInt, IntTy.wrap, IntTy.modulus, u32, i32, h9s1, IntTy.u32] <;> omega
+          exact ExS.set (EvE_of_eval hev)
+        have hInv2 : Loop1Inv (posBlock := posBlock) p m mb tb (j+1) s2 := by
+          simpa [s2, Locals.upd, Loop1Inv] using hInv1
+        have h9s2 : s2.locals 9 = some (u32 (j+1)) := by simp [s2, Locals.upd]
+        obtain ⟨sf, hloopf, hInvf, h9f⟩ := ih hd_le s2 (by simpa [hjeq] using h9s2) (by simpa [hjeq] using hInv2)
+        refine ⟨sf, ?_, hInvf, h9f⟩
+        unfold Gen.validate_material_loop1
+        exact ExS.loop_next hbody (Or.inl rfl) hstep hloopf
+  exact hP 7 (by omega) s0 h9zero hInv0
 
 end Shogi.C.Proofs
