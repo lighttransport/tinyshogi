@@ -262,11 +262,20 @@ Design (two independent pieces):
 
 ### R3 — Remaining small refinements (3–5 d, parallel after R2)
 
-**Progress (2026-11-20):** fid 32 `same_move` is proven (`Shogi/C/Proofs/
-SameMove.lean`): the C copies both move blobs into fresh blocks and compares
-fields 0/1/3/4; the frame lemma shows unrelated blocks are unchanged.
-Axiom-clean. Remaining: fid 29/30 (pseudo wrappers, need a fid 28 wrapper
-first), fid 15/18 (geometric attacks), fid 48 (`validate_material`).
+**Progress (2026-11-20):**
+- fid 32 `same_move` is proven (`Shogi/C/Proofs/SameMove.lean`): the C copies
+  both move blobs into fresh blocks and compares fields 0/1/3/4; the frame
+  lemma shows unrelated blocks are unchanged.
+- fid 29/30 (`shogi_generate_pseudo{,_for_color}`) are proven
+  (`Shogi/C/Proofs/PseudoWrap.lean`): each allocates an 8-byte count, calls
+  fid 28 / fid 27, and returns the number of pseudo moves written (capped at
+  capacity). All axiom-clean.
+- fid 48 (`validate_material`): spec-level foundation is proven
+  (`Shogi/C/Proofs/ValidateMaterial.lean`): `famOfByte`, `boardFamCount_take`,
+  `boardFamCount_81` (board count + hands = `familyCount`),
+  `hand_index_compose` (the C helper chain on a board byte yields the spec
+  hand slot), and `array_store`/`array_load`. The C loop proof itself remains.
+Remaining: fid 48 C loop proof, fid 15/18 (geometric attacks).
 
 Write these directly against `IsPos`.
 
