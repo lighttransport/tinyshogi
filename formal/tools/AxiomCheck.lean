@@ -159,3 +159,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.ev_hand_byte0
 #print axioms Shogi.C.Proofs.ev_hand_byte1
 #print axioms Shogi.C.Proofs.slot_load_u
+#print axioms Shogi.C.Proofs.loop1_body

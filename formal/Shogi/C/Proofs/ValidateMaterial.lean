@@ -7,6 +7,7 @@
 -/
 import Shogi.C.Proofs.Pseudo4
 import Shogi.C.Proofs.EntryPoints
+import Shogi.SfenTheorems
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 8000000
@@ -762,5 +763,264 @@ theorem slot_load_u {s : State} {b : Nat} {T : Block} (i : Fin 7) (val : Nat)
   refine EvE.load (slot_index_u i hbase hidx hb hlen) ?_
   simp only [load, readBytes, hb, Ty.size, IntTy.bytes]
   simp [show 4 * i.val + 4 ≤ T.length by omega, hval]
+
+-- helpers
+theorem slot_index_u_at {s : State} {b : Nat} {T : Block} (base : Nat) (i : Fin 7)
+    (hbase : s.locals base = some (.ptr b 0)) (hidx : s.locals 9 = some (u32 i.val))
+    (hb : s.mem b = some T) (hlen : T.length = 28) :
+    EvE Gen.prog s (.index (.var base) (.var 9) 4) (.ptr b (4 * i.val)) := by
+  have haddr : evalExpr Gen.prog 10 s (.index (.var base) (.var 9) 4) = .ok (.ptr b (4 * i.val)) := by
+    simp [evalExpr, evalCast, evalUn, intOf, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+      ptrAdd, ptrAddN, u32, i32, hbase, hidx, hb, hlen, IntTy.i32, IntTy.u32,
+      show 4 * i.val ≤ T.length by omega]
+    rw [if_pos (show i.val * 4 ≤ 28 by omega)]
+    congr 2 <;> omega
+  exact EvE_of_eval haddr
+theorem slot_load_u_at {s : State} {b : Nat} {T : Block} (base : Nat) (i : Fin 7) (val : Nat)
+    (hbase : s.locals base = some (.ptr b 0)) (hidx : s.locals 9 = some (u32 i.val))
+    (hb : s.mem b = some T) (hlen : T.length = 28)
+    (hval : decodeLE ((T.drop (4*i.val)).take 4) = val) :
+    EvE Gen.prog s (.load (.int ⟨32, false⟩) (.index (.var base) (.var 9) 4))
+      (.int ⟨32, false⟩ val) := by
+  refine EvE.load (slot_index_u_at base i hbase hidx hb hlen) ?_
+  simp only [load, readBytes, hb, Ty.size, IntTy.bytes]
+  simp [show 4 * i.val + 4 ≤ T.length by omega, hval]
+theorem ev_hand_count (p : Position) (hs : p.Shaped) (s : State) (c : Color) (i : Fin 7) (hsmall : p.hand c i < 256)
+    (hm : s.mem posBlock = some (encode p)) (h0 : s.locals 0 = some (posPtr' posBlock))
+    (h9 : s.locals 9 = some (u32 i.val)) :
+    EvE Gen.prog s (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ c.idx)) 7) (.var 9) 1))
+      (.int IntTy.u8 (p.hand c i)) := by
+  have hraw : EvE Gen.prog s (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ c.idx)) 7) (.var 9) 1))
+      (.int IntTy.u8 ((encode p).getD (81 + 7*c.idx + i.val) 0).toNat) := by
+    cases c with
+    | black => simpa [Color.idx] using ev_hand_byte0 p s i hm h0 h9
+    | white => simpa [Color.idx] using ev_hand_byte1 p s i hm h0 h9
+  have hval : (encode p).getD (81 + 7*c.idx + i.val) 0 = (p.hand c i).toUInt8 := hand_byte_val p hs c i
+  obtain ⟨K, hK⟩ := hraw
+  refine ⟨K, ?_⟩
+  intro n hn
+  rw [hK n hn]
+  exact congrArg (fun v => Res.ok (Val.int IntTy.u8 v)) (by rw [hval]; simp [Nat.mod_eq_of_lt hsmall])
+
+theorem evalCast_u32_of_u32 (n : Nat) (hn : n < 2^31) :
+    evalCast ⟨32, false⟩ (.int ⟨32, false⟩ n) = .ok (.int ⟨32, false⟩ n) := by
+  simp [evalCast, IntTy.modulus] <;> omega
+
+theorem evalCast_i32_of_u8 (n : Nat) (hn : n < 256) :
+    evalCast ⟨32, true⟩ (.int ⟨8, false⟩ n) = .ok (.int ⟨32, true⟩ n) := by
+  simp [evalCast, IntTy.modulus, IntTy.u8, IntTy.i32] <;> omega
+
+theorem evalCast_u32_of_i32 (n : Nat) (hn : n < 2^30) :
+    evalCast ⟨32, false⟩ (.int ⟨32, true⟩ n) = .ok (.int ⟨32, false⟩ n) := by
+  simp [evalCast, IntTy.wrap, IntTy.modulus, IntTy.toInt, IntTy.i32, IntTy.u32,
+    IntTy.minVal, IntTy.maxVal] <;> omega
+
+theorem evalBin_add_i32_nat (a b : Nat) (ha : a < 2^30) (hb : b < 2^30) :
+    evalBin .add (some ⟨32, true⟩) (.int ⟨32, true⟩ a) (.int ⟨32, true⟩ b) =
+      .ok (.int ⟨32, true⟩ (a+b)) := by
+  simp [evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+    IntTy.i32, arith, IntTy.inRange, IntTy.minVal, IntTy.maxVal,
+    show ¬ (2147483648 : Nat) ≤ a by omega, show ¬ (2147483648 : Nat) ≤ b by omega,
+    show -2147483648 ≤ (a : Int) + b ∧ (a : Int) + b ≤ 2147483647 by omega]
+  have hs : (a : Int) + b = (a + b : Nat) := by omega
+  rw [hs]
+  rw [Int.emod_eq_of_lt (by omega) (by omega)]
+  omega
+
+theorem evalBin_add_u32_nat (a b : Nat) (ha : a < 2^30) (hb : b < 2^30) :
+    evalBin .add (some ⟨32, false⟩) (.int ⟨32, false⟩ a) (.int ⟨32, false⟩ b) =
+      .ok (.int ⟨32, false⟩ (a+b)) := by
+  simp [evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+    IntTy.u32, arith, IntTy.inRange, IntTy.minVal, IntTy.maxVal,
+    show ¬ (2147483648 : Nat) ≤ a by omega, show ¬ (2147483648 : Nat) ≤ b by omega,
+    show -2147483648 ≤ (a : Int) + b ∧ (a : Int) + b ≤ 2147483647 by omega]
+  omega
+
+theorem evalBin_gt_u32_le (a b : Nat) (ha : a < 2^30) (hb : b < 2^30) (hle : a ≤ b) :
+    evalBin .gt (some ⟨32, false⟩) (.int ⟨32, false⟩ a) (.int ⟨32, false⟩ b) =
+      .ok (boolVal false) := by
+  simp [evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+    IntTy.u32, arith, IntTy.inRange, IntTy.minVal, IntTy.maxVal, boolVal] <;> omega
+
+
+def Loop1Inv (p : Position) (m : Mem) (mb tb : Nat) (j : Nat) (s : State) : Prop :=
+  ∃ MB T,
+    s.locals 0 = some (posPtr' posBlock) ∧ s.locals 1 = some (.ptr mb 0) ∧
+    s.locals 2 = some (.ptr tb 0) ∧
+    s.mem mb = some MB ∧ MB.length = 28 ∧ ArrEq MB maxArr ∧
+    s.mem tb = some T ∧ T.length = 28 ∧
+    (∀ i : Fin 7, decodeLE ((T.drop (4*i.val)).take 4) =
+        if i.val < j then p.familyCount i else boardFamCount p 81 i) ∧
+    s.mem posBlock = some (encode p) ∧
+    mb ≠ tb ∧ mb ≠ 0 ∧ tb ≠ 0 ∧ posBlock ≠ mb ∧ posBlock ≠ tb ∧
+    (∀ b, b ≠ 0 → b ≠ mb → b ≠ tb → s.mem b = m b) ∧ s.ro = false
+
+-- named sub-expressions of the loop-1 body
+def l1Cond (j : Nat) : Expr :=
+  .bin .lt (some ⟨32, false⟩) (.var 9) (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 7)))
+def l1Val : Expr :=
+  .cast ⟨32, false⟩
+    (.bin .add (some ⟨32, false⟩)
+      (.cast ⟨32, false⟩ (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4)))
+      (.cast ⟨32, false⟩ (.cast ⟨32, false⟩
+        (.bin .add (some ⟨32, true⟩)
+          (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 0)) 7) (.var 9) 1)))
+          (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩) (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 1)) 7) (.var 9) 1)))))))
+def l1OverCond : Expr :=
+  .bin .gt (some ⟨32, false⟩)
+    (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4))
+    (.load (.int ⟨32, false⟩) (.index (.var 1) (.var 9) 4))
+def l1Store : Stmt := .store (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4) l1Val
+def l1Ret : Stmt := .ret (some (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩)
+  (.const (.int ⟨32, true⟩ 1)) (.const (.int ⟨32, true⟩ 0)))))
+def loop1BodyStmt : Stmt := .ite (l1Cond 0) (.seq l1Store (.ite l1OverCond l1Ret .skip)) .brk
+
+theorem loop1_body (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
+    (m : Mem) (mb tb : Nat) (s : State) (j : Nat) (hj : j < 7)
+    (h9 : s.locals 9 = some (u32 j))
+    (hInv : Loop1Inv (posBlock := posBlock) p m mb tb j s) :
+    ∃ s1, ExS Gen.prog s (loop1BodyStmt) .normal s1 ∧
+      Loop1Inv (posBlock := posBlock) p m mb tb (j+1) s1 := by
+  rcases hInv with ⟨MB, T, h0, h1, h2, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos,
+    hmbtb, hmb0, htb0, hpm, hpt, hframe, hro⟩
+  let jf : Fin 7 := ⟨j, hj⟩
+  have hall : ∀ i, i ∈ List.finRange 7 → p.familyCount i ≤ PieceType.handMax i := by
+    simpa [Shogi.Position.materialOk, List.all_eq_true] using hmat
+  have hhand_le (c : Color) (i : Fin 7) : p.hand c i ≤ 18 := Shogi.Sfen.hand_le_18 hmat c i
+  have hsmallB : p.hand .black jf < 256 := by have h := hhand_le .black jf; omega
+  have hsmallW : p.hand .white jf < 256 := by have h := hhand_le .white jf; omega
+  have hfits : p.familyCount jf ≤ maxArr jf := by
+    simpa [maxArr] using hall jf (List.mem_finRange jf)
+  let t := boardFamCount p 81 jf
+  let b := p.hand .black jf
+  let w := p.hand .white jf
+  let f := p.familyCount jf
+  have ht_le : t ≤ 81 := by
+    unfold t boardFamCount
+    have hc := List.countP_le_length (p := fun s => famAt p s = jf.val) (l := List.range 81)
+    simp at hc; omega
+  have hb_le : b ≤ 18 := by simpa [b] using hhand_le .black jf
+  have hw_le : w ≤ 18 := by simpa [w] using hhand_le .white jf
+  have hf_le : f ≤ 18 := by
+    have hm : maxArr jf ≤ 18 := (by decide : ∀ i : Fin 7, PieceType.handMax i ≤ 18) jf
+    simpa [f, maxArr] using (Nat.le_trans hfits hm)
+  have htbf : t + b + w = f := by
+    simpa [t, b, w, f] using boardFamCount_81 p hs.1 jf
+  -- condition
+  have hcond : EvE Gen.prog s (l1Cond j) (boolVal true) := by
+    refine EvE_of_eval (n := 10) ?_
+    simp [l1Cond, evalExpr, evalCast, evalUn, intOf, isPtr, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+      evalBin, evalBinInt, binInt, u32, i32, h9, IntTy.u32, IntTy.i32, boolVal] <;> omega
+  -- loads
+  have hTotJ : decodeLE ((T.drop (4*jf.val)).take 4) = t := by simpa [jf, t] using hTot jf
+  have hloadT : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4))
+      (.int ⟨32, false⟩ t) := slot_load_u jf t h2 h9 htb hlentb hTotJ
+  have hloadB : EvE Gen.prog s (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 0)) 7) (.var 9) 1))
+      (.int IntTy.u8 b) := by simpa [b, Color.idx] using ev_hand_count p hs s .black jf hsmallB hpos h0 h9
+  have hloadW : EvE Gen.prog s (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 1)) 7) (.var 9) 1))
+      (.int IntTy.u8 w) := by simpa [w, Color.idx] using ev_hand_count p hs s .white jf hsmallW hpos h0 h9
+  -- casts/adds (sub-expressions named via let)
+  let eT := (.cast ⟨32, false⟩ (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4)) : Expr)
+  let eB := (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 0)) 7) (.var 9) 1)) : Expr)
+  let eW := (.cast ⟨32, true⟩ (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 1)) 7) (.var 9) 1)) : Expr)
+  have hcastT : EvE Gen.prog s eT (.int ⟨32, false⟩ t) := by
+    dsimp [eT]; exact EvE.cast hloadT (evalCast_u32_of_u32 t (by omega))
+  have hcastB : EvE Gen.prog s eB (.int ⟨32, true⟩ b) := by
+    dsimp [eB]; exact EvE.cast hloadB (evalCast_i32_of_u8 b (by omega))
+  have hcastW : EvE Gen.prog s eW (.int ⟨32, true⟩ w) := by
+    dsimp [eW]; exact EvE.cast hloadW (evalCast_i32_of_u8 w (by omega))
+  let eAddI := (.bin .add (some ⟨32, true⟩) eB eW : Expr)
+  have haddI : EvE Gen.prog s eAddI (.int ⟨32, true⟩ (b+w)) := by
+    dsimp [eAddI]; exact EvE.bin hcastB hcastW (evalBin_add_i32_nat b w (by omega) (by omega))
+  let eC1 := (.cast ⟨32, false⟩ eAddI : Expr)
+  have hcastI1 : EvE Gen.prog s eC1 (.int ⟨32, false⟩ (b+w)) := by
+    dsimp [eC1]; exact EvE.cast haddI (evalCast_u32_of_i32 (b+w) (by omega))
+  let eC2 := (.cast ⟨32, false⟩ eC1 : Expr)
+  have hcastI2 : EvE Gen.prog s eC2 (.int ⟨32, false⟩ (b+w)) := by
+    dsimp [eC2]; exact EvE.cast hcastI1 (evalCast_u32_of_u32 (b+w) (by omega))
+  let eAddU := (.bin .add (some ⟨32, false⟩) eT eC2 : Expr)
+  have haddU : EvE Gen.prog s eAddU (.int ⟨32, false⟩ (t+(b+w))) := by
+    dsimp [eAddU]; exact EvE.bin hcastT hcastI2 (evalBin_add_u32_nat t (b+w) (by omega) (by omega))
+  have hvalue : EvE Gen.prog s l1Val (.int ⟨32, false⟩ f) := by
+    have hc : EvE Gen.prog s (.cast ⟨32, false⟩ eAddU) (.int ⟨32, false⟩ (t+(b+w))) := by
+      exact EvE.cast haddU (evalCast_u32_of_u32 (t+(b+w)) (by omega))
+    have hval : t + (b+w) = f := by omega
+    simpa [hval, l1Val, eAddU, eC2, eC1, eAddI, eT, eB, eW] using hc
+  -- store
+  have hidx := slot_index_u jf h2 h9 htb hlentb
+  have hstore_eq : store s.mem (Ty.int ⟨32, false⟩) (.ptr tb (4*jf.val)) (.int ⟨32, false⟩ f) =
+      .ok (s.mem.upd tb (T.take (4*jf.val) ++ encodeLE 4 f ++ T.drop (4*jf.val+4))) := by
+    simp [store, writeBytes, htb, Ty.size, IntTy.bytes, encodeLE_length,
+      show 4*jf.val + 4 ≤ T.length by omega]
+  let T' := T.take (4*jf.val) ++ encodeLE 4 f ++ T.drop (4*jf.val+4)
+  let s1 : State := { s with mem := s.mem.upd tb T' }
+  have estore : ExS Gen.prog s l1Store .normal s1 := by
+    dsimp [l1Store]; exact ExS.store hidx hvalue hro hstore_eq
+  -- overflow check false
+  have hlenT' : T'.length = 28 := by simp [T', hlentb, encodeLE_length]; omega
+  have hTot1 : ∀ i : Fin 7, decodeLE ((T'.drop (4*i.val)).take 4) =
+      if i.val < j+1 then p.familyCount i else boardFamCount p 81 i := by
+    intro i
+    by_cases hij : i = jf
+    · subst hij; rw [if_pos (by simp [jf])]
+      simp [T', hlentb, Nat.min_eq_left (show 4*jf.val ≤ 28 by omega), encodeLE_length,
+        encodeLE, decodeLE] <;> omega
+    · have hiv_ne : i.val ≠ j := by
+        intro heq; apply hij; apply Fin.ext; simpa [jf] using heq
+      by_cases hlt : i.val < j
+      · rw [if_pos (by omega)]
+        simpa [T', hTot i, hlt] using array_write_other T hlentb i jf hij f
+      · rw [if_neg (by omega)]
+        simpa [T', hTot i, hlt] using array_write_other T hlentb i jf hij f
+  have hloadT1 : EvE Gen.prog s1 (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4))
+      (.int ⟨32, false⟩ f) := by
+    have h2s1 : s1.locals 2 = some (.ptr tb 0) := by simp [s1, h2]
+    have h9s1 : s1.locals 9 = some (u32 jf.val) := by simp [s1, h9, jf]
+    have htbs1 : s1.mem tb = some T' := by simp [s1, Mem.upd_eq]
+    have hv : decodeLE ((T'.drop (4*jf.val)).take 4) = f := by simpa [jf] using hTot1 jf
+    exact slot_load_u jf f h2s1 h9s1 htbs1 hlenT' hv
+  have hloadM : EvE Gen.prog s1 (.load (.int ⟨32, false⟩) (.index (.var 1) (.var 9) 4))
+      (.int ⟨32, false⟩ (maxArr jf)) := by
+    have h1s1 : s1.locals 1 = some (.ptr mb 0) := by simp [s1, h1]
+    have h9s1 : s1.locals 9 = some (u32 jf.val) := by simp [s1, h9, jf]
+    have hmbs1 : s1.mem mb = some MB := by simp [s1, T', Mem.upd_ne hmbtb, hmb]
+    exact slot_load_u_at 1 jf (maxArr jf) h1s1 h9s1 hmbs1 hlenmb (hArrMB jf)
+  have hcondgt : EvE Gen.prog s1 l1OverCond (boolVal false) := by
+    dsimp [l1OverCond]
+    exact EvE.bin hloadT1 hloadM (evalBin_gt_u32_le f (maxArr jf) (by omega) (by
+      have hm : maxArr jf ≤ 18 := (by decide : ∀ i : Fin 7, PieceType.handMax i ≤ 18) jf
+      omega) hfits)
+  have eskip : ExS Gen.prog s1 (.ite l1OverCond l1Ret .skip) .normal s1 :=
+    ExS.ite hcondgt rfl ExS.skip
+  have hactions : ExS Gen.prog s (.seq l1Store (.ite l1OverCond l1Ret .skip)) .normal s1 :=
+    ExS.seq estore eskip
+  have hbody : ExS Gen.prog s (loop1BodyStmt) .normal s1 := by
+    dsimp [loop1BodyStmt]; exact ExS.ite hcond rfl hactions
+  refine ⟨s1, hbody, ?_⟩
+  refine ⟨MB, T', ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simpa [s1, h0]
+  · simpa [s1, h1]
+  · simpa [s1, h2]
+  · simpa [s1, T', Mem.upd_ne hmbtb, hmb]
+  · exact hlenmb
+  · exact hArrMB
+  · simp [s1, Mem.upd_eq]
+  · exact hlenT'
+  · exact hTot1
+  · simpa [s1, T', Mem.upd_ne hpt, hpos]
+  · exact hmbtb
+  · exact hmb0
+  · exact htb0
+  · exact hpm
+  · exact hpt
+  · intro bb hb0 hmbx htb_x
+    simpa [s1, T', Mem.upd_ne htb_x] using hframe bb hb0 hmbx htb_x
+  · simpa [s1] using hro
 
 end Shogi.C.Proofs
