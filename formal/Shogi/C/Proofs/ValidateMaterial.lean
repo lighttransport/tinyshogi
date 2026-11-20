@@ -411,25 +411,40 @@ def Inv0T (p : Position) (m : Mem) (mb tb : Nat) (k : Nat) (s : State) : Prop :=
     s.mem tb = some T ∧ T.length = 28 ∧
     (∀ i : Fin 7, decodeLE ((T.drop (4*i.val)).take 4) = boardFamCount p k i) ∧
     s.mem posBlock = some (encode p) ∧
+    mb ≠ tb ∧ mb ≠ 0 ∧ tb ≠ 0 ∧ posBlock ≠ mb ∧ posBlock ≠ tb ∧
     (∀ b, b ≠ 0 → b ≠ mb → b ≠ tb → s.mem b = m b) ∧ s.ro = false
+
+def loop0BodyStmt : Stmt :=
+  .ite (.bin .lt (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 81)))
+    (.seq (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
+      (.seq (.call (some 6) 4 [(.var 5)]) (.set 4 (.var 6))))
+      (.seq (.seq (.call (some 8) 13 [(.var 4)]) (.set 7 (.var 8)))
+        (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+          (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
+            (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+              (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
+    .brk
+
+structure BodyResult (p : Position) (m : Mem) (mb tb : Nat) (k : Nat) (s s1 : State) (T : Block) : Prop where
+  exs : ExS Gen.prog s loop0BodyStmt .normal s1
+  hmem_tb : s1.mem tb = some T
+  hlenT : T.length = 28
+  hTot : ∀ i : Fin 7, decodeLE ((T.drop (4*i.val)).take 4) = boardFamCount p (k+1) i
+  hloc0 : s1.locals 0 = s.locals 0
+  hloc1 : s1.locals 1 = s.locals 1
+  hloc2 : s1.locals 2 = s.locals 2
+  hloc3 : s1.locals 3 = s.locals 3
+  hro : s1.ro = s.ro
+  hmem_mb : s1.mem mb = s.mem mb
+  hmem_pos : s1.mem posBlock = s.mem posBlock
+  hframe : ∀ b, b ≠ 0 → b ≠ mb → b ≠ tb → s1.mem b = s.mem b
 
 -- one body iteration: condition true, helper calls, increment or skip, outcome normal
 theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
     (hs : p.board.length = 81) (hk : k < 81)
     (hInv : Inv0T (posBlock := posBlock) p m mb tb k s) :
-    ∃ s1, ExS Gen.prog s
-      (.ite (.bin .lt (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 81)))
-        (.seq (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
-          (.seq (.call (some 6) 4 [(.var 5)]) (.set 4 (.var 6))))
-          (.seq (.seq (.call (some 8) 13 [(.var 4)]) (.set 7 (.var 8)))
-            (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
-              (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
-                (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
-                  (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
-        .brk) .normal s1 ∧
-      (∃ T', s1.mem tb = some T' ∧ T'.length = 28 ∧
-        (∀ i : Fin 7, decodeLE ((T'.drop (4*i.val)).take 4) = boardFamCount p (k+1) i)) := by
-  rcases hInv with ⟨MB, T, h0, h1, h2, h3, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos, hframe, hro⟩
+    ∃ s1 T, BodyResult (posBlock := posBlock) p m mb tb k s s1 T := by
+  rcases hInv with ⟨MB, T, h0, h1, h2, h3, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos, hmbtb, hmb0, htb0, hpm, hpt, hframe, hro⟩
   let b := pieceByte (p.pieceAt ⟨k, by omega⟩)
   have hb15 : b.toNat % 16 ≠ 15 := board_nibble p hs k hk
   have hcond : EvE Gen.prog s (.bin .lt (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 81)))
@@ -463,7 +478,7 @@ theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
                 (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
                   (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
         .normal s7 := ExS.seq eA (ExS.seq (ExS.seq e13 e7) eskip)
-    refine ⟨s7, ExS.ite hcond rfl hactions, T, ?_, hlentb, ?_⟩
+    refine ⟨s7, T, { exs := ExS.ite hcond rfl hactions, hmem_tb := ?_, hlenT := hlentb, hTot := ?_, hloc0 := ?_, hloc1 := ?_, hloc2 := ?_, hloc3 := ?_, hro := ?_, hmem_mb := ?_, hmem_pos := ?_, hframe := ?_ }⟩
     · rw [show s7.mem = s5.mem by rfl, hmem5]; exact htb
     · intro i
       rw [boardFamCount_succ]
@@ -473,6 +488,19 @@ theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
       rw [hfam]
       simp [show 7 ≠ i.val by omega]
       exact hTot i
+    · simpa [show s7.locals 0 = s5.locals 0 by simp [s7, Locals.upd],
+        hl5 0 (by omega) (by omega) (by omega) (by omega)] using h0
+    · simpa [show s7.locals 1 = s5.locals 1 by simp [s7, Locals.upd],
+        hl5 1 (by omega) (by omega) (by omega) (by omega)] using h1
+    · simpa [show s7.locals 2 = s5.locals 2 by simp [s7, Locals.upd],
+        hl5 2 (by omega) (by omega) (by omega) (by omega)] using h2
+    · simpa [show s7.locals 3 = s5.locals 3 by simp [s7, Locals.upd],
+        hl5 3 (by omega) (by omega) (by omega) (by omega)] using h3
+    · simpa [show s7.ro = s5.ro by rfl, hro5] using hro
+    · simpa [show s7.mem mb = s5.mem mb by rfl, hmem5] using hmb
+    · simpa [show s7.mem posBlock = s5.mem posBlock by rfl, hmem5] using hpos
+    · exact fun b hb0 hmbx htb => by
+        simpa [show s7.mem b = s5.mem b by rfl, hmem5] using hframe b hb0 hmbx htb
   · -- increment
     have hbf_nonneg : 0 ≤ byteFam b := by omega
     have hjlt : (byteFam b).toNat < 7 := by
@@ -522,7 +550,7 @@ theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
         (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
           (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
             (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1)))))
-        .normal s8 := ExS.store hidx hadd_cast (by rw [show s7.ro = s5.ro by rfl, hro5]; exact hro) hstore
+        .normal s8 := ExS.store hidx hadd_cast (by simpa [show s7.ro = s5.ro by rfl, hro5] using hro) hstore
     have hcondge : EvE Gen.prog s7 (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
         (boolVal true) := by
       refine EvE_of_eval (n := 10) ?_
@@ -543,7 +571,7 @@ theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
                 (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
                   (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
         .normal s8 := ExS.seq eA (ExS.seq (ExS.seq e13 e7) estore_branch)
-    refine ⟨s8, ExS.ite hcond rfl hactions, T', ?_, ?_, ?_⟩
+    refine ⟨s8, T', { exs := ExS.ite hcond rfl hactions, hmem_tb := ?_, hlenT := ?_, hTot := ?_, hloc0 := ?_, hloc1 := ?_, hloc2 := ?_, hloc3 := ?_, hro := ?_, hmem_mb := ?_, hmem_pos := ?_, hframe := ?_ }⟩
     · simp [s8, Mem.upd_eq]
     · simp [T', hlentb, Nat.min_eq_left (show 4*j.val ≤ 28 by omega), encodeLE_length]; omega
     · intro i
@@ -566,5 +594,25 @@ theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
           intro h; apply hij; apply Fin.ext; exact h.symm
         rw [if_neg hijv]
         simpa [T', hTot i] using array_write_other T hlentb i j hij (boardFamCount p k j + 1)
+    · simpa [show s8.locals 0 = s7.locals 0 by simp [s8],
+        show s7.locals 0 = s5.locals 0 by simp [s7, Locals.upd],
+        hl5 0 (by omega) (by omega) (by omega) (by omega)] using h0
+    · simpa [show s8.locals 1 = s7.locals 1 by simp [s8],
+        show s7.locals 1 = s5.locals 1 by simp [s7, Locals.upd],
+        hl5 1 (by omega) (by omega) (by omega) (by omega)] using h1
+    · simpa [show s8.locals 2 = s7.locals 2 by simp [s8],
+        show s7.locals 2 = s5.locals 2 by simp [s7, Locals.upd],
+        hl5 2 (by omega) (by omega) (by omega) (by omega)] using h2
+    · simpa [show s8.locals 3 = s7.locals 3 by simp [s8],
+        show s7.locals 3 = s5.locals 3 by simp [s7, Locals.upd],
+        hl5 3 (by omega) (by omega) (by omega) (by omega)] using h3
+    · simpa [show s8.ro = s7.ro by simp [s8], show s7.ro = s5.ro by rfl, hro5] using hro
+    · simpa [show s8.mem mb = s7.mem mb by simp [s8, Mem.upd_ne hmbtb],
+        show s7.mem mb = s5.mem mb by rfl, hmem5] using hmb
+    · simpa [show s8.mem posBlock = s7.mem posBlock by simp [s8, Mem.upd_ne hpt],
+        show s7.mem posBlock = s5.mem posBlock by rfl, hmem5] using hpos
+    · exact fun b hb0 hmbx htb => by
+        simpa [show s8.mem b = s7.mem b by simp [s8, Mem.upd_ne htb],
+          show s7.mem b = s5.mem b by rfl, hmem5] using hframe b hb0 hmbx htb
 
 end Shogi.C.Proofs
