@@ -145,3 +145,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.same_move_spec
 #print axioms Shogi.C.Proofs.shogi_generate_pseudo_spec
 #print axioms Shogi.C.Proofs.shogi_generate_pseudo_for_color_spec
+#print axioms Shogi.C.Proofs.boardFamCount_81
