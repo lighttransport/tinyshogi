@@ -695,4 +695,27 @@ theorem hand_byte_val (p : Position) (hs : p.Shaped) (c : Color) (i : Fin 7) :
   exact enc_getD_hand (pa := p.pieceAt) (h := p.hand) (sd := p.side)
     (kb := kingByte p .black) (kw := kingByte p .white) c i
 
+-- full hand-byte load via the address lemma
+theorem ev_hand_byte0 (p : Position) (s : State) (i : Fin 7)
+    (hm : s.mem posBlock = some (encode p))
+    (h0 : s.locals 0 = some (posPtr' posBlock))
+    (h9 : s.locals 9 = some (u32 i.val)) :
+    EvE Gen.prog s (.load (.int ⟨8, false⟩)
+      (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 0)) 7) (.var 9) 1))
+      (.int IntTy.u8 ((encode p).getD (81 + i.val) 0).toNat) := by
+  -- first the address (copy the proven proof)
+  have haddr : evalExpr Gen.prog 10 s (.index (.index (.field (.var 0) 81) (.const (.int ⟨32, true⟩ 0)) 7) (.var 9) 1)
+      = .ok (.ptr posBlock (81 + i.val)) := by
+    have hlen : (encode p).length = 114 := encode_length p
+    simp [evalExpr, evalCast, evalUn, intOf, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+      ptrAdd, ptrAddN, u32, i32, posPtr', h0, h9, hm, hlen, IntTy.i32, IntTy.u32,
+      wrap_nat32 i.val (by omega), show ¬ (2147483648 : Int) ≤ i.val by omega]
+    omega
+  refine EvE.load (EvE_of_eval haddr) ?_
+  simp only [load, readBytes, hm, Ty.size, IntTy.bytes]
+  have hlen : (encode p).length = 114 := encode_length p
+  simp [show 81 + i.val + 1 ≤ (encode p).length by omega,
+    List.take_one, List.head?_drop, List.getD, decodeLE]
+  cases he : (encode p)[81 + i.val]? <;> simp [he, decodeLE, IntTy.u8]
+
 end Shogi.C.Proofs

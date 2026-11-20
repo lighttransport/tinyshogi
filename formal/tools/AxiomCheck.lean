@@ -156,3 +156,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.loop0_body
 #print axioms Shogi.C.Proofs.loop0_runs
 #print axioms Shogi.C.Proofs.hand_byte_val
+#print axioms Shogi.C.Proofs.ev_hand_byte0
