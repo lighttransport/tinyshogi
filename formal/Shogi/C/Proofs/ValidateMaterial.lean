@@ -739,4 +739,28 @@ theorem ev_hand_byte1 (p : Position) (s : State) (i : Fin 7)
     List.take_one, List.head?_drop, List.getD, decodeLE]
   cases he : (encode p)[81 + 7 + i.val]? <;> simp [he, decodeLE, IntTy.u8]
 
+-- u32-indexed array address: ptr b (4*i)
+theorem slot_index_u {s : State} {b : Nat} {T : Block} (i : Fin 7)
+    (hbase : s.locals 2 = some (.ptr b 0)) (hidx : s.locals 9 = some (u32 i.val))
+    (hb : s.mem b = some T) (hlen : T.length = 28) :
+    EvE Gen.prog s (.index (.var 2) (.var 9) 4) (.ptr b (4 * i.val)) := by
+  have haddr : evalExpr Gen.prog 10 s (.index (.var 2) (.var 9) 4) = .ok (.ptr b (4 * i.val)) := by
+    simp [evalExpr, evalCast, evalUn, intOf, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+      ptrAdd, ptrAddN, u32, i32, hbase, hidx, hb, hlen, IntTy.i32, IntTy.u32,
+      show 4 * i.val ≤ T.length by omega]
+    rw [if_pos (show i.val * 4 ≤ 28 by omega)]
+    congr 2 <;> omega
+  exact EvE_of_eval haddr
+
+-- u32-indexed array load
+theorem slot_load_u {s : State} {b : Nat} {T : Block} (i : Fin 7) (val : Nat)
+    (hbase : s.locals 2 = some (.ptr b 0)) (hidx : s.locals 9 = some (u32 i.val))
+    (hb : s.mem b = some T) (hlen : T.length = 28)
+    (hval : decodeLE ((T.drop (4*i.val)).take 4) = val) :
+    EvE Gen.prog s (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 9) 4))
+      (.int ⟨32, false⟩ val) := by
+  refine EvE.load (slot_index_u i hbase hidx hb hlen) ?_
+  simp only [load, readBytes, hb, Ty.size, IntTy.bytes]
+  simp [show 4 * i.val + 4 ≤ T.length by omega, hval]
+
 end Shogi.C.Proofs
