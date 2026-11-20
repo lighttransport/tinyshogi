@@ -93,5 +93,37 @@ theorem boardFamCount_81 (p : Position) (hs : p.board.length = 81) (i : Fin 7) :
   simp [famOfByte_eq]
   cases o <;> simp
 
+
+/-- The unpromoted type code after `shogi_piece_type` + `shogi_unpromoted_type`. -/
+def unpromotedCode (c : Nat) : Nat :=
+  match PieceType.ofCode c with
+  | none => 0
+  | some t => t.unpromote.code
+
+/-- The hand slot of a piece byte after unpromotion, or -1. -/
+def byteFam (b : UInt8) : Int :=
+  match PieceType.ofCode (unpromotedCode (b.toNat % 16)) with
+  | none => -1
+  | some t => match t.handIndex with
+    | some i => (i.val : Int)
+    | none => -1
+
+theorem hand_index_compose (b : Fin 256) (h15 : b.val % 16 ≠ 15) :
+    run Gen.fid_hand_index [u32 (unpromotedCode (b.val % 16))] =
+      some (some (i32 (byteFam ⟨b.val, b.isLt⟩))) := by
+  cases hb : PieceType.ofCode (b.val % 16) with
+  | none =>
+      have hc : b.val % 16 < 16 := Nat.mod_lt _ (by decide)
+      have hall : ∀ c : Fin 16, c.val ≠ 0 → c.val ≠ 15 → PieceType.ofCode c.val ≠ none := by decide +kernel
+      have h0 : b.val % 16 = 0 := by
+        by_cases h : b.val % 16 = 0
+        · exact h
+        · exact False.elim (hall ⟨b.val % 16, hc⟩ h h15 hb)
+      simp [unpromotedCode, byteFam, hb, h0]
+      decide +kernel
+  | some t =>
+      simp [unpromotedCode, byteFam, hb, PieceType.ofCode_code]
+      cases htu : t.unpromote <;> decide +kernel
+
 end Shogi.C.Proofs
 
