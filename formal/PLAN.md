@@ -270,12 +270,14 @@ Design (two independent pieces):
   (`Shogi/C/Proofs/PseudoWrap.lean`): each allocates an 8-byte count, calls
   fid 28 / fid 27, and returns the number of pseudo moves written (capped at
   capacity). All axiom-clean.
-- fid 48 (`validate_material`): spec-level foundation is proven
-  (`Shogi/C/Proofs/ValidateMaterial.lean`): `famOfByte`, `boardFamCount_take`,
-  `boardFamCount_81` (board count + hands = `familyCount`),
-  `hand_index_compose` (the C helper chain on a board byte yields the spec
-  hand slot), and `array_store`/`array_load`. The C loop proof itself remains.
-Remaining: fid 48 C loop proof, fid 15/18 (geometric attacks).
+- fid 48 (`validate_material`) is **complete**
+  (`Shogi/C/Proofs/ValidateMaterial.lean`, `validate_material_spec`): the full
+  C body is proved to allocate the maximum/total arrays, initialise the maximum
+  to `handMax`, count each board family, add both hands, reject on overflow,
+  and return `u8 1` for a shaped position with `materialOk = true`. The two
+  loops (`loop0_runs`, `loop1_runs`) use `ExS.loop_next`/`ExS.loop_brk` and
+  the structured `BodyResult`/`Loop1Inv` invariants. Axiom-clean.
+Remaining: fid 15/18 (geometric attacks).
 
 Write these directly against `IsPos`.
 
