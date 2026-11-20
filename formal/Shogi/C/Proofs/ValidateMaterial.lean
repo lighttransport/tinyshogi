@@ -331,4 +331,18 @@ theorem slot_index {s : State} {tb : Nat} {T : Block} (j : Fin 7)
   simp [IntTy.i32, hnonneg, hle]
   omega
 
+
+/-- Load the u32 total at slot `j` of the array block `tb`. -/
+theorem slot_load {s : State} {tb : Nat} {T : Block} (j : Fin 7) (val : Nat)
+    (h2 : s.locals 2 = some (.ptr tb 0))
+    (h7 : s.locals 7 = some (i32 (j.val : Int)))
+    (htb : s.mem tb = some T) (hlen : T.length = 28)
+    (hT : decodeLE ((T.drop (4*j.val)).take 4) = val) :
+    EvE Gen.prog s (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))
+      (.int ⟨32, false⟩ val) := by
+  refine EvE.load (slot_index (s := s) j h2 h7 htb hlen) ?_
+  simp only [load, readBytes, Ty.size, IntTy.bytes]
+  rw [htb]
+  simp [show 4 * j.val + 4 ≤ T.length by omega, hT]
+
 end Shogi.C.Proofs
