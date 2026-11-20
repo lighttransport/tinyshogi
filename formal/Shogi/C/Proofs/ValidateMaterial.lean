@@ -125,5 +125,44 @@ theorem hand_index_compose (b : Fin 256) (h15 : b.val % 16 ≠ 15) :
       simp [unpromotedCode, byteFam, hb, PieceType.ofCode_code]
       cases htu : t.unpromote <;> decide +kernel
 
+
+/-- Store a u32 at `blk[4*i .. 4*i+4)`. -/
+theorem array_store {s : State} {j b i v : Nat} {blk : Block} (hv : v < 2 ^ 31)
+    (hj : s.locals j = some (.ptr b 0)) (hb : s.mem b = some blk) (hlen : 4 * i + 4 ≤ blk.length)
+    (hro : s.ro = false) :
+    ExS Gen.prog s
+      (.store (.int ⟨32, false⟩) (.index (.var j) (.const (.int ⟨64, false⟩ i)) 4)
+        (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ v)))) .normal
+      { s with mem := s.mem.write b (4 * i) (encodeLE 4 v) } := by
+    refine ExS.store (pa := .ptr b (4 * i)) (v := .int ⟨32, false⟩ v)
+      (EvE.index (EvE.var hj) (EvE.const (v := .int IntTy.u64 i))
+        (by simp [IntTy.u64, ptrAddN, hb, show i * 4 = 4 * i by omega, show 4 * i ≤ blk.length by omega]))
+      (EvE_of_eval (n := 3) (by
+        have h1 : IntTy.toInt IntTy.i32 v = (v : Int) := by simp [IntTy.toInt, IntTy.i32, IntTy.modulus]; omega
+        have h2 : ((v : Int) % (4294967296 : Int)).toNat = v := by
+          rw [Int.emod_eq_of_lt (by omega) (by omega)]
+          simp
+        simp [evalExpr, evalCast, IntTy.wrap, IntTy.modulus, h1, h2,
+          Nat.mod_eq_of_lt (show v < 4294967296 by omega)]
+        have h3 : ({ width := 32, signed := true } : IntTy).toInt v = (v : Int) := by
+          simp [IntTy.toInt]; omega
+        rw [h3]
+        rw [Int.emod_eq_of_lt (by omega) (by omega)]
+        simp)) hro ?_
+    simp only [store, Ty.size, IntTy.bytes, ite_true]
+    exact writeBytes_ok hb (by simpa [encodeLE_length] using hlen)
+
+/-- Load the u32 at `blk[4*i .. 4*i+4)`. -/
+theorem array_load {s : State} {j b i : Nat} {blk : Block}
+    (hj : s.locals j = some (.ptr b 0)) (hb : s.mem b = some blk) (hlen : 4 * i + 4 ≤ blk.length) :
+    EvE Gen.prog s
+      (.load (.int ⟨32, false⟩) (.index (.var j) (.const (.int ⟨64, false⟩ i)) 4))
+      (.int ⟨32, false⟩ (decodeLE ((blk.drop (4 * i)).take 4))) := by
+    refine EvE.load (pa := .ptr b (4 * i))
+      (EvE.index (EvE.var hj) (EvE.const (v := .int IntTy.u64 i))
+        (by simp [IntTy.u64, ptrAddN, hb, show i * 4 = 4 * i by omega, show 4 * i ≤ blk.length by omega])) ?_
+    simp only [load, readBytes, hb, Ty.size, IntTy.bytes, show 4*i + 4 ≤ blk.length by omega, ite_true]
+    rfl
+
 end Shogi.C.Proofs
 
