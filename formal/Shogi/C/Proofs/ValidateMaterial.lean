@@ -164,5 +164,148 @@ theorem array_load {s : State} {j b i : Nat} {blk : Block}
     simp only [load, readBytes, hb, Ty.size, IntTy.bytes, show 4*i + 4 ≤ blk.length by omega, ite_true]
     rfl
 
-end Shogi.C.Proofs
 
+/-- Lift a kernel-checked `run` result to an `ExS` call in arbitrary memory. -/
+theorem call_run {s : State} {d f : Nat} {fn : Func} {args : List Expr} {vs : List Val} {v : Val}
+    (hf : Gen.prog f = some fn) (hp : pureS fn.body = true)
+    (hlen : fn.params.length = vs.length) (hrun : run f vs = some (some v))
+    (hargs : EvArgs Gen.prog s args vs) :
+    ExS Gen.prog s (.call (some d) f args) .normal { s with locals := s.locals.upd d v } := by
+  refine ExS.call_dst (s' := ⟨frameLocals fn.params vs, s.mem, s.ro⟩) hargs hf hlen ?_
+  exact pure_callS hf hp hlen hrun s.mem s.ro
+
+example : pureS Gen.shogi_piece_type.body = true := by decide
+example : pureS Gen.shogi_unpromoted_type.body = true := by decide
+example : pureS Gen.hand_index.body = true := by decide
+
+
+
+
+theorem unpromoted_run_all : ∀ c : Fin 16, c.val ≠ 15 →
+    run Gen.fid_shogi_unpromoted_type [u32 c.val] = some (some (u32 (unpromotedCode c.val))) := by
+  decide +kernel
+
+theorem piece_type_run_all : ∀ b : Fin 256,
+    run Gen.fid_shogi_piece_type [u8 b.val] = some (some (u32 (b.val % 16))) := by
+  decide +kernel
+
+
+
+/-- A board byte never has nibble 15. -/
+theorem board_nibble (p : Position) (hs : p.board.length = 81) (k : Nat) (hk : k < 81) :
+    (pieceByte (p.pieceAt ⟨k, by omega⟩)).toNat % 16 ≠ 15 := by
+  cases hp : p.pieceAt ⟨k, by omega⟩ with
+  | none => simp [pieceByte]
+  | some pc =>
+      obtain ⟨c, t⟩ := pc
+      simp [pieceByte, Piece.code]
+      have ht : t.code ≤ 14 := by cases t <;> decide
+      omega
+
+/-- The three helper calls on the board byte at square `k` return the spec
+    hand slot (or -1) in local 8, leaving memory and locals 0..3 unchanged. -/
+theorem board_helper_calls (s : State) (p : Position) (hs : p.board.length = 81)
+    (k : Nat) (hk : k < 81) (hm : s.mem posBlock = some (encode p))
+    (h0 : s.locals 0 = some (posPtr' posBlock)) (h3 : s.locals 3 = some (u8 k)) :
+    ∃ s', ExS Gen.prog s
+      (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
+        (.seq (.call (some 6) 4 [(.var 5)])
+          (.seq (.set 4 (.var 6)) (.call (some 8) 13 [(.var 4)])))) .normal s' ∧
+      s'.locals 8 = some (i32 (byteFam (pieceByte (p.pieceAt ⟨k, by omega⟩)))) ∧
+      s'.mem = s.mem ∧ (∀ x, x ≠ 5 → x ≠ 6 → x ≠ 4 → x ≠ 8 → s'.locals x = s.locals x) := by
+  let b := pieceByte (p.pieceAt ⟨k, by omega⟩)
+  have hb15 : b.toNat % 16 ≠ 15 := board_nibble p hs k hk
+  -- load the board byte
+  have hbload : EvE Gen.prog s (.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1)) (u8 b.toNat) := by
+    refine EvE.load (pa := .ptr posBlock k)
+      (EvE.index (EvE.field (pb := .ptr posBlock 0) (EvE.var h0) (by
+          show ptrAddN s.mem (.ptr posBlock 0) 0 = .ok (.ptr posBlock 0)
+          simp [ptrAddN, hm]))
+        (EvE.var h3) (by
+        have hlen : (encode p).length = 114 := encode_length p
+        simp [IntTy.u8, ptrAddN, posPtr', hm, hlen, show k ≤ 114 by omega])) ?_
+    have hread := readBoard hm k hk
+    simp [load, hread, Ty.size, IntTy.bytes, decodeLE, b]
+    rfl
+  have e1 : ExS Gen.prog s
+      (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))]) .normal
+      { s with locals := s.locals.upd 5 (u32 (b.toNat % 16)) } := by
+    apply call_run (f := Gen.fid_shogi_piece_type) (fn := Gen.shogi_piece_type)
+      (vs := [u8 b.toNat]) (v := u32 (b.toNat % 16))
+    · rfl
+    · decide
+    · rfl
+    · exact piece_type_run_all ⟨b.toNat, UInt8.toNat_lt b⟩
+    · exact EvArgs.cons hbload EvArgs.nil
+  let s5 : State := { s with locals := s.locals.upd 5 (u32 (b.toNat % 16)) }
+  have e2 : ExS Gen.prog s5 (.call (some 6) 4 [(.var 5)]) .normal
+      { s5 with locals := s5.locals.upd 6 (u32 (unpromotedCode (b.toNat % 16))) } := by
+    apply call_run (f := Gen.fid_shogi_unpromoted_type) (fn := Gen.shogi_unpromoted_type)
+      (vs := [u32 (b.toNat % 16)]) (v := u32 (unpromotedCode (b.toNat % 16)))
+    · rfl
+    · decide
+    · rfl
+    · exact unpromoted_run_all ⟨b.toNat % 16, Nat.mod_lt _ (by decide)⟩ hb15
+    · exact EvArgs.cons (EvE.var (by simp [s5, Locals.upd])) EvArgs.nil
+  have e3 : ExS Gen.prog { s5 with locals := s5.locals.upd 6 (u32 (unpromotedCode (b.toNat % 16))) }
+      (.set 4 (.var 6)) .normal
+      { s5 with locals := (s5.locals.upd 6 (u32 (unpromotedCode (b.toNat % 16)))).upd 4 (u32 (unpromotedCode (b.toNat % 16))) } := ExS.set (EvE.var (by simp [Locals.upd]))
+  let s7 : State := { s5 with locals := (s5.locals.upd 6 (u32 (unpromotedCode (b.toNat % 16)))).upd 4 (u32 (unpromotedCode (b.toNat % 16))) }
+  have e4 : ExS Gen.prog s7 (.call (some 8) 13 [(.var 4)]) .normal
+      { s7 with locals := s7.locals.upd 8 (i32 (byteFam b)) } := by
+    apply call_run (f := Gen.fid_hand_index) (fn := Gen.hand_index)
+      (vs := [u32 (unpromotedCode (b.toNat % 16))]) (v := i32 (byteFam b))
+    · rfl
+    · decide
+    · rfl
+    · exact hand_index_compose ⟨b.toNat, UInt8.toNat_lt b⟩ hb15
+    · exact EvArgs.cons (EvE.var (by simp [s7, Locals.upd])) EvArgs.nil
+  refine ⟨{ s7 with locals := s7.locals.upd 8 (i32 (byteFam b)) }, ?_, ?_, ?_, ?_⟩
+  · exact ExS.seq e1 (ExS.seq e2 (ExS.seq e3 e4))
+  · simp [s7, Locals.upd, b]
+  · rfl
+  · intro x hx5 hx6 hx4 hx8
+    simp [s5, s7, Locals.upd, hx5, hx6, hx4, hx8]
+
+
+
+/-- A 7-entry u32 array in memory. -/
+def ArrEq (blk : Block) (f : Fin 7 → Nat) : Prop :=
+  ∀ i : Fin 7, decodeLE ((blk.drop (4 * i.val)).take 4) = f i
+
+theorem famOfByte_of_byteFam (b : UInt8) (hb15 : b.toNat % 16 ≠ 15) :
+    famOfByte b = if byteFam b < 0 then 7 else (byteFam b).toNat := by
+  cases hc : PieceType.ofCode (b.toNat % 16) with
+  | none =>
+      have hc0 : b.toNat % 16 = 0 := by
+        have hlt : b.toNat % 16 < 16 := Nat.mod_lt _ (by decide)
+        have hall : ∀ c : Fin 16, c.val ≠ 0 → c.val ≠ 15 → PieceType.ofCode c.val ≠ none := by decide +kernel
+        by_cases h : b.toNat % 16 = 0
+        · exact h
+        · exact False.elim (hall ⟨b.toNat % 16, hlt⟩ h hb15 hc)
+      simp [famOfByte, byteFam, unpromotedCode, hc, hc0, PieceType.ofCode]
+  | some t =>
+      cases ht : t.unpromote.handIndex with
+      | none =>
+          simp [famOfByte, byteFam, unpromotedCode, hc, ht, PieceType.ofCode_code]
+      | some i =>
+          simp [famOfByte, byteFam, unpromotedCode, hc, ht, PieceType.ofCode_code]
+          omega
+
+
+theorem boardFamCount_succ (p : Position) (k : Nat) (i : Fin 7) :
+    boardFamCount p (k + 1) i = boardFamCount p k i + (if famAt p k = i.val then 1 else 0) := by
+  unfold boardFamCount
+  rw [List.range_succ, List.countP_append]
+  simp
+
+
+theorem byteFam_bound (b : UInt8) : byteFam b = -1 ∨ (byteFam b).toNat < 7 := by
+  cases hc : PieceType.ofCode (unpromotedCode (b.toNat % 16)) with
+  | none => left; simp [byteFam, hc]
+  | some t =>
+      cases ht : t.handIndex with
+      | none => left; simp [byteFam, hc, ht]
+      | some i => right; simp [byteFam, hc, ht]
+
+end Shogi.C.Proofs

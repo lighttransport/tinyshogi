@@ -147,3 +147,6 @@ import Shogi
 #print axioms Shogi.C.Proofs.shogi_generate_pseudo_for_color_spec
 #print axioms Shogi.C.Proofs.boardFamCount_81
 #print axioms Shogi.C.Proofs.hand_index_compose
+#print axioms Shogi.C.Proofs.board_helper_calls
+#print axioms Shogi.C.Proofs.boardFamCount_succ
+#print axioms Shogi.C.Proofs.byteFam_bound
