@@ -135,11 +135,13 @@ import Shogi
 #print axioms Shogi.C.shogi_generate_legal_mut_correct
 #print axioms Shogi.C.encodeW_length
 #print axioms Shogi.C.encode_length
-#print axioms XorList.xorList_self
-#print axioms XorList.foldl_eq_xorList
+#print axioms Shogi.XorList.xorList_self
+#print axioms Shogi.XorList.foldl_eq_xorList
 #print axioms Shogi.Position.zobrist
 #print axioms Shogi.Position.zobristBoard_eq_xor
 #print axioms Shogi.Position.zobrist_side_flip
 #print axioms MiniC.ExS_ext
 #print axioms MiniC.ExS_mem_ext
 #print axioms Shogi.C.Proofs.same_move_spec
+#print axioms Shogi.C.Proofs.shogi_generate_pseudo_spec
+#print axioms Shogi.C.Proofs.shogi_generate_pseudo_for_color_spec
