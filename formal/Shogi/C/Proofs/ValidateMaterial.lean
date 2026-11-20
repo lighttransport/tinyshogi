@@ -882,7 +882,8 @@ theorem loop1_body (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
     (h9 : s.locals 9 = some (u32 j))
     (hInv : Loop1Inv (posBlock := posBlock) p m mb tb j s) :
     ∃ s1, ExS Gen.prog s (loop1BodyStmt) .normal s1 ∧
-      Loop1Inv (posBlock := posBlock) p m mb tb (j+1) s1 := by
+      Loop1Inv (posBlock := posBlock) p m mb tb (j+1) s1 ∧
+      s1.locals 9 = s.locals 9 := by
   rcases hInv with ⟨MB, T, h0, h1, h2, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos,
     hmbtb, hmb0, htb0, hpm, hpt, hframe, hro⟩
   let jf : Fin 7 := ⟨j, hj⟩
@@ -1003,24 +1004,26 @@ theorem loop1_body (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
   have hbody : ExS Gen.prog s (loop1BodyStmt) .normal s1 := by
     dsimp [loop1BodyStmt]; exact ExS.ite hcond rfl hactions
   refine ⟨s1, hbody, ?_⟩
-  refine ⟨MB, T', ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · simpa [s1, h0]
-  · simpa [s1, h1]
-  · simpa [s1, h2]
-  · simpa [s1, T', Mem.upd_ne hmbtb, hmb]
-  · exact hlenmb
-  · exact hArrMB
-  · simp [s1, Mem.upd_eq]
-  · exact hlenT'
-  · exact hTot1
-  · simpa [s1, T', Mem.upd_ne hpt, hpos]
-  · exact hmbtb
-  · exact hmb0
-  · exact htb0
-  · exact hpm
-  · exact hpt
-  · intro bb hb0 hmbx htb_x
-    simpa [s1, T', Mem.upd_ne htb_x] using hframe bb hb0 hmbx htb_x
-  · simpa [s1] using hro
+  constructor
+  · refine ⟨MB, T', ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · simpa [s1, h0]
+    · simpa [s1, h1]
+    · simpa [s1, h2]
+    · simpa [s1, T', Mem.upd_ne hmbtb, hmb]
+    · exact hlenmb
+    · exact hArrMB
+    · simp [s1, Mem.upd_eq]
+    · exact hlenT'
+    · exact hTot1
+    · simpa [s1, T', Mem.upd_ne hpt, hpos]
+    · exact hmbtb
+    · exact hmb0
+    · exact htb0
+    · exact hpm
+    · exact hpt
+    · intro bb hb0 hmbx htb_x
+      simpa [s1, T', Mem.upd_ne htb_x] using hframe bb hb0 hmbx htb_x
+    · simpa [s1] using hro
+  · simp [s1]
 
 end Shogi.C.Proofs
