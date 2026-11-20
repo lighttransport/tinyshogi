@@ -152,3 +152,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.byteFam_bound
 #print axioms Shogi.C.Proofs.slot_index
 #print axioms Shogi.C.Proofs.slot_load
+#print axioms Shogi.C.Proofs.array_write_other

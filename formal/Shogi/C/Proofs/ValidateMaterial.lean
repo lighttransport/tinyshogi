@@ -345,4 +345,51 @@ theorem slot_load {s : State} {tb : Nat} {T : Block} (j : Fin 7) (val : Nat)
   rw [htb]
   simp [show 4 * j.val + 4 ≤ T.length by omega, hT]
 
+theorem array_write_other (T : Block) (hlen : T.length = 28) (i j : Fin 7) (hij : i ≠ j) (v : Nat) :
+    let T' := T.take (4*j.val) ++ encodeLE 4 v ++ T.drop (4*j.val + 4)
+    decodeLE ((T'.drop (4*i.val)).take 4) = decodeLE ((T.drop (4*i.val)).take 4) := by
+  intro T'
+  have hijlt : i.val < j.val ∨ j.val < i.val := by omega
+  rcases hijlt with hlt | hgt
+  · -- i < j: the write is after the read window
+    have h1 : 4 * i.val ≤ (T.take (4*j.val)).length := by simp [hlen]; omega
+    rw [show T'.drop (4*i.val) = (T.take (4*j.val)).drop (4*i.val) ++
+        (encodeLE 4 v ++ T.drop (4*j.val + 4)) by
+      simp [T', List.drop_append_of_le_length h1]]
+    rw [List.take_append_of_le_length (show 4 ≤ ((T.take (4*j.val)).drop (4*i.val)).length by simp [hlen]; omega)]
+    -- (take 4j T).drop 4i = take (4j - 4i) (T.drop 4i)
+    rw [show (T.take (4*j.val)).drop (4*i.val) = (T.drop (4*i.val)).take (4*j.val - 4*i.val) by
+      rw [List.drop_take]]
+    rw [List.take_take]
+    simp [Nat.min_eq_left (show 4 ≤ 4*j.val - 4*i.val by omega)]
+  · -- j < i: the write is before the read window
+    have hA : (T.take (4*j.val)).length = 4*j.val := by
+      simp [hlen, Nat.min_eq_left (show 4*j.val ≤ 28 by omega)]
+    have hdropA : (T.take (4*j.val)).drop (4*i.val) = [] := by
+      apply List.drop_eq_nil_of_le
+      rw [hA]; omega
+    have hdrop_part : T'.drop (4*i.val) = (encodeLE 4 v ++ T.drop (4*j.val+4)).drop (4*i.val - 4*j.val) := by
+      dsimp [T']
+      rw [List.drop_append]
+      rw [List.drop_append]
+      rw [hdropA]
+      simp [hA, encodeLE_length]
+      rw [List.drop_append]
+      simp [encodeLE_length]
+      exact congrArg (fun x => min (4 * (j : Nat) + 4 + x) (List.length T))
+        (show 4 * (i : Nat) - (4 * (j : Nat) + 4) = 4 * (i : Nat) - 4 * (j : Nat) - 4 by omega)
+    rw [hdrop_part]
+    simp only [List.drop_append]
+    have hk : 4 ≤ 4 * i.val - 4 * j.val := by omega
+    have hdropenc : (encodeLE 4 v).drop (4*i.val - 4*j.val) = [] := by
+      apply List.drop_eq_nil_of_le
+      simp [encodeLE_length]; omega
+    rw [hdropenc, List.nil_append]
+    rw [← List.drop_drop]
+    rw [List.drop_drop]
+    rw [List.drop_drop]
+    apply congrArg (fun x => decodeLE (List.take 4 (List.drop x T)))
+    simp [encodeLE_length]
+    omega
+
 end Shogi.C.Proofs
