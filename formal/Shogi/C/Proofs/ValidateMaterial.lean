@@ -615,4 +615,76 @@ theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
         simpa [show s8.mem b = s7.mem b by simp [s8, Mem.upd_ne htb],
           show s7.mem b = s5.mem b by rfl, hmem5] using hframe b hb0 hmbx htb
 
+theorem loop0_runs (p : Position) (m : Mem) (mb tb : Nat) (s0 : State)
+    (hs : p.board.length = 81) (hInv0 : Inv0T (posBlock := posBlock) p m mb tb 0 s0) :
+    ∃ s', ExS Gen.prog s0 Gen.validate_material_loop0 .normal s' ∧
+      Inv0T (posBlock := posBlock) p m mb tb 81 s' := by
+  let P : Nat → Prop := fun d => d ≤ 81 → ∀ (s : State),
+    Inv0T (posBlock := posBlock) p m mb tb (81 - d) s →
+      ∃ s', ExS Gen.prog s Gen.validate_material_loop0 .normal s' ∧
+        Inv0T (posBlock := posBlock) p m mb tb 81 s'
+  have hP : ∀ d, P d := by
+    intro d
+    induction d with
+    | zero =>
+        intro hd s hInv
+        refine ⟨s, ?_, ?_⟩
+        · unfold Gen.validate_material_loop0
+          apply ExS.loop_brk
+          obtain ⟨MB, T, h0, h1, h2, h3, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos,
+            hmbtb, hmb0, htb0, hpm, hpt, hframe, hro⟩ := hInv
+          have hcond : EvE Gen.prog s (.bin .lt (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 81)))
+              (boolVal false) := by
+            refine EvE.bin (va := i32 81) (EvE.cast (v := i32 81) (EvE.var h3) ?_) (EvE.const _) ?_
+            · simp [u8, i32, IntTy.u8, IntTy.i32, evalCast, IntTy.wrap, IntTy.modulus, IntTy.toInt]
+            · simp [i32, IntTy.i32, evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap,
+                IntTy.modulus, boolVal]
+          exact ExS.ite (bc := false) hcond rfl ExS.brk
+        · exact hInv
+    | succ d ih =>
+        intro hd s hInv
+        have hInv_copy := hInv
+        obtain ⟨MB0, T0, h0, h1, h2, h3, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos,
+          hmbtb, hmb0, htb0, hpm, hpt, hframe, hro⟩ := hInv
+        let k := 81 - (d + 1)
+        have hk : k < 81 := by change 81 - (d + 1) < 81; exact Nat.sub_lt (by decide) (Nat.succ_pos d)
+        have hd_le : d ≤ 81 := by omega
+        have hk_eq : k + 1 = 81 - d := by dsimp [k]; omega
+        obtain ⟨s1, T1, hres⟩ := loop0_body p m mb tb s k hs hk hInv_copy
+        let s2 : State := { s1 with locals := s1.locals.upd 3 (u8 (k+1)) }
+        have hstep : ExS Gen.prog s1 (.set 3 (.cast ⟨8, false⟩
+            (.bin .add (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 1))))) .normal s2 := by
+          have h3s1 : s1.locals 3 = some (.int IntTy.u8 k) := by rw [hres.hloc3]; exact h3
+          have hev : evalExpr Gen.prog 5 s1 (.cast ⟨8, false⟩
+              (.bin .add (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 1))))
+              = .ok (u8 (k+1)) := ev_succ (v := 3) s1 k hk h3s1
+          exact ExS.set (EvE_of_eval hev)
+        have hInv2 : Inv0T (posBlock := posBlock) p m mb tb (k+1) s2 := by
+          refine ⟨MB0, T1, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+          · rw [show s2.locals 0 = s1.locals 0 by simp [s2, Locals.upd], hres.hloc0]; exact h0
+          · rw [show s2.locals 1 = s1.locals 1 by simp [s2, Locals.upd], hres.hloc1]; exact h1
+          · rw [show s2.locals 2 = s1.locals 2 by simp [s2, Locals.upd], hres.hloc2]; exact h2
+          · simp [s2, Locals.upd]
+          · rw [show s2.mem mb = s1.mem mb by simp [s2], hres.hmem_mb]; exact hmb
+          · exact hlenmb
+          · exact hArrMB
+          · rw [show s2.mem tb = s1.mem tb by simp [s2]]; exact hres.hmem_tb
+          · exact hres.hlenT
+          · exact hres.hTot
+          · rw [show s2.mem posBlock = s1.mem posBlock by simp [s2], hres.hmem_pos]; exact hpos
+          · exact hmbtb
+          · exact hmb0
+          · exact htb0
+          · exact hpm
+          · exact hpt
+          · intro b hb0 hmbx htb
+            rw [show s2.mem b = s1.mem b by simp [s2], hres.hframe b hb0 hmbx htb]
+            exact hframe b hb0 hmbx htb
+          · rw [show s2.ro = s1.ro by simp [s2], hres.hro]; exact hro
+        obtain ⟨sf, hloopf, hInvf⟩ := ih hd_le s2 (by simpa [hk_eq] using hInv2)
+        refine ⟨sf, ?_, hInvf⟩
+        unfold Gen.validate_material_loop0
+        exact ExS.loop_next hres.exs (Or.inl rfl) hstep hloopf
+  exact hP 81 (by omega) s0 (by simpa using hInv0)
+
 end Shogi.C.Proofs
