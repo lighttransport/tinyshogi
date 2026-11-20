@@ -1080,4 +1080,232 @@ theorem loop1_runs (p : Position) (hs : p.Shaped) (hmat : p.materialOk = true)
         exact ExS.loop_next hbody (Or.inl rfl) hstep hloopf
   exact hP 7 (by omega) s0 h9zero hInv0
 
+def maxBlock : Block :=
+  encodeLE 4 18 ++ encodeLE 4 4 ++ encodeLE 4 4 ++ encodeLE 4 4 ++
+  encodeLE 4 4 ++ encodeLE 4 2 ++ encodeLE 4 2
+
+def setSlot (blk : Block) (i v : Nat) : Block :=
+  blk.take (4*i) ++ encodeLE 4 v ++ blk.drop (4*i+4)
+
+theorem maxBlock_ArrEq : ArrEq maxBlock maxArr := by
+  intro i
+  have hv : i.val = 0 ∨ i.val = 1 ∨ i.val = 2 ∨ i.val = 3 ∨ i.val = 4 ∨ i.val = 5 ∨ i.val = 6 := by omega
+  rcases hv with h|h|h|h|h|h|h
+  · have : i = ⟨0, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+  · have : i = ⟨1, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+  · have : i = ⟨2, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+  · have : i = ⟨3, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+  · have : i = ⟨4, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+  · have : i = ⟨5, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+  · have : i = ⟨6, by omega⟩ := Fin.ext h; rw [this]; simp [maxBlock, maxArr, ArrEq, encodeLE, decodeLE, PieceType.handMax]
+
+theorem decodeLE_replicate_zero : ∀ k, decodeLE (List.replicate k (0:UInt8)) = (0:Nat) := by
+  intro k
+  induction k with
+  | zero => simp [decodeLE]
+  | succ k ih =>
+      change decodeLE ((0 : UInt8) :: List.replicate k 0) = 0
+      simp [decodeLE, ih]
+
+theorem max_index {s : State} {mb i : Nat} {MB : Block} (hi : i < 7)
+    (h1 : s.locals 1 = some (.ptr mb 0)) (hmb : s.mem mb = some MB) (hlen : MB.length = 28) :
+    EvE Gen.prog s (.index (.var 1) (.const (.int ⟨64, false⟩ i)) 4) (.ptr mb (4*i)) := by
+  have haddr : evalExpr Gen.prog 10 s (.index (.var 1) (.const (.int ⟨64, false⟩ i)) 4) = .ok (.ptr mb (4*i)) := by
+    simp [evalExpr, evalUn, intOf, IntTy.toInt, IntTy.u64, ptrAddN, h1, hmb, hlen]
+    rw [if_pos (show i * 4 ≤ 28 by omega)]
+    congr 2 <;> omega
+  exact EvE_of_eval haddr
+
+theorem store_max_slot {s : State} {mb i v : Nat} {MB : Block} (hi : i < 7) (hv : v < 2^30)
+    (h1 : s.locals 1 = some (.ptr mb 0)) (hmb : s.mem mb = some MB) (hlen : MB.length = 28)
+    (hro : s.ro = false) :
+    ExS Gen.prog s (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ i)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ v)))) .normal
+      { s with mem := s.mem.upd mb (setSlot MB i v) } := by
+  have hev : EvE Gen.prog s (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ v)))
+      (.int ⟨32, false⟩ v) := by
+    exact EvE.cast (EvE.const (v := .int ⟨32, true⟩ v)) (evalCast_u32_of_i32 v (by omega))
+  have hstore : store s.mem (Ty.int ⟨32, false⟩) (.ptr mb (4*i)) (.int ⟨32, false⟩ v) =
+      .ok (s.mem.upd mb (setSlot MB i v)) := by
+    simp [store, writeBytes, hmb, Ty.size, IntTy.bytes, setSlot, encodeLE_length,
+      show 4*i + 4 ≤ MB.length by omega]
+  exact ExS.store (max_index hi h1 hmb hlen) hev hro hstore
+
+-- applying stores 0..6 to a zero block yields maxBlock
+theorem init_stores_result :
+    setSlot (setSlot (setSlot (setSlot (setSlot (setSlot (setSlot (List.replicate 28 0) 0 18) 1 4) 2 4) 3 4) 4 4) 5 2) 6 2 = maxBlock := by
+  decide +kernel
+
+theorem validate_material_spec {p : Position} (hs : p.Shaped) (hmat : p.materialOk = true)
+    {m : Mem} {n : Nat} (hm : m posBlock = some (encode p)) (hf : Fresh m n) (hn64 : n + 2 < 2^64) (hpm0 : posBlock ≠ 0) :
+    ∃ sf, ExS Gen.prog ⟨frameLocals Gen.validate_material.params [posPtr' posBlock], m, false⟩
+      Gen.validate_material.body (.ret (some (.int ⟨8, false⟩ 1))) sf ∧
+      sf.mem posBlock = some (encode p) ∧
+      (∀ b, b ≠ 0 → b ≠ n → b ≠ n + 1 → sf.mem b = m b) := by
+  let s0 : State := ⟨frameLocals Gen.validate_material.params [posPtr' posBlock], m, false⟩
+  have hn0 : n ≠ 0 := hf.2.1
+  have hn1 : n + 1 ≠ 0 := by omega
+  have hposn : posBlock < n := posBlock_lt_of_fresh (m := m) (p := p) hf hm
+  have hpmn : posBlock ≠ n := by omega
+  have hpmn1 : posBlock ≠ n + 1 := by omega
+  have hp0 : posBlock ≠ 0 := hpm0
+  -- alloc maximum
+  have e1 : ExS Gen.prog s0 (.alloc 1 28) .normal
+      { s0 with mem := (s0.mem.upd 0 (encodeLE 8 (n+1))).upd n (List.replicate 28 0),
+                locals := s0.locals.upd 1 (.ptr n 0) } :=
+    exec_alloc (hf.allocAt (by omega)) 1 28
+  let s1 : State := { s0 with mem := (s0.mem.upd 0 (encodeLE 8 (n+1))).upd n (List.replicate 28 0), locals := s0.locals.upd 1 (.ptr n 0) }
+  have hs1_1 : s1.locals 1 = some (.ptr n 0) := by simp [s1, s0, frameLocals, Locals.upd]
+  have hs1_mb : s1.mem n = some (List.replicate 28 0) := by simp [s1, Mem.upd]
+  have hs1_ro : s1.ro = false := by simp [s1, s0]
+  -- 7 stores (named blocks keep the state facts simple)
+  let B0 : Block := List.replicate 28 0
+  let B1 := setSlot B0 0 18
+  let B2 := setSlot B1 1 4
+  let B3 := setSlot B2 2 4
+  let B4 := setSlot B3 3 4
+  let B5 := setSlot B4 4 4
+  let B6 := setSlot B5 5 2
+  let B7 := setSlot B6 6 2
+  let s2a : State := { s1 with mem := s1.mem.upd n B1 }
+  have e2a : ExS Gen.prog s1 (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 0)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 18)))) .normal s2a := by
+    dsimp [s2a]; exact store_max_slot (s := s1) (mb := n) (i := 0) (v := 18) (MB := B0)
+      (by omega) (by omega) hs1_1 (by simp [s1, B0, Mem.upd]) (by simp [B0]) hs1_ro
+  let s2b : State := { s2a with mem := s2a.mem.upd n B2 }
+  have e2b : ExS Gen.prog s2a (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 1)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 4)))) .normal s2b := by
+    dsimp [s2b]; exact store_max_slot (s := s2a) (mb := n) (i := 1) (v := 4) (MB := B1)
+      (by omega) (by omega) (by simp [s2a, hs1_1]) (by simp [s2a, Mem.upd]) (by simp [B1, setSlot, encodeLE_length, B0] <;> omega) (by simp [s2a, hs1_ro])
+  let s2c : State := { s2b with mem := s2b.mem.upd n B3 }
+  have e2c : ExS Gen.prog s2b (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 2)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 4)))) .normal s2c := by
+    dsimp [s2c]; exact store_max_slot (s := s2b) (mb := n) (i := 2) (v := 4) (MB := B2)
+      (by omega) (by omega) (by simp [s2b, s2a, hs1_1]) (by simp [s2b, Mem.upd]) (by simp [B2, B1, setSlot, encodeLE_length, B0] <;> omega) (by simp [s2b, s2a, hs1_ro])
+  let s2d : State := { s2c with mem := s2c.mem.upd n B4 }
+  have e2d : ExS Gen.prog s2c (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 3)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 4)))) .normal s2d := by
+    dsimp [s2d]; exact store_max_slot (s := s2c) (mb := n) (i := 3) (v := 4) (MB := B3)
+      (by omega) (by omega) (by simp [s2c, s2b, s2a, hs1_1]) (by simp [s2c, Mem.upd]) (by simp [B3, B2, B1, setSlot, encodeLE_length, B0] <;> omega) (by simp [s2c, s2b, s2a, hs1_ro])
+  let s2e : State := { s2d with mem := s2d.mem.upd n B5 }
+  have e2e : ExS Gen.prog s2d (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 4)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 4)))) .normal s2e := by
+    dsimp [s2e]; exact store_max_slot (s := s2d) (mb := n) (i := 4) (v := 4) (MB := B4)
+      (by omega) (by omega) (by simp [s2d, s2c, s2b, s2a, hs1_1]) (by simp [s2d, Mem.upd]) (by simp [B4, B3, B2, B1, setSlot, encodeLE_length, B0] <;> omega) (by simp [s2d, s2c, s2b, s2a, hs1_ro])
+  let s2f : State := { s2e with mem := s2e.mem.upd n B6 }
+  have e2f : ExS Gen.prog s2e (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 5)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 2)))) .normal s2f := by
+    dsimp [s2f]; exact store_max_slot (s := s2e) (mb := n) (i := 5) (v := 2) (MB := B5)
+      (by omega) (by omega) (by simp [s2e, s2d, s2c, s2b, s2a, hs1_1]) (by simp [s2e, Mem.upd]) (by simp [B5, B4, B3, B2, B1, setSlot, encodeLE_length, B0] <;> omega) (by simp [s2e, s2d, s2c, s2b, s2a, hs1_ro])
+  let s2 : State := { s2f with mem := s2f.mem.upd n B7 }
+  have e2g : ExS Gen.prog s2f (.store (.int ⟨32, false⟩) (.index (.var 1) (.const (.int ⟨64, false⟩ 6)) 4)
+      (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 2)))) .normal s2 := by
+    dsimp [s2]; exact store_max_slot (s := s2f) (mb := n) (i := 6) (v := 2) (MB := B6)
+      (by omega) (by omega) (by simp [s2f, s2e, s2d, s2c, s2b, s2a, hs1_1]) (by simp [s2f, Mem.upd]) (by simp [B6, B5, B4, B3, B2, B1, setSlot, encodeLE_length, B0] <;> omega) (by simp [s2f, s2e, s2d, s2c, s2b, s2a, hs1_ro])
+  have hB7 : B7 = maxBlock := by rfl
+  have hs2_mb : s2.mem n = some maxBlock := by simp [s2, Mem.upd, hB7]
+  have hs2_1 : s2.locals 1 = some (.ptr n 0) := by simp [s2, s2f, s2e, s2d, s2c, s2b, s2a, hs1_1]
+  -- alloc total
+  have hf2 : Fresh s2.mem (n+1) := by
+    refine ⟨?_, by omega, ?_⟩
+    · simp [s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, Mem.upd, hf.1, hn0, show 0 ≠ n by omega]
+    · intro x hx
+      have hx0 : x ≠ 0 := by omega
+      have hxn : x ≠ n := by omega
+      have hsx : s2.mem x = m x := by
+        simp [s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, Mem.upd, hx0, hxn]
+      rw [hsx]
+      exact hf.2.2 x (by omega)
+  have e3 : ExS Gen.prog s2 (.alloc 2 28) .normal
+      { s2 with mem := (s2.mem.upd 0 (encodeLE 8 (n+2))).upd (n+1) (List.replicate 28 0),
+                locals := s2.locals.upd 2 (.ptr (n+1) 0) } :=
+    exec_alloc (hf2.allocAt (by omega)) 2 28
+  let s3 : State := { s2 with mem := (s2.mem.upd 0 (encodeLE 8 (n+2))).upd (n+1) (List.replicate 28 0), locals := s2.locals.upd 2 (.ptr (n+1) 0) }
+  -- set 3 = u8 0
+  have e4 : ExS Gen.prog s3 (.set 3 (.cast ⟨8, false⟩ (.const (.int ⟨32, true⟩ 0)))) .normal
+      { s3 with locals := s3.locals.upd 3 (u8 0) } := by
+    exact ExS.set (EvE_of_eval (n := 3) (by simp [evalExpr, evalCast, IntTy.wrap, IntTy.modulus, IntTy.toInt, IntTy.i32, IntTy.u8, u8, boolVal]))
+  let s4 := { s3 with locals := s3.locals.upd 3 (u8 0) }
+  -- loop0 invariant
+  have hInv0 : Inv0T (posBlock := posBlock) p s4.mem n (n+1) 0 s4 := by
+    refine ⟨maxBlock, List.replicate 28 0, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · simp [s4, s3, s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, frameLocals, Gen.validate_material, Locals.upd]
+    · simp [s4, s3, s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, frameLocals, Gen.validate_material, Locals.upd]
+    · simp [s4, s3, Locals.upd, hs2_1]
+    · simp [s4, Locals.upd]
+    · simpa [s4, s3, Mem.upd, hn0, show n ≠ n+1 by omega] using hs2_mb
+    · simp [maxBlock, encodeLE_length]
+    · exact maxBlock_ArrEq
+    · simp [s4, s3, Mem.upd]
+    · simp
+    · intro i
+      rw [boardFamCount]
+      simp [famAt]
+      change decodeLE (List.take 4 (List.drop (4 * i.val) (List.replicate 28 (0:UInt8)))) = 0
+      rw [List.drop_replicate, List.take_replicate]
+      exact decodeLE_replicate_zero _
+    · simpa [s4, s3, s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, Mem.upd, hpmn,
+        hpmn1, hp0, frameLocals] using hm
+    · omega
+    · exact hn0
+    · exact Nat.succ_ne_zero n
+    · exact hpmn
+    · exact hpmn1
+    · intro b hb0 hbn hbn1
+      simp [s4, s3, s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, Mem.upd_ne hb0,
+        Mem.upd_ne hbn, Mem.upd_ne hbn1]
+    · rfl
+  obtain ⟨s5, hloop0, hInv81⟩ := loop0_runs p s4.mem n (n+1) s4 hs.1 hInv0
+
+  -- set 9 = u32 0
+  have e5 : ExS Gen.prog s5 (.set 9 (.cast ⟨32, false⟩ (.const (.int ⟨32, true⟩ 0)))) .normal
+      { s5 with locals := s5.locals.upd 9 (u32 0) } := by
+    exact ExS.set (EvE_of_eval (n := 3) (by
+      simp [evalExpr, evalCast, IntTy.wrap, IntTy.modulus, IntTy.toInt, IntTy.i32, IntTy.u32, u32]))
+  let s6 : State := { s5 with locals := s5.locals.upd 9 (u32 0) }
+  have h9zero : s6.locals 9 = some (u32 0) := by simp [s6, Locals.upd]
+  obtain ⟨MB81, T81, i0, i1, i2, i3, iMB, ilenMB, iArrMB, iTB, ilenT, iTot, ipos,
+    imbtb, imb0, itb0, ipm, ipt, iframe, iro⟩ := hInv81
+  have hInv1 : Loop1Inv (posBlock := posBlock) p s6.mem n (n+1) 0 s6 := by
+    refine ⟨MB81, T81, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · simpa [s6, Locals.upd] using i0
+    · simpa [s6, Locals.upd] using i1
+    · simpa [s6, Locals.upd] using i2
+    · simpa [s6, Locals.upd] using iMB
+    · exact ilenMB
+    · exact iArrMB
+    · simpa [s6, Locals.upd] using iTB
+    · exact ilenT
+    · intro i; simpa using iTot i
+    · simpa [s6, Locals.upd] using ipos
+    · exact imbtb
+    · exact imb0
+    · exact itb0
+    · exact ipm
+    · exact ipt
+    · intro b hb0 hbn hbn1; simpa [s6, Locals.upd] using iframe b hb0 hbn hbn1
+    · simpa [s6, Locals.upd] using iro
+  obtain ⟨s7, hloop1, hInv7, h97⟩ := loop1_runs p hs hmat s6.mem n (n+1) s6 h9zero hInv1
+  -- final return (1 != 0) -> u8 1
+  have hret : ExS Gen.prog s7 (.ret (some (.cast ⟨8, false⟩ (.bin .ne (some ⟨32, true⟩)
+      (.const (.int ⟨32, true⟩ 1)) (.const (.int ⟨32, true⟩ 0)))))) (.ret (some (.int ⟨8, false⟩ 1))) s7 := by
+    apply ExS.ret
+    refine EvE_of_eval (n := 10) ?_
+    simp [evalExpr, evalCast, evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.wrap,
+      IntTy.modulus, IntTy.toInt, IntTy.i32, IntTy.u8, u8, boolVal]
+  refine ⟨s7, ?_, ?_, ?_⟩
+  · unfold Gen.validate_material
+    exact ExS.seq (ExS.seq e1 (ExS.seq e2a (ExS.seq e2b (ExS.seq e2c (ExS.seq e2d
+      (ExS.seq e2e (ExS.seq e2f e2g)))))))
+      (ExS.seq e3 (ExS.seq (ExS.seq e4 hloop0) (ExS.seq (ExS.seq e5 hloop1) hret)))
+  · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, mp7, _, _, _, _, _, _, _⟩ := hInv7
+    simpa [s6, Locals.upd] using mp7
+  · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f7, _⟩ := hInv7
+    intro b hb0 hbn hbn1
+    have h1 := f7 b hb0 hbn hbn1
+    have h2 := iframe b hb0 hbn hbn1
+    have h3 : s4.mem b = m b := by
+      simpa [s4, s3, s2, s2f, s2e, s2d, s2c, s2b, s2a, s1, s0, Mem.upd, hb0, hbn, hbn1]
+    rw [h1, h2, h3]
+
 end Shogi.C.Proofs
