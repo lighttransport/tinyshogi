@@ -153,3 +153,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.slot_index
 #print axioms Shogi.C.Proofs.slot_load
 #print axioms Shogi.C.Proofs.array_write_other
+#print axioms Shogi.C.Proofs.loop0_body

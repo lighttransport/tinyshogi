@@ -207,12 +207,14 @@ theorem board_nibble (p : Position) (hs : p.board.length = 81) (k : Nat) (hk : k
 theorem board_helper_calls (s : State) (p : Position) (hs : p.board.length = 81)
     (k : Nat) (hk : k < 81) (hm : s.mem posBlock = some (encode p))
     (h0 : s.locals 0 = some (posPtr' posBlock)) (h3 : s.locals 3 = some (u8 k)) :
-    ∃ s', ExS Gen.prog s
-      (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
-        (.seq (.call (some 6) 4 [(.var 5)])
-          (.seq (.set 4 (.var 6)) (.call (some 8) 13 [(.var 4)])))) .normal s' ∧
-      s'.locals 8 = some (i32 (byteFam (pieceByte (p.pieceAt ⟨k, by omega⟩)))) ∧
-      s'.mem = s.mem ∧ (∀ x, x ≠ 5 → x ≠ 6 → x ≠ 4 → x ≠ 8 → s'.locals x = s.locals x) := by
+    ∃ s4 s5,
+      ExS Gen.prog s
+        (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
+          (.seq (.call (some 6) 4 [(.var 5)]) (.set 4 (.var 6)))) .normal s4 ∧
+      ExS Gen.prog s4 (.call (some 8) 13 [(.var 4)]) .normal s5 ∧
+      s5.locals 8 = some (i32 (byteFam (pieceByte (p.pieceAt ⟨k, by omega⟩)))) ∧
+      s5.mem = s.mem ∧ s5.ro = s.ro ∧
+      (∀ x, x ≠ 5 → x ≠ 6 → x ≠ 4 → x ≠ 8 → s5.locals x = s.locals x) := by
   let b := pieceByte (p.pieceAt ⟨k, by omega⟩)
   have hb15 : b.toNat % 16 ≠ 15 := board_nibble p hs k hk
   -- load the board byte
@@ -260,8 +262,8 @@ theorem board_helper_calls (s : State) (p : Position) (hs : p.board.length = 81)
     · rfl
     · exact hand_index_compose ⟨b.toNat, UInt8.toNat_lt b⟩ hb15
     · exact EvArgs.cons (EvE.var (by simp [s7, Locals.upd])) EvArgs.nil
-  refine ⟨{ s7 with locals := s7.locals.upd 8 (i32 (byteFam b)) }, ?_, ?_, ?_, ?_⟩
-  · exact ExS.seq e1 (ExS.seq e2 (ExS.seq e3 e4))
+  refine ⟨s7, { s7 with locals := s7.locals.upd 8 (i32 (byteFam b)) }, ?_, e4, ?_, ?_, rfl, ?_⟩
+  · exact ExS.seq e1 (ExS.seq e2 e3)
   · simp [s7, Locals.upd, b]
   · rfl
   · intro x hx5 hx6 hx4 hx8
@@ -391,5 +393,178 @@ theorem array_write_other (T : Block) (hlen : T.length = 28) (i j : Fin 7) (hij 
     apply congrArg (fun x => decodeLE (List.take 4 (List.drop x T)))
     simp [encodeLE_length]
     omega
+
+
+theorem byteFam_neg (b : UInt8) (h : byteFam b < 0) : byteFam b = -1 := by
+  cases hc : PieceType.ofCode (unpromotedCode (b.toNat % 16)) with
+  | none => simp [byteFam, hc]
+  | some t =>
+      cases ht : t.handIndex with
+      | none => simp [byteFam, hc, ht]
+      | some i => simp [byteFam, hc, ht] at h; omega
+
+def Inv0T (p : Position) (m : Mem) (mb tb : Nat) (k : Nat) (s : State) : Prop :=
+  ∃ MB T,
+    s.locals 0 = some (posPtr' posBlock) ∧ s.locals 1 = some (.ptr mb 0) ∧
+    s.locals 2 = some (.ptr tb 0) ∧ s.locals 3 = some (u8 k) ∧
+    s.mem mb = some MB ∧ MB.length = 28 ∧ ArrEq MB maxArr ∧
+    s.mem tb = some T ∧ T.length = 28 ∧
+    (∀ i : Fin 7, decodeLE ((T.drop (4*i.val)).take 4) = boardFamCount p k i) ∧
+    s.mem posBlock = some (encode p) ∧
+    (∀ b, b ≠ 0 → b ≠ mb → b ≠ tb → s.mem b = m b) ∧ s.ro = false
+
+-- one body iteration: condition true, helper calls, increment or skip, outcome normal
+theorem loop0_body (p : Position) (m : Mem) (mb tb : Nat) (s : State) (k : Nat)
+    (hs : p.board.length = 81) (hk : k < 81)
+    (hInv : Inv0T (posBlock := posBlock) p m mb tb k s) :
+    ∃ s1, ExS Gen.prog s
+      (.ite (.bin .lt (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 81)))
+        (.seq (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
+          (.seq (.call (some 6) 4 [(.var 5)]) (.set 4 (.var 6))))
+          (.seq (.seq (.call (some 8) 13 [(.var 4)]) (.set 7 (.var 8)))
+            (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+              (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
+                (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+                  (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
+        .brk) .normal s1 ∧
+      (∃ T', s1.mem tb = some T' ∧ T'.length = 28 ∧
+        (∀ i : Fin 7, decodeLE ((T'.drop (4*i.val)).take 4) = boardFamCount p (k+1) i)) := by
+  rcases hInv with ⟨MB, T, h0, h1, h2, h3, hmb, hlenmb, hArrMB, htb, hlentb, hTot, hpos, hframe, hro⟩
+  let b := pieceByte (p.pieceAt ⟨k, by omega⟩)
+  have hb15 : b.toNat % 16 ≠ 15 := board_nibble p hs k hk
+  have hcond : EvE Gen.prog s (.bin .lt (some ⟨32, true⟩) (.cast ⟨32, true⟩ (.var 3)) (.const (.int ⟨32, true⟩ 81)))
+      (boolVal true) := by
+    refine EvE.bin (va := i32 (k : Int)) (EvE.cast (v := i32 (k : Int)) (EvE.var h3) ?_) (EvE.const _) ?_
+    · simp [u8, i32, IntTy.u8, IntTy.i32, evalCast, IntTy.wrap, IntTy.modulus, IntTy.toInt,
+        Nat.mod_eq_of_lt (show k < 4294967296 by omega)]
+      rw [Int.emod_eq_of_lt (by omega) (by omega)]; simp
+    · simp [i32, IntTy.i32, evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap,
+        IntTy.modulus, boolVal, hk, Nat.mod_eq_of_lt (show k < 4294967296 by omega)]
+      rw [Int.emod_eq_of_lt (by omega) (by omega)]; simp; omega
+  obtain ⟨s4, s5, eA, e13, hl8, hmem5, hro5, hl5⟩ := board_helper_calls s p hs k hk hpos h0 h3
+  let s7 : State := { s5 with locals := s5.locals.upd 7 (i32 (byteFam b)) }
+  have h7 : s7.locals 7 = some (i32 (byteFam b)) := by simp [s7, Locals.upd]
+  have e7 : ExS Gen.prog s5 (.set 7 (.var 8)) .normal s7 := ExS.set (EvE.var hl8)
+  by_cases hneg : byteFam b < 0
+  · -- skip
+    have hbf : byteFam b = -1 := byteFam_neg b hneg
+    have hcondge : EvE Gen.prog s7 (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+        (boolVal false) := by
+      refine EvE_of_eval (n := 10) ?_
+      simp [evalExpr, evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap,
+        IntTy.modulus, boolVal, i32, IntTy.i32, h7, hbf]
+    have eskip : ExS Gen.prog s7 (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0))) (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩ (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip) .normal s7 := ExS.ite hcondge rfl ExS.skip
+    have hactions : ExS Gen.prog s
+        (.seq (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
+          (.seq (.call (some 6) 4 [(.var 5)]) (.set 4 (.var 6))))
+          (.seq (.seq (.call (some 8) 13 [(.var 4)]) (.set 7 (.var 8)))
+            (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+              (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
+                (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+                  (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
+        .normal s7 := ExS.seq eA (ExS.seq (ExS.seq e13 e7) eskip)
+    refine ⟨s7, ExS.ite hcond rfl hactions, T, ?_, hlentb, ?_⟩
+    · rw [show s7.mem = s5.mem by rfl, hmem5]; exact htb
+    · intro i
+      rw [boardFamCount_succ]
+      have hf := famOfByte_of_byteFam b hb15
+      rw [hbf] at hf
+      have hfam : famAt p k = 7 := by simpa [famAt, hk, b] using hf
+      rw [hfam]
+      simp [show 7 ≠ i.val by omega]
+      exact hTot i
+  · -- increment
+    have hbf_nonneg : 0 ≤ byteFam b := by omega
+    have hjlt : (byteFam b).toNat < 7 := by
+      rcases byteFam_bound b with h | h
+      · omega
+      · exact h
+    let j : Fin 7 := ⟨(byteFam b).toNat, hjlt⟩
+    have hbfj : byteFam b = (j.val : Int) := by simp [j, Int.toNat_of_nonneg hbf_nonneg]
+    have h2s7 : s7.locals 2 = some (.ptr tb 0) := by
+      rw [show s7.locals 2 = s5.locals 2 by simp [s7, Locals.upd],
+        hl5 2 (by omega) (by omega) (by omega) (by omega)]
+      exact h2
+    have h7j : s7.locals 7 = some (i32 (j.val : Int)) := by rw [h7, hbfj]
+    have hs7tb : s7.mem tb = some T := by rw [show s7.mem = s5.mem by rfl, hmem5, htb]
+    have hidx := slot_index (s := s7) j h2s7 h7j hs7tb hlentb
+    have hold := hTot j
+    have hload : EvE Gen.prog s7 (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))
+        (.int ⟨32, false⟩ (boardFamCount p k j)) := slot_load j _ h2s7 h7j hs7tb hlentb hold
+    have hbnd : boardFamCount p k j ≤ 81 := by
+      unfold boardFamCount
+      have := List.countP_le_length (p := fun s => famAt p s = j.val) (l := List.range k)
+      simp at this; omega
+    have hadd : EvE Gen.prog s7
+        (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+          (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1)))
+        (.int ⟨32, false⟩ (boardFamCount p k j + 1)) := by
+      refine EvE.bin (va := .int ⟨32, false⟩ (boardFamCount p k j))
+        (EvE.cast hload (by simp [evalCast, IntTy.wrap, IntTy.modulus,
+          Nat.mod_eq_of_lt (show boardFamCount p k j < 4294967296 by omega)])) (EvE.const _) ?_
+      simp [evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap, IntTy.modulus,
+        arith, IntTy.inRange, IntTy.u32, Nat.mod_eq_of_lt (show boardFamCount p k j + 1 < 4294967296 by omega)]
+    have hadd_cast : EvE Gen.prog s7 (.cast ⟨32, false⟩
+        (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+          (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))
+        (.int ⟨32, false⟩ (boardFamCount p k j + 1)) := by
+      apply EvE.cast hadd
+      have hlt : boardFamCount p k j + 1 < 4294967296 := by omega
+      simp [evalCast, IntTy.wrap, IntTy.modulus, Nat.mod_eq_of_lt hlt]
+    have hstore : store s7.mem (Ty.int ⟨32, false⟩) (.ptr tb (4*j.val))
+        (.int ⟨32, false⟩ (boardFamCount p k j + 1)) =
+        .ok (s7.mem.upd tb (T.take (4*j.val) ++ encodeLE 4 (boardFamCount p k j + 1) ++ T.drop (4*j.val+4))) := by
+      simp [store, writeBytes, hs7tb, Ty.size, IntTy.bytes, encodeLE_length,
+        show 4*j.val + 4 ≤ T.length by omega]
+    let T' := T.take (4*j.val) ++ encodeLE 4 (boardFamCount p k j + 1) ++ T.drop (4*j.val+4)
+    let s8 : State := { s7 with mem := s7.mem.upd tb T' }
+    have estore : ExS Gen.prog s7
+        (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
+          (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+            (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1)))))
+        .normal s8 := ExS.store hidx hadd_cast (by rw [show s7.ro = s5.ro by rfl, hro5]; exact hro) hstore
+    have hcondge : EvE Gen.prog s7 (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+        (boolVal true) := by
+      refine EvE_of_eval (n := 10) ?_
+      simp [evalExpr, evalBin, evalBinInt, binInt, intOf, isPtr, IntTy.toInt, IntTy.wrap,
+        IntTy.modulus, boolVal, i32, IntTy.i32, h7j, hbf_nonneg]
+      omega
+    have estore_branch : ExS Gen.prog s7 (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+        (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
+          (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+            (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)
+        .normal s8 := ExS.ite hcondge rfl estore
+    have hactions : ExS Gen.prog s
+        (.seq (.seq (.call (some 5) 2 [(.load (.int ⟨8, false⟩) (.index (.field (.var 0) 0) (.var 3) 1))])
+          (.seq (.call (some 6) 4 [(.var 5)]) (.set 4 (.var 6))))
+          (.seq (.seq (.call (some 8) 13 [(.var 4)]) (.set 7 (.var 8)))
+            (.ite (.bin .ge (some ⟨32, true⟩) (.var 7) (.const (.int ⟨32, true⟩ 0)))
+              (.store (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4) (.cast ⟨32, false⟩
+                (.bin .add (some ⟨32, false⟩) (.cast ⟨32, false⟩
+                  (.load (.int ⟨32, false⟩) (.index (.var 2) (.var 7) 4))) (.const (.int ⟨32, false⟩ 1))))) .skip)))
+        .normal s8 := ExS.seq eA (ExS.seq (ExS.seq e13 e7) estore_branch)
+    refine ⟨s8, ExS.ite hcond rfl hactions, T', ?_, ?_, ?_⟩
+    · simp [s8, Mem.upd_eq]
+    · simp [T', hlentb, Nat.min_eq_left (show 4*j.val ≤ 28 by omega), encodeLE_length]; omega
+    · intro i
+      rw [boardFamCount_succ]
+      have hfam : famAt p k = j.val := by
+        have hf := famOfByte_of_byteFam b hb15
+        simpa [famAt, hk, b, j, Int.toNat_of_nonneg hbf_nonneg, hbf_nonneg, show ¬ byteFam b < 0 by omega] using hf
+      rw [hfam]
+      by_cases hij : i = j
+      · have hijv : j.val = i.val := by rw [hij]
+        rw [if_pos hijv]
+        subst hij
+        have hnew : decodeLE ((T'.drop (4*j.val)).take 4) = boardFamCount p k j + 1 := by
+          unfold T'
+          simp [T', hlentb, Nat.min_eq_left (show 4*j.val ≤ 28 by omega), encodeLE_length,
+            encodeLE, decodeLE, Nat.mod_eq_of_lt (show boardFamCount p k j + 1 < 4294967296 by omega)]
+          omega
+        exact hnew
+      · have hijv : (j : Nat) ≠ i.val := by
+          intro h; apply hij; apply Fin.ext; exact h.symm
+        rw [if_neg hijv]
+        simpa [T', hTot i] using array_write_other T hlentb i j hij (boardFamCount p k j + 1)
 
 end Shogi.C.Proofs
