@@ -308,4 +308,27 @@ theorem byteFam_bound (b : UInt8) : byteFam b = -1 ∨ (byteFam b).toNat < 7 := 
       | none => left; simp [byteFam, hc, ht]
       | some i => right; simp [byteFam, hc, ht]
 
+
+/-- The C `.index (var 2) (var 7) 4` addressing for a slot `j < 7`. -/
+theorem slot_index {s : State} {tb : Nat} {T : Block} (j : Fin 7)
+    (h2 : s.locals 2 = some (.ptr tb 0))
+    (h7 : s.locals 7 = some (i32 (j.val : Int)))
+    (htb : s.mem tb = some T) (hlen : T.length = 28) :
+    EvE Gen.prog s (.index (.var 2) (.var 7) 4) (.ptr tb (4 * j.val)) := by
+  refine EvE.index (EvE.var h2) (EvE.var h7) ?_
+  have hn : IntTy.wrap IntTy.i32 (j.val : Int) = j.val := by
+    have hmod : (↑j.val % 4294967296 : Int) = j.val := Int.emod_eq_of_lt (by omega) (by omega)
+    simp [IntTy.wrap, IntTy.modulus, IntTy.i32, hmod]
+  have hdelta : IntTy.i32.toInt (IntTy.wrap IntTy.i32 (j.val : Int)) = j.val := by
+    rw [hn]
+    simp [IntTy.toInt, IntTy.i32, IntTy.modulus]
+    omega
+  rw [hdelta]
+  unfold ptrAdd
+  simp only [htb]
+  have hnonneg : 0 ≤ (j.val : Int) * 4 := by omega
+  have hle : (j.val : Int) * 4 ≤ (T.length : Int) := by rw [hlen]; omega
+  simp [IntTy.i32, hnonneg, hle]
+  omega
+
 end Shogi.C.Proofs

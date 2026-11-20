@@ -150,3 +150,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.board_helper_calls
 #print axioms Shogi.C.Proofs.boardFamCount_succ
 #print axioms Shogi.C.Proofs.byteFam_bound
+#print axioms Shogi.C.Proofs.slot_index
