@@ -687,4 +687,12 @@ theorem loop0_runs (p : Position) (m : Mem) (mb tb : Nat) (s0 : State)
         exact ExS.loop_next hres.exs (Or.inl rfl) hstep hloopf
   exact hP 81 (by omega) s0 (by simpa using hInv0)
 
+
+-- hand byte at slot i of colour c in the encoded position
+theorem hand_byte_val (p : Position) (hs : p.Shaped) (c : Color) (i : Fin 7) :
+    (encode p).getD (81 + 7 * c.idx + i.val) 0 = (p.hand c i).toUInt8 := by
+  rw [encode_enc]
+  exact enc_getD_hand (pa := p.pieceAt) (h := p.hand) (sd := p.side)
+    (kb := kingByte p .black) (kw := kingByte p .white) c i
+
 end Shogi.C.Proofs
