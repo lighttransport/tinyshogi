@@ -57,27 +57,27 @@ theorem step_once {s : State} {c : Expr} {vc : Val} {bc : Bool}
     exact ⟨v, ExS.seq (ExS.ite hc hbc ExS.skip) hv⟩
   · exact ⟨fid15_u8bool true, ExS.seq_ret (ExS.ite hc hbc hret)⟩
 
-theorem fid15_body (code : Nat) (hcode : code < 128) (dr dc fwd : Int)
+theorem fid15_body (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int)
     (hdr : -2147483648 ≤ dr ∧ dr < 2147483648) (hdc : -2147483648 ≤ dc ∧ dc < 2147483648)
     (hfwd : fwd = 1 ∨ fwd = -1)
     (hsdr : -8 ≤ dr ∧ dr ≤ 8) (hsdc : -8 ≤ dc ∧ dc ≤ 8) :
-    ∃ v, ExS Gen.prog (s15s code dr dc fwd) Gen.step_piece_attacks.body
-      (.ret (some v)) (s15s code dr dc fwd) := by
-  let s := s15s code dr dc fwd
+    ∃ v, ExS Gen.prog (s15s m code dr dc fwd) Gen.step_piece_attacks.body
+      (.ret (some v)) (s15s m code dr dc fwd) := by
+  let s := s15s m code dr dc fwd
   have he1 : EvE Gen.prog s gcond1 (boolVal (sp1 code dr dc fwd)) := by
-    rw [gc1]; exact fid15_ev_c1 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc1]; exact fid15_ev_c1 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have he2 : EvE Gen.prog s gcond2 (boolVal (sp2 code dr dc fwd)) := by
-    rw [gc2]; exact fid15_ev_c2 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc2]; exact fid15_ev_c2 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have he3 : EvE Gen.prog s gcond3 (boolVal (sp3 code dr dc fwd)) := by
-    rw [gc3]; exact fid15_ev_c3 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc3]; exact fid15_ev_c3 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have he4 : EvE Gen.prog s gcond4 (boolVal (sp4 code dr dc fwd)) := by
-    rw [gc4]; exact fid15_ev_c4 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc4]; exact fid15_ev_c4 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have he5 : EvE Gen.prog s gcond5 (boolVal (sp5 code dr dc fwd)) := by
-    rw [gc5]; exact fid15_ev_c5 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc5]; exact fid15_ev_c5 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have he6 : EvE Gen.prog s gcond6 (boolVal (sp6 code dr dc fwd)) := by
-    rw [gc6]; exact fid15_ev_c6 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc6]; exact fid15_ev_c6 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have he7 : EvE Gen.prog s gcond7 (boolVal (sp7 code dr dc fwd)) := by
-    rw [gc7]; exact fid15_ev_c7 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    rw [gc7]; exact fid15_ev_c7 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have htrue : ExS Gen.prog s rTrue (.ret (some (fid15_u8bool true))) s := by
     apply ExS.ret
     exact eval_ret_true s
@@ -177,20 +177,20 @@ theorem step_once2 {s : State} {c : Expr} {vc : Val} {bc rb : Bool}
     exact ⟨v, ExS.seq (ExS.ite hc hbc ExS.skip) hv, by simpa using hve⟩
   · exact ⟨fid15_u8bool true, ExS.seq_ret (ExS.ite hc hbc hret), rfl⟩
 
-theorem fid15_body_eq (code : Nat) (hcode : code < 128) (dr dc fwd : Int)
+theorem fid15_body_eq (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int)
     (hdr : -2147483648 ≤ dr ∧ dr < 2147483648) (hdc : -2147483648 ≤ dc ∧ dc < 2147483648)
     (hfwd : fwd = 1 ∨ fwd = -1)
     (hsdr : -8 ≤ dr ∧ dr ≤ 8) (hsdc : -8 ≤ dc ∧ dc ≤ 8) :
-    ∃ v, ExS Gen.prog (s15s code dr dc fwd) Gen.step_piece_attacks.body
-      (.ret (some v)) (s15s code dr dc fwd) ∧ v = fid15_u8bool (cformula code dr dc fwd) := by
-  let s := s15s code dr dc fwd
-  have he1 : EvE Gen.prog s gcond1 (boolVal (sp1 code dr dc fwd)) := by rw [gc1]; exact fid15_ev_c1 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
-  have he2 : EvE Gen.prog s gcond2 (boolVal (sp2 code dr dc fwd)) := by rw [gc2]; exact fid15_ev_c2 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
-  have he3 : EvE Gen.prog s gcond3 (boolVal (sp3 code dr dc fwd)) := by rw [gc3]; exact fid15_ev_c3 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
-  have he4 : EvE Gen.prog s gcond4 (boolVal (sp4 code dr dc fwd)) := by rw [gc4]; exact fid15_ev_c4 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
-  have he5 : EvE Gen.prog s gcond5 (boolVal (sp5 code dr dc fwd)) := by rw [gc5]; exact fid15_ev_c5 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
-  have he6 : EvE Gen.prog s gcond6 (boolVal (sp6 code dr dc fwd)) := by rw [gc6]; exact fid15_ev_c6 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
-  have he7 : EvE Gen.prog s gcond7 (boolVal (sp7 code dr dc fwd)) := by rw [gc7]; exact fid15_ev_c7 code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+    ∃ v, ExS Gen.prog (s15s m code dr dc fwd) Gen.step_piece_attacks.body
+      (.ret (some v)) (s15s m code dr dc fwd) ∧ v = fid15_u8bool (cformula code dr dc fwd) := by
+  let s := s15s m code dr dc fwd
+  have he1 : EvE Gen.prog s gcond1 (boolVal (sp1 code dr dc fwd)) := by rw [gc1]; exact fid15_ev_c1 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  have he2 : EvE Gen.prog s gcond2 (boolVal (sp2 code dr dc fwd)) := by rw [gc2]; exact fid15_ev_c2 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  have he3 : EvE Gen.prog s gcond3 (boolVal (sp3 code dr dc fwd)) := by rw [gc3]; exact fid15_ev_c3 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  have he4 : EvE Gen.prog s gcond4 (boolVal (sp4 code dr dc fwd)) := by rw [gc4]; exact fid15_ev_c4 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  have he5 : EvE Gen.prog s gcond5 (boolVal (sp5 code dr dc fwd)) := by rw [gc5]; exact fid15_ev_c5 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  have he6 : EvE Gen.prog s gcond6 (boolVal (sp6 code dr dc fwd)) := by rw [gc6]; exact fid15_ev_c6 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  have he7 : EvE Gen.prog s gcond7 (boolVal (sp7 code dr dc fwd)) := by rw [gc7]; exact fid15_ev_c7 code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   have htrue : ExS Gen.prog s rTrue (.ret (some (fid15_u8bool true))) s := by
     apply ExS.ret; exact eval_ret_true s
   have hfin : ∃ v, ExS Gen.prog s g7 (.ret (some v)) s ∧ v = fid15_u8bool false := by
@@ -243,18 +243,18 @@ theorem fid15_body_eq (code : Nat) (hcode : code < 128) (dr dc fwd : Int)
   simpa only [cformula, Bool.or_false, Bool.or_assoc] using hs1'
 
 
-theorem step_piece_attacks_spec (code : Nat) (hcode : code < 128)
+theorem step_piece_attacks_spec (code : Nat) (m : Mem) (hcode : code < 128)
     (dr dc fwd : Int) (hdr : -2147483648 ≤ dr ∧ dr < 2147483648)
     (hdc : -2147483648 ≤ dc ∧ dc < 2147483648) (hfwd : fwd = 1 ∨ fwd = -1)
     (hsdr : -8 ≤ dr ∧ dr ≤ 8) (hsdc : -8 ≤ dc ∧ dc ≤ 8) :
     ∃ sf v, ExS Gen.prog
-      (s15s code dr dc fwd)
+      (s15s m code dr dc fwd)
       Gen.step_piece_attacks.body (.ret (some v)) sf ∧
       (v = fid15_u8bool true ↔ ∃ t : PieceType, PieceType.ofCode code = some t ∧
         (dr, dc) ∈ stepOffsets fwd t) := by
-  obtain ⟨v, hexs, hv⟩ := fid15_body_eq code hcode dr dc fwd hdr hdc hfwd hsdr hsdc
+  obtain ⟨v, hexs, hv⟩ := fid15_body_eq code m hcode dr dc fwd hdr hdc hfwd hsdr hsdc
   refine ⟨?_, v, ?_, ?_⟩
-  · exact (s15s code dr dc fwd)
+  · exact (s15s m code dr dc fwd)
   · simpa [s15s, frameLocals, Gen.step_piece_attacks] using hexs
   · rw [hv, fid15_u8bool]
     constructor

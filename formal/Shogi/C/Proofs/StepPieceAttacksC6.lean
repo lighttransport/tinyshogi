@@ -4,11 +4,11 @@ set_option linter.unusedSimpArgs false
 namespace Shogi.C.Proofs
 open MiniC Shogi Shogi.C
 
-theorem fid15_ev_c6 (code : Nat) (hcode : code < 128) (dr dc fwd : Int)
+theorem fid15_ev_c6 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int)
     (hdr : -2147483648 ≤ dr ∧ dr < 2147483648) (hdc : -2147483648 ≤ dc ∧ dc < 2147483648)
     (hfwd : fwd = 1 ∨ fwd = -1)
     (hsdr : -8 ≤ dr ∧ dr ≤ 8) (hsdc : -8 ≤ dc ∧ dc ≤ 8) :
-    EvE Gen.prog (s15s code dr dc fwd) c6 (boolVal (sp6 code dr dc fwd)) := by
+    EvE Gen.prog (s15s m code dr dc fwd) c6 (boolVal (sp6 code dr dc fwd)) := by
   have hc : code = 0 ∨ code = 1 ∨ code = 2 ∨ code = 3 ∨ code = 4 ∨ code = 5 ∨ code = 6 ∨ code = 7 ∨ code = 8 ∨ code = 9 ∨ code = 10 ∨ code = 11 ∨ code = 12 ∨ code = 13 ∨ code = 14 ∨ 15 ≤ code := by omega
   rcases hc with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | hbig
   · refine EvE_of_eval (n := 20) ?_

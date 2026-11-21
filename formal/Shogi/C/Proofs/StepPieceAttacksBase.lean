@@ -5,8 +5,8 @@ set_option maxRecDepth 100000
 namespace Shogi.C.Proofs
 open MiniC Shogi Shogi.C
 
-def s15s (code : Nat) (dr dc fwd : Int) : State :=
-  ⟨(fun i => match i with | 0 => some (i8 code) | 1 => some (i32 dr) | 2 => some (i32 dc) | 3 => some (i32 fwd) | _ => none), (fun _ => none), false⟩
+def s15s (m : Mem) (code : Nat) (dr dc fwd : Int) : State :=
+  ⟨(fun i => match i with | 0 => some (i8 code) | 1 => some (i32 dr) | 2 => some (i32 dc) | 3 => some (i32 fwd) | _ => none), m, false⟩
 
 def fid15_u8bool (b : Bool) : Val := .int ⟨8, false⟩ (if b then 1 else 0)
 
