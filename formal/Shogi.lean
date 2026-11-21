@@ -78,4 +78,5 @@ import Shogi.C.Proofs.RayWalk
 import Shogi.C.Proofs.RayGeom
 import Shogi.C.Proofs.Fid18Bridge
 import Shogi.C.Proofs.Fid18Spec
+import Shogi.C.Proofs.Fid18Guard
 import Shogi.C.Main
