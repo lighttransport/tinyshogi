@@ -288,7 +288,11 @@ Design (two independent pieces):
   `walkErr ↔ to ∈ p.slideTargets from dir` bridge (via `mem_slide_go`) and
   the wrapper assembly on the `Helpers.lean` refinements plus
   `step_piece_attacks_spec`; then `shogi_piece_attacks_square_spec` itself.
-Remaining: fid 18 wrapper/spec assembly (geometric attacks).
+Remaining: fid 18 wrapper/spec assembly (geometric attacks). Note: the
+wrapper passes `u32 type.code` to fid 15, whereas `step_piece_attacks_spec`
+is stated for the `i8 code` frame state `s15s`; the wrapper therefore needs
+either a u32-code variant of that spec or an ExS congruence transferring
+between the two first-argument representations before `ExS.call_dst` applies.
 
 Write these directly against `IsPos`.
 
