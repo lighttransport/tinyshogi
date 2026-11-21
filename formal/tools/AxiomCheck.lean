@@ -163,4 +163,5 @@ import Shogi.C.Proofs.StepPieceAttacksSpec
 #print axioms Shogi.C.Proofs.loop1_body
 #print axioms Shogi.C.Proofs.loop1_runs
 #print axioms Shogi.C.Proofs.validate_material_spec
+#print axioms Shogi.C.Proofs.ray_walk_loop
 #print axioms Shogi.C.Proofs.step_piece_attacks_spec

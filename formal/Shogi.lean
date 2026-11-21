@@ -74,4 +74,5 @@ import Shogi.C.Proofs.EntryPoints
 import Shogi.C.Proofs.RecDischarge
 import Shogi.C.Proofs.StepPieceAttacks
 import Shogi.C.Proofs.StepPieceAttacksSpec
+import Shogi.C.Proofs.RayWalk
 import Shogi.C.Main
