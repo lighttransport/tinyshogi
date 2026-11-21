@@ -277,8 +277,18 @@ Design (two independent pieces):
   and return `u8 1` for a shaped position with `materialOk = true`. The two
   loops (`loop0_runs`, `loop1_runs`) use `ExS.loop_next`/`ExS.loop_brk` and
   the structured `BodyResult`/`Loop1Inv` invariants. Axiom-clean.
-- fid 15 (`step_piece_attacks`) is **complete** (`Shogi/C/Proofs/StepPieceAttacksSpec.lean`, `step_piece_attacks_spec`): the seven-step condition evaluation refines `stepOffsets` membership for |dr|,|dc| ≤ 8. Axiom-clean.
-Remaining: fid 18 (geometric attacks).
+- fid 15 (`step_piece_attacks`) is **complete** (`Shogi/C/Proofs/StepPieceAttacksSpec.lean`, `step_piece_attacks_spec`): the seven-step condition evaluation refines `stepOffsets` membership for |dr|,|dc| ≤ 8. Axiom-clean. It is now parameterised by an arbitrary `Mem`, so it composes into fid 18's call state.
+- fid 18 (`shogi_piece_attacks_square`) — **partial**:
+  `Shogi/C/Proofs/RayWalk.lean` proves `ray_walk_loop`, the full refinement of
+  `shogi_piece_attacks_square_loop0` against a step-indexed `walkErr`
+  predicate (returns `false8` iff an intermediate ray square is occupied,
+  otherwise breaks with the cursor at `to`). `Shogi/C/Proofs/RayGeom.lean`
+  supplies kernel-checked ray geometry (`ray_nodup_finite`, `ray_index_finite`,
+  `ray_suffix_finite`, `exists_rdir`). All axiom-clean. Still to do: the
+  `walkErr ↔ to ∈ p.slideTargets from dir` bridge (via `mem_slide_go`) and
+  the wrapper assembly on the `Helpers.lean` refinements plus
+  `step_piece_attacks_spec`; then `shogi_piece_attacks_square_spec` itself.
+Remaining: fid 18 wrapper/spec assembly (geometric attacks).
 
 Write these directly against `IsPos`.
 
