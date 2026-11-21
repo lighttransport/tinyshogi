@@ -100,4 +100,20 @@ theorem set16_eval_finite : ∀ (dr' dc' : Fin 17),
     some (IntTy.u8, if ((dr'.val : Int) - 8 = 0 ∨ (dc'.val : Int) - 8 = 0) then 1 else 0) := by
   decide +kernel
 
+set_option maxRecDepth 100000 in
+theorem ray_len_ge_finite : ∀ (f t : Square), f ≠ t →
+  ((if (t.row : Int) - f.row < 0 then -((t.row : Int) - f.row) else (t.row : Int) - f.row) =
+   (if (t.col : Int) - f.col < 0 then -((t.col : Int) - f.col) else (t.col : Int) - f.col) ∧
+   (t.row : Int) - f.row ≠ 0) ∨
+  ((t.row : Int) - f.row = 0 ∧ (t.col : Int) - f.col ≠ 0) ∨
+  ((t.col : Int) - f.col = 0 ∧ (t.row : Int) - f.row ≠ 0) →
+  let dr : Int := (t.row : Int) - f.row
+  let dc : Int := (t.col : Int) - f.col
+  let rs : Int := if dr > 0 then 1 else if dr < 0 then -1 else 0
+  let cs : Int := if dc > 0 then 1 else if dc < 0 then -1 else 0
+  let k : Nat := max dr.natAbs dc.natAbs
+  let d : Nat := k - 1
+  d < (ray f (rs, cs)).length
+:= by decide +kernel
+
 end Shogi.C.Proofs
