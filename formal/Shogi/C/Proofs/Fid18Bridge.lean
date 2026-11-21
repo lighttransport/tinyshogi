@@ -72,6 +72,8 @@ theorem mem_slide_go_at (p : Position) (l : List Square) (ti : Nat) (hnd : l.Nod
 
 end Shogi.Position
 
+namespace Shogi.C.Proofs
+
 set_option maxRecDepth 100000 in
 theorem sq_mk_self : ∀ q : Square, Square.mk? (q.row : Int) (q.col : Int) = some q := by decide +kernel
 set_option maxRecDepth 100000 in
@@ -93,3 +95,5 @@ theorem ray_next_col : ∀ (s : Square) (r : Fin 8) (j : Fin 8)
     (hj1 : j.val + 1 < (ray s (rdir r.val)).length),
     (((ray s (rdir r.val))[j.val+1]'hj1).col : Int) =
       (((ray s (rdir r.val))[j.val]'hj).col : Int) + (rdir r.val).2 := by decide +kernel
+
+end Shogi.C.Proofs
