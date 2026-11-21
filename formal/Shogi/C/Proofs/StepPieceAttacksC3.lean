@@ -13,7 +13,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
   rcases hc with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | hbig
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -49,7 +49,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -85,7 +85,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -121,7 +121,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -165,7 +165,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
         all_goals refine EvE_of_eval (n := 20) ?_; rfl
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -201,7 +201,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -237,7 +237,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -273,7 +273,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -309,7 +309,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -345,7 +345,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -381,7 +381,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -417,7 +417,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -453,7 +453,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -489,7 +489,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -525,7 +525,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp3, c3, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show code ≠ 1 by omega,
       show code ≠ 3 by omega,
@@ -538,6 +538,7 @@ theorem fid15_ev_c3 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show code ≠ 8 by omega,
       show code ≠ 13 by omega,
       show code ≠ 14 by omega,
+      show code % 4294967296 = code by omega, show code % 256 = code by omega,
       i8_toInt_wrap code hcode, fid15_i8_int code hcode,
       show IntTy.toInt (⟨8, true⟩ : IntTy) code = (code : Int) by simp [IntTy.toInt, IntTy.i8, IntTy.modulus]; omega,
       show (code : Int) % 256 = code by rw [Int.emod_eq_of_lt (by omega) (by omega)],

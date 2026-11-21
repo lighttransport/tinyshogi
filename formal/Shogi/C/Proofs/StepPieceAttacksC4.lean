@@ -13,7 +13,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
   rcases hc with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | hbig
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -49,7 +49,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -85,7 +85,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -121,7 +121,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -157,123 +157,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
-      IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
-      show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
-  · rcases hfwd with rfl | rfl
-    all_goals
-      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
-      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-      all_goals
-        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
-        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-        all_goals refine EvE_of_eval (n := 20) ?_; rfl
-  · refine EvE_of_eval (n := 20) ?_
-    simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
-      IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
-      show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
-  · refine EvE_of_eval (n := 20) ?_
-    simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
-      IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
-      show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨8, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.modulus]),
-      show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
-  · refine EvE_of_eval (n := 20) ?_
-    simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -315,33 +199,9 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
         have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
         rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
         all_goals refine EvE_of_eval (n := 20) ?_; rfl
-  · rcases hfwd with rfl | rfl
-    all_goals
-      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
-      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-      all_goals
-        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
-        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-        all_goals refine EvE_of_eval (n := 20) ?_; rfl
-  · rcases hfwd with rfl | rfl
-    all_goals
-      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
-      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-      all_goals
-        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
-        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-        all_goals refine EvE_of_eval (n := 20) ?_; rfl
-  · rcases hfwd with rfl | rfl
-    all_goals
-      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
-      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-      all_goals
-        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
-        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-        all_goals refine EvE_of_eval (n := 20) ?_; rfl
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -377,7 +237,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
       show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
@@ -413,7 +273,147 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
   · refine EvE_of_eval (n := 20) ?_
     simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
-      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
+      IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
+      show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
+  · rcases hfwd with rfl | rfl
+    all_goals
+      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
+      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      all_goals
+        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
+        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+        all_goals refine EvE_of_eval (n := 20) ?_; rfl
+  · rcases hfwd with rfl | rfl
+    all_goals
+      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
+      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      all_goals
+        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
+        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+        all_goals refine EvE_of_eval (n := 20) ?_; rfl
+  · rcases hfwd with rfl | rfl
+    all_goals
+      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
+      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      all_goals
+        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
+        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+        all_goals refine EvE_of_eval (n := 20) ?_; rfl
+  · rcases hfwd with rfl | rfl
+    all_goals
+      have hdr_c : dr = -8 ∨ dr = -7 ∨ dr = -6 ∨ dr = -5 ∨ dr = -4 ∨ dr = -3 ∨ dr = -2 ∨ dr = -1 ∨ dr = 0 ∨ dr = 1 ∨ dr = 2 ∨ dr = 3 ∨ dr = 4 ∨ dr = 5 ∨ dr = 6 ∨ dr = 7 ∨ dr = 8 := by omega
+      rcases hdr_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      all_goals
+        have hdc_c : dc = -8 ∨ dc = -7 ∨ dc = -6 ∨ dc = -5 ∨ dc = -4 ∨ dc = -3 ∨ dc = -2 ∨ dc = -1 ∨ dc = 0 ∨ dc = 1 ∨ dc = 2 ∨ dc = 3 ∨ dc = 4 ∨ dc = 5 ∨ dc = 6 ∨ dc = 7 ∨ dc = 8 := by omega
+        rcases hdc_c with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+        all_goals refine EvE_of_eval (n := 20) ?_; rfl
+  · refine EvE_of_eval (n := 20) ?_
+    simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
+      IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
+      show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
+  · refine EvE_of_eval (n := 20) ?_
+    simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
+      IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
+      show (2 : Nat) ^ IntTy.i8.width = 256 by rfl, show IntTy.i8.signed = true by rfl,
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 0 = 0 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 1 = 1 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 2 = 2 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 3 = 3 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 4 = 4 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 5 = 5 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 6 = 6 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 7 = 7 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 8 = 8 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 9 = 9 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 10 = 10 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 11 = 11 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 12 = 12 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 13 = 13 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨8, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.i8, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 14 = 14 by (simp [IntTy.toInt, IntTy.modulus]),
+      show IntTy.toInt (⟨32, true⟩ : IntTy) 4294967295 = -1 by simp [IntTy.toInt, IntTy.modulus]]
+  · refine EvE_of_eval (n := 20) ?_
+    simp [sp4, c4, s15s, evalExpr, evalBin, evalBinInt, binInt,
+      intOf, isPtr, evalUn, evalCast, IntTy.wrap, IntTy.modulus, i8, i32, u32, u32,
       IntTy.i8, IntTy.i32, IntTy.u32, boolVal, truthy, Res.bind_eq,
       show code ≠ 1 by omega,
       show code ≠ 3 by omega,
@@ -426,6 +426,7 @@ theorem fid15_ev_c4 (code : Nat) (m : Mem) (hcode : code < 128) (dr dc fwd : Int
       show code ≠ 8 by omega,
       show code ≠ 13 by omega,
       show code ≠ 14 by omega,
+      show code % 4294967296 = code by omega, show code % 256 = code by omega,
       i8_toInt_wrap code hcode, fid15_i8_int code hcode,
       show IntTy.toInt (⟨8, true⟩ : IntTy) code = (code : Int) by simp [IntTy.toInt, IntTy.i8, IntTy.modulus]; omega,
       show (code : Int) % 256 = code by rw [Int.emod_eq_of_lt (by omega) (by omega)],
