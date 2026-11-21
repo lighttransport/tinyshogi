@@ -162,7 +162,7 @@ theorem ray_walk_loop (p : Position) (m : Mem) (hm : m posBlock = some (encode p
     s.locals 21 = some (i32 col) →
     s.mem = m →
     if walkErr p rs cs to d row col then
-      ∃ s', ExS Gen.prog s Gen.shogi_piece_attacks_square_loop0 (.ret (some false8)) s'
+      ∃ s', ExS Gen.prog s Gen.shogi_piece_attacks_square_loop0 (.ret (some false8)) s' ∧ s'.mem = m
     else
       ∃ s', ExS Gen.prog s Gen.shogi_piece_attacks_square_loop0 .normal s' ∧
         s'.mem = m ∧ s'.locals 19 = some (i32 (Square.row to : Int)) ∧
@@ -351,8 +351,8 @@ theorem ray_walk_loop (p : Position) (m : Mem) (hm : m posBlock = some (encode p
         split at ihres
         · rename_i hh
           rw [if_pos hh]
-          obtain ⟨s', hs'⟩ := ihres
-          refine ⟨s', ?_⟩
+          obtain ⟨s', hs', hm'⟩ := ihres
+          refine ⟨s', ?_, hm'⟩
           exact ExS.loop_next (ExS.seq hcall23 (ExS.seq hite1 hbody)) (Or.inl rfl) ExS.skip hs'
         · rename_i hh
           rw [if_neg hh]
@@ -386,8 +386,9 @@ theorem ray_walk_loop (p : Position) (m : Mem) (hm : m posBlock = some (encode p
           refine ExS.ite (bc := true) hcond_ev (by simp [truthy_boolVal, hb0sq]) ?_
           refine ExS.ret ?_
           exact EvE_of_eval (n := 3) (by simp [evalExpr, evalBin, isPtr, evalBinInt, binInt, intOf, evalCast, false8, boolVal, IntTy.i32, IntTy.u8, IntTy.toInt, IntTy.wrap, IntTy.modulus, Res.bind])
-        refine ⟨sret, ?_⟩
-        exact ExS.loop_ret (ExS.seq hcall23 (ExS.seq hite1 hbody))
+        refine ⟨sret, ?_, ?_⟩
+        · exact ExS.loop_ret (ExS.seq hcall23 (ExS.seq hite1 hbody))
+        · simp [sret, s25, s24, s23, hmem]
     · have hrowNe : row ≠ (Square.row to : Int) := hrowEq
       -- first ite: row != row23 (true), set 25 = 1
       let s23 : State := {s with locals := s.locals.upd 23 (i32 (Square.row to))}
@@ -471,8 +472,8 @@ theorem ray_walk_loop (p : Position) (m : Mem) (hm : m posBlock = some (encode p
             (by simp [s21, Locals.upd])
             (by simp [s21, s19, s25, s23, hmem])
         split at ihres
-        · rename_i hh; rw [if_pos hh]; obtain ⟨s', hs'⟩ := ihres
-          refine ⟨s', ?_⟩
+        · rename_i hh; rw [if_pos hh]; obtain ⟨s', hs', hm'⟩ := ihres
+          refine ⟨s', ?_, hm'⟩
           exact ExS.loop_next (ExS.seq hcall23 (ExS.seq hite1 hbody)) (Or.inl rfl) ExS.skip hs'
         · rename_i hh; rw [if_neg hh]; obtain ⟨s', hs', hm', h19', h21'⟩ := ihres
           refine ⟨s', ?_, hm', h19', h21'⟩
@@ -501,7 +502,8 @@ theorem ray_walk_loop (p : Position) (m : Mem) (hm : m posBlock = some (encode p
           refine ExS.ite (bc := true) hcond_ev (by simp [truthy_boolVal, hb0sq]) ?_
           refine ExS.ret ?_
           exact EvE_of_eval (n := 3) (by simp [evalExpr, evalBin, isPtr, evalBinInt, binInt, intOf, evalCast, false8, boolVal, IntTy.i32, IntTy.u8, IntTy.toInt, IntTy.wrap, IntTy.modulus, Res.bind])
-        refine ⟨sret, ?_⟩
-        exact ExS.loop_ret (ExS.seq hcall23 (ExS.seq hite1 hbody))
+        refine ⟨sret, ?_, ?_⟩
+        · exact ExS.loop_ret (ExS.seq hcall23 (ExS.seq hite1 hbody))
+        · simp [sret, s25, s23, hmem]
 
 end Shogi.C.Proofs

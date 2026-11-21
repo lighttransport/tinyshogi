@@ -116,4 +116,50 @@ theorem ray_len_ge_finite : ∀ (f t : Square), f ≠ t →
   d < (ray f (rs, cs)).length
 := by decide +kernel
 
+theorem slider_loop_exs (p : Position) (f t : Square) (m : Mem) (hm : m posBlock = some (encode p))
+    (rs cs : Int) (d : Nat) (r : Fin 8) (hrdir : rdir r.val = (rs, cs))
+    (hrow : (t.row : Int) = ((f.row : Int) + rs) + (d : Int) * rs)
+    (hcol : (t.col : Int) = ((f.col : Int) + cs) + (d : Int) * cs)
+    (hbnd : ∀ i, i ≤ d → 0 ≤ ((f.row : Int) + rs) + (i : Int) * rs ∧
+      ((f.row : Int) + rs) + (i : Int) * rs < 9 ∧
+      0 ≤ ((f.col : Int) + cs) + (i : Int) * cs ∧
+      ((f.col : Int) + cs) + (i : Int) * cs < 9)
+    (hstep : rs ≠ 0 ∨ cs ≠ 0) (hrs : -1 ≤ rs ∧ rs ≤ 1) (hcs : -1 ≤ cs ∧ cs ≤ 1)
+    (hti : d < (ray f (rs, cs)).length) :
+    let s : State := ⟨(fun i => match i with
+      | 0 => some (posPtr' posBlock) | 2 => some (u8 t.val)
+      | 17 => some (i32 rs) | 18 => some (i32 cs)
+      | 19 => some (i32 ((f.row : Int) + rs)) | 21 => some (i32 ((f.col : Int) + cs))
+      | _ => none), m, false⟩
+    ∃ s', ExS Gen.prog s
+      (.seq Gen.shogi_piece_attacks_square_loop0
+        (.ret (some (.cast ⟨8,false⟩ (.bin .ne (some ⟨32,true⟩) (.const (.int ⟨32,true⟩ 1)) (.const (.int ⟨32,true⟩ 0)))))))
+      (.ret (some (if walkErr p rs cs t d ((f.row : Int) + rs) ((f.col : Int) + cs) then false8 else true8))) s' ∧
+      s'.mem = m := by
+  dsimp only
+  let s : State := ⟨(fun i => match i with
+      | 0 => some (posPtr' posBlock) | 2 => some (u8 t.val)
+      | 17 => some (i32 rs) | 18 => some (i32 cs)
+      | 19 => some (i32 ((f.row : Int) + rs)) | 21 => some (i32 ((f.col : Int) + cs))
+      | _ => none), m, false⟩
+  have hl0 : s.locals 0 = some (posPtr' posBlock) := by simp [s]
+  have hl2 : s.locals 2 = some (u8 t.val) := by simp [s]
+  have hl17 : s.locals 17 = some (i32 rs) := by simp [s]
+  have hl18 : s.locals 18 = some (i32 cs) := by simp [s]
+  have hl19 : s.locals 19 = some (i32 ((f.row : Int) + rs)) := by simp [s]
+  have hl21 : s.locals 21 = some (i32 ((f.col : Int) + cs)) := by simp [s]
+  have hloop := ray_walk_loop p m hm rs cs t hstep hrs hcs d
+    ((f.row : Int) + rs) ((f.col : Int) + cs) s hrow hcol hbnd hl0 hl2 hl17 hl18 hl19 hl21 rfl
+  by_cases hw : walkErr p rs cs t d ((f.row : Int) + rs) ((f.col : Int) + cs) = true
+  · obtain ⟨s', hs', hm'⟩ := (if_pos hw).mp hloop
+    refine ⟨s', ?_, hm'⟩
+    simpa [hw] using (ExS.seq_ret hs')
+  · obtain ⟨s', hs', hmem, h19, h21⟩ := (if_neg hw).mp hloop
+    refine ⟨s', ?_, hmem⟩
+    refine ExS.seq hs' ?_
+    apply ExS.ret
+    apply EvE_of_eval (n := 3)
+    simp [evalExpr, evalBin, evalCast, true8, boolVal, IntTy.i32, IntTy.u8, IntTy.toInt,
+      isPtr, evalBinInt, binInt, intOf, Res.bind, hw, IntTy.wrap, IntTy.modulus]
+
 end Shogi.C.Proofs
