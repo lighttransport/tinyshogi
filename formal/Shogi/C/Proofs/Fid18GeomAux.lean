@@ -88,4 +88,16 @@ theorem set15_eval_finite : ∀ (dr' dc' : Fin 17),
     some (IntTy.u8, if absI ((dr'.val : Int) - 8) = absI ((dc'.val : Int) - 8) then 1 else 0) := by
   decide +kernel
 
+
+def set16expr : Expr := .cast ⟨8,false⟩ (.bin .ne (some ⟨32,true⟩)
+  (.lor (.bin .eq (some ⟨32,true⟩) (.var 6) (.const (.int ⟨32,true⟩ 0)))
+        (.bin .eq (some ⟨32,true⟩) (.var 9) (.const (.int ⟨32,true⟩ 0))))
+  (.const (.int ⟨32,true⟩ 0)))
+
+set_option maxRecDepth 100000 in
+theorem set16_eval_finite : ∀ (dr' dc' : Fin 17),
+  evalSig (evalExpr Gen.prog 10 (sTest ((dr'.val : Int) - 8) ((dc'.val : Int) - 8)) set16expr) =
+    some (IntTy.u8, if ((dr'.val : Int) - 8 = 0 ∨ (dc'.val : Int) - 8 = 0) then 1 else 0) := by
+  decide +kernel
+
 end Shogi.C.Proofs
