@@ -2,6 +2,7 @@
    if any theorem depends on an axiom other than propext, Classical.choice,
    Quot.sound (in particular `sorryAx` or `Lean.ofReduceBool`). -/
 import Shogi
+import Shogi.C.Proofs.StepPieceAttacksSpec
 #print axioms Shogi.Usi.parse_print
 #print axioms Shogi.Usi.square_fileRank
 #print axioms Shogi.PieceType.handIndex_ofHandIndex
@@ -162,3 +163,4 @@ import Shogi
 #print axioms Shogi.C.Proofs.loop1_body
 #print axioms Shogi.C.Proofs.loop1_runs
 #print axioms Shogi.C.Proofs.validate_material_spec
+#print axioms Shogi.C.Proofs.step_piece_attacks_spec

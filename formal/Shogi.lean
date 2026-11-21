@@ -72,4 +72,6 @@ import Shogi.SfenTheorems
 import Shogi.C.Proofs.LegalMain
 import Shogi.C.Proofs.EntryPoints
 import Shogi.C.Proofs.RecDischarge
+import Shogi.C.Proofs.StepPieceAttacks
+import Shogi.C.Proofs.StepPieceAttacksSpec
 import Shogi.C.Main

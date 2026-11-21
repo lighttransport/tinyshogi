@@ -277,7 +277,8 @@ Design (two independent pieces):
   and return `u8 1` for a shaped position with `materialOk = true`. The two
   loops (`loop0_runs`, `loop1_runs`) use `ExS.loop_next`/`ExS.loop_brk` and
   the structured `BodyResult`/`Loop1Inv` invariants. Axiom-clean.
-Remaining: fid 15/18 (geometric attacks).
+- fid 15 (`step_piece_attacks`) is **complete** (`Shogi/C/Proofs/StepPieceAttacksSpec.lean`, `step_piece_attacks_spec`): the seven-step condition evaluation refines `stepOffsets` membership for |dr|,|dc| ≤ 8. Axiom-clean.
+Remaining: fid 18 (geometric attacks).
 
 Write these directly against `IsPos`.
 
