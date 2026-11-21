@@ -76,4 +76,5 @@ import Shogi.C.Proofs.StepPieceAttacks
 import Shogi.C.Proofs.StepPieceAttacksSpec
 import Shogi.C.Proofs.RayWalk
 import Shogi.C.Proofs.RayGeom
+import Shogi.C.Proofs.Fid18Bridge
 import Shogi.C.Main
