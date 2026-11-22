@@ -125,31 +125,19 @@ theorem slider_loop_exs (p : Position) (f t : Square) (m : Mem) (hm : m posBlock
       0 ≤ ((f.col : Int) + cs) + (i : Int) * cs ∧
       ((f.col : Int) + cs) + (i : Int) * cs < 9)
     (hstep : rs ≠ 0 ∨ cs ≠ 0) (hrs : -1 ≤ rs ∧ rs ≤ 1) (hcs : -1 ≤ cs ∧ cs ≤ 1)
-    (hti : d < (ray f (rs, cs)).length) :
-    let s : State := ⟨(fun i => match i with
-      | 0 => some (posPtr' posBlock) | 2 => some (u8 t.val)
-      | 17 => some (i32 rs) | 18 => some (i32 cs)
-      | 19 => some (i32 ((f.row : Int) + rs)) | 21 => some (i32 ((f.col : Int) + cs))
-      | _ => none), m, false⟩
+    (hti : d < (ray f (rs, cs)).length)
+    (s : State) (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl2 : s.locals 2 = some (u8 t.val))
+    (hl17 : s.locals 17 = some (i32 rs)) (hl18 : s.locals 18 = some (i32 cs))
+    (hl19 : s.locals 19 = some (i32 ((f.row : Int) + rs)))
+    (hl21 : s.locals 21 = some (i32 ((f.col : Int) + cs)))
+    (hsm : s.mem = m) :
     ∃ s', ExS Gen.prog s
       (.seq Gen.shogi_piece_attacks_square_loop0
         (.ret (some (.cast ⟨8,false⟩ (.bin .ne (some ⟨32,true⟩) (.const (.int ⟨32,true⟩ 1)) (.const (.int ⟨32,true⟩ 0)))))))
       (.ret (some (if walkErr p rs cs t d ((f.row : Int) + rs) ((f.col : Int) + cs) then false8 else true8))) s' ∧
       s'.mem = m := by
-  dsimp only
-  let s : State := ⟨(fun i => match i with
-      | 0 => some (posPtr' posBlock) | 2 => some (u8 t.val)
-      | 17 => some (i32 rs) | 18 => some (i32 cs)
-      | 19 => some (i32 ((f.row : Int) + rs)) | 21 => some (i32 ((f.col : Int) + cs))
-      | _ => none), m, false⟩
-  have hl0 : s.locals 0 = some (posPtr' posBlock) := by simp [s]
-  have hl2 : s.locals 2 = some (u8 t.val) := by simp [s]
-  have hl17 : s.locals 17 = some (i32 rs) := by simp [s]
-  have hl18 : s.locals 18 = some (i32 cs) := by simp [s]
-  have hl19 : s.locals 19 = some (i32 ((f.row : Int) + rs)) := by simp [s]
-  have hl21 : s.locals 21 = some (i32 ((f.col : Int) + cs)) := by simp [s]
   have hloop := ray_walk_loop p m hm rs cs t hstep hrs hcs d
-    ((f.row : Int) + rs) ((f.col : Int) + cs) s hrow hcol hbnd hl0 hl2 hl17 hl18 hl19 hl21 rfl
+    ((f.row : Int) + rs) ((f.col : Int) + cs) s hrow hcol hbnd hl0 hl2 hl17 hl18 hl19 hl21 hsm
   by_cases hw : walkErr p rs cs t d ((f.row : Int) + rs) ((f.col : Int) + cs) = true
   · obtain ⟨s', hs', hm'⟩ := (if_pos hw).mp hloop
     refine ⟨s', ?_, hm'⟩
@@ -174,5 +162,128 @@ theorem guard0_spec {ty : Nat} {dr dc fwd : Int} {diag straight : Nat}
     simpa [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq] using hv
   · rename_i hv
     omega
+theorem guardSpec_lt (ty : Nat) (dr dc fwd : Int) (diag straight : Nat) :
+    guardSpec ty dr dc fwd diag straight < 2147483648 := by
+  unfold guardSpec
+  dsimp
+  split <;> decide
+
+def ptByCode (n : Nat) : PieceType :=
+  if n = 1 then .pawn else if n = 2 then .lance else if n = 3 then .knight
+  else if n = 4 then .silver else if n = 5 then .gold else if n = 6 then .bishop
+  else if n = 7 then .rook else if n = 8 then .king else if n = 9 then .proPawn
+  else if n = 10 then .proLance else if n = 11 then .proKnight else if n = 12 then .proSilver
+  else if n = 13 then .horse else .dragon
+
+
+theorem eve_u8_of_sig {s : State} {e : Expr} {N k : Nat}
+    (h : evalSig (evalExpr Gen.prog N s e) = some (IntTy.u8, k)) :
+    EvE Gen.prog s e (u8 k) := by
+  apply EvE_of_eval (n := N)
+  cases he : evalExpr Gen.prog N s e with
+  | ok v =>
+    cases v with
+    | int t n =>
+      simp [evalSig, he] at h
+      rcases h with ⟨rfl, rfl⟩
+      rfl
+    | ptr b o => simp [evalSig, he] at h
+    | null => simp [evalSig, he] at h
+    | f64 x => simp [evalSig, he] at h
+  | ub => simp [evalSig, he] at h
+  | timeout => simp [evalSig, he] at h
+
+theorem eve_i32_of_sig {s : State} {e : Expr} {N k : Nat} (hk : k < 2147483648)
+    (h : evalSig (evalExpr Gen.prog N s e) = some (IntTy.i32, k)) :
+    EvE Gen.prog s e (i32 (k : Int)) := by
+  apply EvE_of_eval (n := N)
+  cases he : evalExpr Gen.prog N s e with
+  | ok v =>
+    cases v with
+    | int t n =>
+      simp [evalSig, he] at h
+      rcases h with ⟨rfl, rfl⟩
+      have hmod : ((n : Int) % (4294967296 : Int)).toNat = n := by
+        rw [Int.emod_eq_of_lt (a := (n : Int)) (b := (4294967296 : Int)) (by omega) (by omega)]
+        simp
+      simpa [i32, IntTy.wrap, IntTy.modulus, IntTy.i32] using hmod.symm
+    | ptr b o => simp [evalSig, he] at h
+    | null => simp [evalSig, he] at h
+    | f64 x => simp [evalSig, he] at h
+  | ub => simp [evalSig, he] at h
+  | timeout => simp [evalSig, he] at h
+
+theorem eve_i32z_of_sig {s : State} {e : Expr} {N : Nat} {z : Int}
+    (h : evalSig (evalExpr Gen.prog N s e) = some (IntTy.i32, (z % (4294967296 : Int)).toNat)) :
+    EvE Gen.prog s e (i32 z) := by
+  apply EvE_of_eval (n := N)
+  cases he : evalExpr Gen.prog N s e with
+  | ok v =>
+    cases v with
+    | int t n =>
+      simp [evalSig, he] at h
+      rcases h with ⟨rfl, rfl⟩
+      rfl
+    | ptr b o => simp [evalSig, he] at h
+    | null => simp [evalSig, he] at h
+    | f64 x => simp [evalSig, he] at h
+  | ub => simp [evalSig, he] at h
+  | timeout => simp [evalSig, he] at h
+
+def signExpr (i : Nat) : Expr := .bin .sub (some ⟨32,true⟩)
+  (.bin .gt (some ⟨32,true⟩) (.var i) (.const (.int ⟨32,true⟩ 0)))
+  (.bin .lt (some ⟨32,true⟩) (.var i) (.const (.int ⟨32,true⟩ 0)))
+
+def sSign (z : Int) : State :=
+  ⟨(fun j => if j = 6 then some (i32 z) else none), (fun _ => none), false⟩
+
+set_option maxRecDepth 100000 in
+theorem sign_eval_finite : ∀ z : Fin 17,
+    evalSig (evalExpr Gen.prog 8 (sSign ((z.val : Int) - 8)) (signExpr 6)) =
+      some (IntTy.i32, ((if ((z.val : Int) - 8) > 0 then (1 : Int)
+        else if ((z.val : Int) - 8) < 0 then (-1 : Int) else 0) % (4294967296 : Int)).toNat) := by
+  decide +kernel
+
+
+
+set_option maxRecDepth 100000 in
+theorem ray_at_to_finite : ∀ (f t : Square), f ≠ t →
+  let dr : Int := (t.row : Int) - f.row
+  let dc : Int := (t.col : Int) - f.col
+  let rs : Int := if dr > 0 then 1 else if dr < 0 then -1 else 0
+  let cs : Int := if dc > 0 then 1 else if dc < 0 then -1 else 0
+  let k : Nat := max dr.natAbs dc.natAbs
+  let d : Nat := k - 1
+  ((if dr < 0 then -dr else dr) = (if dc < 0 then -dc else dc) ∧ dr ≠ 0) ∨
+  (dr = 0 ∧ dc ≠ 0) ∨ (dc = 0 ∧ dr ≠ 0) →
+  ∀ r : Fin 8, rdir r.val = (rs, cs) → (ray f (rdir r.val))[d]? = some t
+:= by decide +kernel
+
+
+set_option maxRecDepth 100000 in
+theorem ray_at_of_rowcol : ∀ (f t : Square), f ≠ t →
+  ∀ r : Fin 8,
+  let dr : Int := (t.row : Int) - f.row
+  let dc : Int := (t.col : Int) - f.col
+  let rs : Int := if dr > 0 then 1 else if dr < 0 then -1 else 0
+  let cs : Int := if dc > 0 then 1 else if dc < 0 then -1 else 0
+  let k : Nat := max dr.natAbs dc.natAbs
+  let d : Nat := k - 1
+  rdir r.val = (rs, cs) →
+  (t.row : Int) = ((f.row : Int) + rs) + (d : Int) * rs →
+  (t.col : Int) = ((f.col : Int) + cs) + (d : Int) * cs →
+  ∀ hk : d < (ray f (rdir r.val)).length, (ray f (rdir r.val))[d]'hk = t
+:= by decide +kernel
+
+
+set_option maxRecDepth 100000 in
+theorem slide_dir_eq_of_mem : ∀ (f t : Square) (d1 d2 : Fin 3), f ≠ t →
+  let dr : Int := (t.row : Int) - f.row
+  let dc : Int := (t.col : Int) - f.col
+  let rs : Int := if dr > 0 then 1 else if dr < 0 then -1 else 0
+  let cs : Int := if dc > 0 then 1 else if dc < 0 then -1 else 0
+  t ∈ ray f (((d1.val : Int) - 1), ((d2.val : Int) - 1)) →
+  (((d1.val : Int) - 1), ((d2.val : Int) - 1)) = (rs, cs)
+:= by decide +kernel
 
 end Shogi.C.Proofs
