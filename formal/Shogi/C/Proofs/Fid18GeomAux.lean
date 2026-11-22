@@ -162,4 +162,17 @@ theorem slider_loop_exs (p : Position) (f t : Square) (m : Mem) (hm : m posBlock
     simp [evalExpr, evalBin, evalCast, true8, boolVal, IntTy.i32, IntTy.u8, IntTy.toInt,
       isPtr, evalBinInt, binInt, intOf, Res.bind, hw, IntTy.wrap, IntTy.modulus]
 
+theorem guard0_spec {ty : Nat} {dr dc fwd : Int} {diag straight : Nat}
+    (h : guardSpec ty dr dc fwd diag straight = 0) :
+    (((diag != 0) ∧ (ty = 6 ∨ ty = 13)) ∨
+     ((straight != 0) ∧ (ty = 7 ∨ ty = 14))) ∨
+    ((dc = 0 ∧ dr * fwd > 0) ∧ ty = 2) := by
+  unfold guardSpec at h
+  dsimp at h
+  split at h
+  · rename_i hv
+    simpa [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq] using hv
+  · rename_i hv
+    omega
+
 end Shogi.C.Proofs
