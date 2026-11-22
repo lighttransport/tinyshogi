@@ -278,23 +278,16 @@ Design (two independent pieces):
   loops (`loop0_runs`, `loop1_runs`) use `ExS.loop_next`/`ExS.loop_brk` and
   the structured `BodyResult`/`Loop1Inv` invariants. Axiom-clean.
 - fid 15 (`step_piece_attacks`) is **complete** (`Shogi/C/Proofs/StepPieceAttacksSpec.lean`, `step_piece_attacks_spec`): the seven-step condition evaluation refines `stepOffsets` membership for |dr|,|dc| ≤ 8. Axiom-clean. It is now parameterised by an arbitrary `Mem`, so it composes into fid 18's call state.
-- fid 18 (`shogi_piece_attacks_square`) — **partial**:
+- fid 18 (`shogi_piece_attacks_square`) — **complete**
+  (`Shogi/C/Proofs/Fid18SpecMain.lean`, `shogi_piece_attacks_square_spec`):
+  the full geometric-attacks spec, composing the guard, piece load, helper
+  calls, `step_piece_attacks_spec`, `ray_walk_loop` and `walkErr_slide`.
   `Shogi/C/Proofs/RayWalk.lean` proves `ray_walk_loop`, the full refinement of
   `shogi_piece_attacks_square_loop0` against a step-indexed `walkErr`
   predicate (returns `false8` iff an intermediate ray square is occupied,
   otherwise breaks with the cursor at `to`). `Shogi/C/Proofs/RayGeom.lean`
   supplies kernel-checked ray geometry (`ray_nodup_finite`, `ray_index_finite`,
-  `ray_suffix_finite`, `exists_rdir`). All axiom-clean. Still to do: the
-  `walkErr ↔ to ∈ p.slideTargets from dir` bridge (via `mem_slide_go`) and
-  the wrapper assembly on the `Helpers.lean` refinements plus
-  `step_piece_attacks_spec`; then `shogi_piece_attacks_square_spec` itself.
-Remaining: fid 18 wrapper/spec assembly (geometric attacks). The fid 15
-argument-representation blocker is resolved: `s15s` now passes `u32 code`,
-`step_piece_attacks_spec` is verified against the wrapper's frame state, and
-`frame15` + `guard_ev` provide the state equality and guard refinement needed
-by `ExS.call_dst`. Still to write: `shogi_piece_attacks_square_spec` itself,
-composing the guard, piece load, helper calls, `step_piece_attacks_spec`,
-`ray_walk_loop` and `walkErr_slide`.
+  `ray_suffix_finite`, `exists_rdir`). Axiom-clean.
 
 Write these directly against `IsPos`.
 

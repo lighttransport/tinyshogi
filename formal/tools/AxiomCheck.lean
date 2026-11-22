@@ -174,3 +174,4 @@ import Shogi.C.Proofs.StepPieceAttacksSpec
 #print axioms Shogi.C.Proofs.ray_suffix_finite
 #print axioms Shogi.C.Proofs.ray_walk_loop
 #print axioms Shogi.C.Proofs.step_piece_attacks_spec
+#print axioms Shogi.C.Proofs.shogi_piece_attacks_square_spec

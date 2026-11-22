@@ -162,6 +162,16 @@ theorem guard0_spec {ty : Nat} {dr dc fwd : Int} {diag straight : Nat}
     simpa [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq] using hv
   · rename_i hv
     omega
+theorem guardSpec_le_one (ty : Nat) (dr dc fwd : Int) (diag straight : Nat) :
+    guardSpec ty dr dc fwd diag straight ≤ 1 := by
+  unfold guardSpec
+  dsimp
+  let v := (decide (diag != 0) && decide (ty = 6 ∨ ty = 13)) ||
+           (decide (straight != 0) && decide (ty = 7 ∨ ty = 14)) ||
+           (decide (dc = 0) && decide (dr * fwd > 0) && decide (ty = 2))
+  change (if v then 0 else 1) ≤ 1
+  by_cases hv : v <;> simp [hv]
+
 theorem guardSpec_lt (ty : Nat) (dr dc fwd : Int) (diag straight : Nat) :
     guardSpec ty dr dc fwd diag straight < 2147483648 := by
   unfold guardSpec
@@ -293,5 +303,83 @@ theorem offset_eq_finite : ∀ (f t : Square) (a b : Fin 5), f ≠ t →
   (((a.val : Int) - 2), ((b.val : Int) - 2)) =
     ((t.row : Int) - f.row, (t.col : Int) - f.col)
 := by decide +kernel
+
+
+theorem sign_diag {dr dc : Int} (habs : (if dr < 0 then -dr else dr) = (if dc < 0 then -dc else dc))
+    (hdr : dr ≠ 0) :
+    ((if dr > 0 then 1 else if dr < 0 then -1 else 0),
+     (if dc > 0 then 1 else if dc < 0 then -1 else 0)) ∈ diagonals := by
+  simp [diagonals]
+  omega
+
+theorem sign_ortho {dr dc : Int} (hzero : dr = 0 ∨ dc = 0) (hnz : dr ≠ 0 ∨ dc ≠ 0) :
+    ((if dr > 0 then 1 else if dr < 0 then -1 else 0),
+     (if dc > 0 then 1 else if dc < 0 then -1 else 0)) ∈ orthogonals := by
+  simp [orthogonals]
+  omega
+
+theorem sign_lance {dr dc fwd : Int} (hfw : fwd = 1 ∨ fwd = -1)
+    (hdc : dc = 0) (hdrfwd : dr * fwd > 0) :
+    (if dr > 0 then 1 else if dr < 0 then -1 else 0) = fwd ∧
+    (if dc > 0 then 1 else if dc < 0 then -1 else 0) = 0 := by
+  rcases hfw with rfl | rfl <;> simp [hdc] <;> omega
+
+theorem sq_val_eq (s : Square) : s.val = s.row * 9 + s.col := by
+  have h := Nat.div_add_mod s.val 9
+  dsimp [Square.row, Square.col] at *
+  omega
+
+set_option maxRecDepth 100000 in
+theorem ray_mem_geom_finite : ∀ (f t : Square) (r : Fin 8),
+  f ≠ t → t ∈ ray f (rdir r.val) →
+  let dr : Int := (t.row : Int) - f.row
+  let dc : Int := (t.col : Int) - f.col
+  let d := rdir r.val
+  (d.1 = 0 → dr = 0) ∧ (d.2 = 0 → dc = 0) ∧
+  (d.1 ≠ 0 → d.2 ≠ 0 → (if dr < 0 then -dr else dr) = (if dc < 0 then -dc else dc)) ∧
+  (d.1 * dr > 0 ∨ d.1 = 0) ∧ (d.2 * dc > 0 ∨ d.2 = 0)
+:= by decide +kernel
+
+theorem ptByCode_code (ty : PieceType) : ptByCode ty.code = ty := by cases ty <;> rfl
+
+theorem slide_dir_in_bounds (c : Color) (ty : PieceType) (d : Int × Int)
+    (h : d ∈ slideDirs c.fwd ty) :
+    -1 ≤ d.1 ∧ d.1 ≤ 1 ∧ -1 ≤ d.2 ∧ d.2 ≤ 1 := by
+  cases c <;> cases ty <;> simp [slideDirs, diagonals, orthogonals, Color.fwd] at h ⊢
+  all_goals rcases h with rfl | rfl | rfl | rfl <;> simp [Color.fwd] <;> omega
+
+theorem offset_eq_diff {f t : Square} {a b : Int}
+    (h : Square.offset f (a, b) = some t) :
+    a = (t.row : Int) - f.row ∧ b = (t.col : Int) - f.col := by
+  unfold Square.offset Square.mk? at h
+  split at h
+  · next hpos =>
+      rw [Option.some.injEq] at h
+      have hv : ((((f.row : Int) + a) * 9 + ((f.col : Int) + b)).toNat) = t.val := by
+        simpa using congrArg Fin.val h
+      have hto : ((((f.row : Int) + a) * 9 + ((f.col : Int) + b)).toNat : Int) =
+          ((f.row : Int) + a) * 9 + ((f.col : Int) + b) := by
+        have hnonneg : 0 ≤ ((f.row : Int) + a) * 9 + ((f.col : Int) + b) := by
+          rcases hpos with ⟨hr, _, hc, _⟩
+          omega
+        omega
+      have hvi : (((((f.row : Int) + a) * 9 + ((f.col : Int) + b)).toNat : Int)) = (t.val : Int) := by
+        exact_mod_cast hv
+      rw [hto] at hvi
+      have htval : (t.val : Int) = (t.row : Int) * 9 + (t.col : Int) := by
+        have hdm := Nat.div_add_mod t.val 9
+        dsimp [Square.row, Square.col]
+        omega
+      rw [htval] at hvi
+      have htcol_bnd : (t.col : Int) < 9 := by
+        have := t.isLt
+        dsimp [Square.col]
+        omega
+      have htrow_bnd : (t.row : Int) < 9 := by
+        have := t.isLt
+        dsimp [Square.row]
+        omega
+      constructor <;> omega
+  · contradiction
 
 end Shogi.C.Proofs
