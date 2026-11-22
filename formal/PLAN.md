@@ -284,15 +284,17 @@ Design (two independent pieces):
   predicate (returns `false8` iff an intermediate ray square is occupied,
   otherwise breaks with the cursor at `to`). `Shogi/C/Proofs/RayGeom.lean`
   supplies kernel-checked ray geometry (`ray_nodup_finite`, `ray_index_finite`,
-  `ray_suffix_finite`, `exists_rdir`) and the `walkErr ↔ to ∈ p.slideTargets
-  from dir` bridge (via `mem_slide_go`). All axiom-clean.
-- fid 18 (`shogi_piece_attacks_square`) is **complete**
-  (`Shogi/C/Proofs/Fid18SpecMain.lean`, `shogi_piece_attacks_square_spec`): the
-  full C body is refined, including the guard, piece load, helper calls, the
-  `u32 code` fid 15 step-attack call, and the slider branch via
-  `slider_loop_exs` (`ray_walk_loop` + `walkErr_slide`). Axiom-clean.
-
-Remaining: none (all five R3 refinements proven).
+  `ray_suffix_finite`, `exists_rdir`). All axiom-clean. Still to do: the
+  `walkErr ↔ to ∈ p.slideTargets from dir` bridge (via `mem_slide_go`) and
+  the wrapper assembly on the `Helpers.lean` refinements plus
+  `step_piece_attacks_spec`; then `shogi_piece_attacks_square_spec` itself.
+Remaining: fid 18 wrapper/spec assembly (geometric attacks). The fid 15
+argument-representation blocker is resolved: `s15s` now passes `u32 code`,
+`step_piece_attacks_spec` is verified against the wrapper's frame state, and
+`frame15` + `guard_ev` provide the state equality and guard refinement needed
+by `ExS.call_dst`. Still to write: `shogi_piece_attacks_square_spec` itself,
+composing the guard, piece load, helper calls, `step_piece_attacks_spec`,
+`ray_walk_loop` and `walkErr_slide`.
 
 Write these directly against `IsPos`.
 
