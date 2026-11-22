@@ -125,19 +125,31 @@ theorem slider_loop_exs (p : Position) (f t : Square) (m : Mem) (hm : m posBlock
       0 ≤ ((f.col : Int) + cs) + (i : Int) * cs ∧
       ((f.col : Int) + cs) + (i : Int) * cs < 9)
     (hstep : rs ≠ 0 ∨ cs ≠ 0) (hrs : -1 ≤ rs ∧ rs ≤ 1) (hcs : -1 ≤ cs ∧ cs ≤ 1)
-    (hti : d < (ray f (rs, cs)).length)
-    (s : State) (hl0 : s.locals 0 = some (posPtr' posBlock)) (hl2 : s.locals 2 = some (u8 t.val))
-    (hl17 : s.locals 17 = some (i32 rs)) (hl18 : s.locals 18 = some (i32 cs))
-    (hl19 : s.locals 19 = some (i32 ((f.row : Int) + rs)))
-    (hl21 : s.locals 21 = some (i32 ((f.col : Int) + cs)))
-    (hsm : s.mem = m) :
+    (hti : d < (ray f (rs, cs)).length) :
+    let s : State := ⟨(fun i => match i with
+      | 0 => some (posPtr' posBlock) | 2 => some (u8 t.val)
+      | 17 => some (i32 rs) | 18 => some (i32 cs)
+      | 19 => some (i32 ((f.row : Int) + rs)) | 21 => some (i32 ((f.col : Int) + cs))
+      | _ => none), m, false⟩
     ∃ s', ExS Gen.prog s
       (.seq Gen.shogi_piece_attacks_square_loop0
         (.ret (some (.cast ⟨8,false⟩ (.bin .ne (some ⟨32,true⟩) (.const (.int ⟨32,true⟩ 1)) (.const (.int ⟨32,true⟩ 0)))))))
       (.ret (some (if walkErr p rs cs t d ((f.row : Int) + rs) ((f.col : Int) + cs) then false8 else true8))) s' ∧
       s'.mem = m := by
+  dsimp only
+  let s : State := ⟨(fun i => match i with
+      | 0 => some (posPtr' posBlock) | 2 => some (u8 t.val)
+      | 17 => some (i32 rs) | 18 => some (i32 cs)
+      | 19 => some (i32 ((f.row : Int) + rs)) | 21 => some (i32 ((f.col : Int) + cs))
+      | _ => none), m, false⟩
+  have hl0 : s.locals 0 = some (posPtr' posBlock) := by simp [s]
+  have hl2 : s.locals 2 = some (u8 t.val) := by simp [s]
+  have hl17 : s.locals 17 = some (i32 rs) := by simp [s]
+  have hl18 : s.locals 18 = some (i32 cs) := by simp [s]
+  have hl19 : s.locals 19 = some (i32 ((f.row : Int) + rs)) := by simp [s]
+  have hl21 : s.locals 21 = some (i32 ((f.col : Int) + cs)) := by simp [s]
   have hloop := ray_walk_loop p m hm rs cs t hstep hrs hcs d
-    ((f.row : Int) + rs) ((f.col : Int) + cs) s hrow hcol hbnd hl0 hl2 hl17 hl18 hl19 hl21 hsm
+    ((f.row : Int) + rs) ((f.col : Int) + cs) s hrow hcol hbnd hl0 hl2 hl17 hl18 hl19 hl21 rfl
   by_cases hw : walkErr p rs cs t d ((f.row : Int) + rs) ((f.col : Int) + cs) = true
   · obtain ⟨s', hs', hm'⟩ := (if_pos hw).mp hloop
     refine ⟨s', ?_, hm'⟩
@@ -150,12 +162,17 @@ theorem slider_loop_exs (p : Position) (f t : Square) (m : Mem) (hm : m posBlock
     simp [evalExpr, evalBin, evalCast, true8, boolVal, IntTy.i32, IntTy.u8, IntTy.toInt,
       isPtr, evalBinInt, binInt, intOf, Res.bind, hw, IntTy.wrap, IntTy.modulus]
 
-
-def ptByCode (n : Nat) : PieceType :=
-  if n = 1 then .pawn else if n = 2 then .lance else if n = 3 then .knight
-  else if n = 4 then .silver else if n = 5 then .gold else if n = 6 then .bishop
-  else if n = 7 then .rook else if n = 8 then .king else if n = 9 then .proPawn
-  else if n = 10 then .proLance else if n = 11 then .proKnight else if n = 12 then .proSilver
-  else if n = 13 then .horse else .dragon
+theorem guard0_spec {ty : Nat} {dr dc fwd : Int} {diag straight : Nat}
+    (h : guardSpec ty dr dc fwd diag straight = 0) :
+    (((diag != 0) ∧ (ty = 6 ∨ ty = 13)) ∨
+     ((straight != 0) ∧ (ty = 7 ∨ ty = 14))) ∨
+    ((dc = 0 ∧ dr * fwd > 0) ∧ ty = 2) := by
+  unfold guardSpec at h
+  dsimp at h
+  split at h
+  · rename_i hv
+    simpa [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq] using hv
+  · rename_i hv
+    omega
 
 end Shogi.C.Proofs
