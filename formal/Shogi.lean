@@ -80,4 +80,5 @@ import Shogi.C.Proofs.Fid18Bridge
 import Shogi.C.Proofs.Fid18Spec
 import Shogi.C.Proofs.Fid18Guard
 import Shogi.C.Proofs.Fid18GeomAux
+import Shogi.C.Proofs.Fid18SpecMain
 import Shogi.C.Main
