@@ -286,4 +286,12 @@ theorem slide_dir_eq_of_mem : ∀ (f t : Square) (d1 d2 : Fin 3), f ≠ t →
   (((d1.val : Int) - 1), ((d2.val : Int) - 1)) = (rs, cs)
 := by decide +kernel
 
+
+set_option maxRecDepth 100000 in
+theorem offset_eq_finite : ∀ (f t : Square) (a b : Fin 5), f ≠ t →
+  Square.offset f (((a.val : Int) - 2), ((b.val : Int) - 2)) = some t →
+  (((a.val : Int) - 2), ((b.val : Int) - 2)) =
+    ((t.row : Int) - f.row, (t.col : Int) - f.col)
+:= by decide +kernel
+
 end Shogi.C.Proofs
