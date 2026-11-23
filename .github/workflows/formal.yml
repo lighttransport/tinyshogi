@@ -14,7 +14,7 @@ jobs:
       run:
         working-directory: formal
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: Install elan
