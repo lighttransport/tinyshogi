@@ -95,7 +95,7 @@ the compact deeper WASM material search, since WebGPU command submission is
 asynchronous. The web UI offers Practice through Expert strength presets;
 they control the WASM engine's per-move search budget, with a Custom setting
 for the raw node slider. The default build favors a low browser footprint: it
-starts with 320 KiB of linear memory, uses a 64 KiB transposition table and
+starts with 384 KiB of linear memory, uses a 64 KiB transposition table and
 224 KiB stack, and grows in 64 KiB increments only if a workload needs more,
 up to a 64 MiB hard ceiling.
 

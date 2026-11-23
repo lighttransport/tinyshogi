@@ -7,7 +7,9 @@
 
 #define SHOGI_BOARD_SIZE 9
 #define SHOGI_SQUARES 81
+#ifndef SHOGI_MAX_MOVES
 #define SHOGI_MAX_MOVES 7200
+#endif
 #ifndef TINYSHOGI_MAX_HISTORY
 #define TINYSHOGI_MAX_HISTORY 4096
 #endif

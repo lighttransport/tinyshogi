@@ -6,10 +6,14 @@ EMCC_ENV = $(if $(EM_CACHE),EM_CACHE=$(EM_CACHE),)
 
 # No pthread flags are used by default. The WASM API includes the single-thread
 # search backend; the UI invokes it from engine-worker.js.
+# The WASM build overrides SHOGI_MAX_MOVES to 600 for its stack-resident move
+# arrays (the proven maximum on reachable positions is 591); the native build
+# keeps the verified 7200 generator buffer. 384 KiB initial memory covers the
+# generated read-only attack tables plus the 224 KiB stack.
 EMCCFLAGS ?= -O2 -std=c11 -sENVIRONMENT=web -sMODULARIZE=1 -sEXPORT_ES6=1 \
-	-DTINYSHOGI_MAX_HISTORY=1024 -DTINYSHOGI_SEARCH_MAX_PATH=128 \
+	-DTINYSHOGI_MAX_HISTORY=1024 -DTINYSHOGI_SEARCH_MAX_PATH=128 -DSHOGI_MAX_MOVES=600 \
 	-sALLOW_MEMORY_GROWTH=1 \
-	-sINITIAL_MEMORY=327680 -sMAXIMUM_MEMORY=67108864 \
+	-sINITIAL_MEMORY=393216 -sMAXIMUM_MEMORY=67108864 \
 	-sSTACK_SIZE=229376 -sSTACK_OVERFLOW_CHECK=2 -sMALLOC=emmalloc \
 	-sMEMORY_GROWTH_GEOMETRIC_STEP=0 -sMEMORY_GROWTH_LINEAR_STEP=65536 \
 	-sEXPORTED_RUNTIME_METHODS='["cwrap"]' \
