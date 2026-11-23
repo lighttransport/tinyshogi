@@ -60,11 +60,20 @@ def guardSpec (ty : Nat) (dr dc fwd : Int) (diag straight : Nat) : Nat :=
   if v then 0 else 1
 
 
+set_option maxHeartbeats 0 in
 set_option maxRecDepth 100000 in
 theorem guard_eval_finite : ∀ (ty : Fin 16) (dr' dc' : Fin 17) (fwdb : Fin 2) (diagb : Fin 2) (straightb : Fin 2),
   evalSig (evalExpr Gen.prog 12 (guardState ty.val ((dr'.val:Int)-8) ((dc'.val:Int)-8) (if fwdb.val=0 then 1 else -1) diagb.val straightb.val) guardExpr) =
     some (IntTy.i32, guardSpec ty.val ((dr'.val:Int)-8) ((dc'.val:Int)-8) (if fwdb.val=0 then 1 else -1) diagb.val straightb.val) := by
-  decide +kernel
+  intro ty
+  cases ty with
+  | mk tv htv =>
+    have hc : tv = 0 ∨ tv = 1 ∨ tv = 2 ∨ tv = 3 ∨ tv = 4 ∨ tv = 5 ∨ tv = 6 ∨ tv = 7 ∨
+              tv = 8 ∨ tv = 9 ∨ tv = 10 ∨ tv = 11 ∨ tv = 12 ∨ tv = 13 ∨ tv = 14 ∨ tv = 15 := by omega
+    rcases hc with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals
+      intro dr' dc' fwdb diagb straightb
+      decide +kernel +revert
 
 #eval evalSig (evalExpr Gen.prog 12 (guardState 6 1 1 1 1 1) guardExpr)
 #eval guardSpec 6 1 1 1 1 1
@@ -294,14 +303,6 @@ theorem slide_dir_eq_of_mem : ∀ (f t : Square) (d1 d2 : Fin 3), f ≠ t →
   let cs : Int := if dc > 0 then 1 else if dc < 0 then -1 else 0
   t ∈ ray f (((d1.val : Int) - 1), ((d2.val : Int) - 1)) →
   (((d1.val : Int) - 1), ((d2.val : Int) - 1)) = (rs, cs)
-:= by decide +kernel
-
-
-set_option maxRecDepth 100000 in
-theorem offset_eq_finite : ∀ (f t : Square) (a b : Fin 5), f ≠ t →
-  Square.offset f (((a.val : Int) - 2), ((b.val : Int) - 2)) = some t →
-  (((a.val : Int) - 2), ((b.val : Int) - 2)) =
-    ((t.row : Int) - f.row, (t.col : Int) - f.col)
 := by decide +kernel
 
 

@@ -27,8 +27,10 @@ jobs:
           path: formal/.lake
           key: lake-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-${{ hashFiles('formal/**/*.lean') }}
           restore-keys: lake-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-
+      # Several geometry lemmas are kernel-decided over large finite domains;
+      # serialize the build so peak memory stays under the runner's 7 GB limit.
       - name: Build spec, MiniC and proofs
-        run: lake build
+        run: LAKE_JOBS=1 lake build
       - name: Gen.lean matches src/shogi.c
         run: python3 tools/c2lean.py --check
       - name: src/shogi_tables.h matches formal/Shogi/Tables.lean
