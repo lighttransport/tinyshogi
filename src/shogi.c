@@ -19,11 +19,9 @@ typedef struct {
     uint16_t piece_mask;
 } StepAttackProbe;
 
-static StepAttackProbe step_attack_probes[2][SHOGI_SQUARES][10];
-static uint8_t step_attack_probe_count[2][SHOGI_SQUARES];
-static uint8_t attack_rays[SHOGI_SQUARES][8][8];
-static uint8_t attack_ray_length[SHOGI_SQUARES][8];
-static uint16_t attack_ray_masks[2][SHOGI_SQUARES][8];
+/* Target-centred attack tables, generated from the Lean specification
+ * (formal/Shogi/Tables.lean) and checked against it by proof. */
+#include "shogi_tables.h"
 /* 0: uninitialized, 1: one thread is building, 2: ready. */
 static atomic_uint initialization_state;
 
@@ -46,62 +44,6 @@ static bool step_piece_attacks(ShogiPieceType type, int dr, int dc, int forward)
     return false;
 }
 
-static void init_attack_tables(void) {
-    static const int ray_row[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
-    static const int ray_col[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
-    for (unsigned target = 0; target < SHOGI_SQUARES; ++target) {
-        int target_row = (int)target / SHOGI_BOARD_SIZE;
-        int target_col = (int)target % SHOGI_BOARD_SIZE;
-        for (unsigned attacker = 0; attacker < 2; ++attacker) {
-            int forward = attacker == SHOGI_BLACK ? -1 : 1;
-            uint8_t probe_count = 0;
-            for (int row = target_row - 2; row <= target_row + 2; ++row) {
-                if (row < 0 || row >= SHOGI_BOARD_SIZE) continue;
-                for (int col = target_col - 2; col <= target_col + 2; ++col) {
-                    if (col < 0 || col >= SHOGI_BOARD_SIZE ||
-                        (row == target_row && col == target_col)) continue;
-                    int dr = target_row - row;
-                    int dc = target_col - col;
-                    uint16_t mask = 0;
-                    for (ShogiPieceType type = SHOGI_PAWN;
-                         type <= SHOGI_DRAGON; ++type) {
-                        if (step_piece_attacks(type, dr, dc, forward))
-                            mask |= (uint16_t)1U << type;
-                    }
-                    if (mask != 0 && probe_count < 10U) {
-                        step_attack_probes[attacker][target][probe_count++] =
-                            (StepAttackProbe){(uint8_t)(row * SHOGI_BOARD_SIZE + col), mask};
-                    }
-                }
-            }
-            step_attack_probe_count[attacker][target] = probe_count;
-        }
-        for (unsigned ray = 0; ray < 8; ++ray) {
-            uint8_t length = 0;
-            int dr = ray_row[ray], dc = ray_col[ray];
-            for (int row = target_row + dr, col = target_col + dc;
-                 row >= 0 && row < SHOGI_BOARD_SIZE &&
-                 col >= 0 && col < SHOGI_BOARD_SIZE;
-                 row += dr, col += dc) {
-                attack_rays[target][ray][length++] =
-                    (uint8_t)(row * SHOGI_BOARD_SIZE + col);
-            }
-            attack_ray_length[target][ray] = length;
-            bool diagonal = dr != 0 && dc != 0;
-            uint16_t mask = diagonal ?
-                ((uint16_t)1U << SHOGI_BISHOP) | ((uint16_t)1U << SHOGI_HORSE) :
-                ((uint16_t)1U << SHOGI_ROOK) | ((uint16_t)1U << SHOGI_DRAGON);
-            for (unsigned attacker = 0; attacker < 2; ++attacker) {
-                int forward = attacker == SHOGI_BLACK ? -1 : 1;
-                uint16_t attacker_mask = mask;
-                if (!diagonal && dc == 0 && dr == -forward)
-                    attacker_mask |= (uint16_t)1U << SHOGI_LANCE;
-                attack_ray_masks[attacker][target][ray] = attacker_mask;
-            }
-        }
-    }
-}
-
 static uint64_t splitmix64(uint64_t *state) {
     uint64_t value = (*state += UINT64_C(0x9e3779b97f4a7c15));
     value = (value ^ (value >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
@@ -121,7 +63,6 @@ void shogi_init(void) {
         return;
     }
 
-    init_attack_tables();
     uint64_t state = UINT64_C(0x7a6f676963686f6c);
     for (size_t square = 0; square < SHOGI_SQUARES; ++square) {
         for (size_t piece = 0; piece < 32; ++piece) {
@@ -547,10 +488,10 @@ static bool step_square_attacked(const ShogiPosition *position, uint8_t target,
                                  ShogiColor attacker) {
     uint8_t attacker_bit = (uint8_t)((unsigned)attacker << 4);
     for (uint8_t index = 0; index < step_attack_probe_count[attacker][target]; ++index) {
-        StepAttackProbe probe = step_attack_probes[attacker][target][index];
-        uint8_t piece = position->board[probe.square];
+        const StepAttackProbe *probe = &step_attack_probes[attacker][target][index];
+        uint8_t piece = position->board[probe->square];
         if (piece != SHOGI_EMPTY && (piece & 0x10U) == attacker_bit &&
-            (probe.piece_mask & ((uint16_t)1U << (piece & 0x0fU))) != 0)
+            (probe->piece_mask & ((uint16_t)1U << (piece & 0x0fU))) != 0)
             return true;
     }
     return false;

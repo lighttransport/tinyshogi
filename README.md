@@ -11,6 +11,13 @@ the king to be in the enemy camp, at least ten other pieces in that camp, no
 check on the king, and 28 points for Sente or 27 for Gote. Rooks, bishops,
 dragons, and horses are worth five points; other non-king pieces are worth one.
 
+## Formal verification
+
+A machine-checked Lean 4 specification of the shogi rules, together with proofs
+about the C implementation, lives in [`formal/`](formal/). See the
+[Lean formalization status](formal/README.md) for current coverage and the
+[formalization plan](formal/PLAN.md) for milestones.
+
 ## Build
 
 Meson:
